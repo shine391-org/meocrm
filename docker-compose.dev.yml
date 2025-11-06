@@ -1,0 +1,33 @@
+version: '3.8'
+services:
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: meocrm-postgres-dev
+    environment:
+      POSTGRES_DB: meocrm_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: meocrm_dev
+    ports:
+      - "2001:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+
+  redis-dev:
+    image: redis:7-alpine
+    container_name: meocrm-redis-dev
+    ports:
+      - "2002:6379"
+    volumes:
+      - redis_dev_data:/data
+
+  adminer-dev:
+    image: adminer:latest
+    container_name: meocrm-adminer-dev
+    ports:
+      - "2006:8080"
+    depends_on:
+      - postgres-dev
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
