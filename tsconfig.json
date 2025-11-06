@@ -1,11 +1,1 @@
-{
-  "compilerOptions": {
-    "target": "ES2021",
-    "module": "commonjs",
-    "lib": ["ES2021"],
-    "skipLibCheck": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "esModuleInterop": true
-  }
-}
+{"compilerOptions":{"target":"ES2021","module":"commonjs","lib":["ES2021"],"skipLibCheck":true,"strict":true,"esModuleInterop":true,"allowSyntheticDefaultImports":true,"forceConsistentCasingInFileNames":true,"resolveJsonModule":true},"exclude":["node_modules","dist",".next","coverage"]}
