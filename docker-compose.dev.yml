@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: meocrm_dev
     ports:
-      - "2001:5432"
+      - '2001:5432'
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
 
@@ -16,7 +16,7 @@ services:
     image: redis:7-alpine
     container_name: meocrm-redis-dev
     ports:
-      - "2002:6379"
+      - '2002:6379'
     volumes:
       - redis_dev_data:/data
 
@@ -24,7 +24,7 @@ services:
     image: adminer:latest
     container_name: meocrm-adminer-dev
     ports:
-      - "2006:8080"
+      - '2006:8080'
     depends_on:
       - postgres-dev
 

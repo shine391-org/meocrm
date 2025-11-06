@@ -1,0 +1,16 @@
+module.exports = {
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    ecmaVersion: 2021,
+    sourceType: 'module',
+  },
+  plugins: ['@typescript-eslint'],
+  extends: ['eslint:recommended', '@typescript-eslint/recommended', 'prettier'],
+  root: true,
+  env: {
+    node: true,
+    jest: true,
+    es6: true,
+  },
+  ignorePatterns: ['.eslintrc.js'],
+};

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.next/
+build/
+*.config.js
+pnpm-lock.yaml
+.env*
