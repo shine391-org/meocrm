@@ -295,3 +295,239 @@ For more details, see:
 - Architecture Documentation
 - Testing Guide
 - API Conventions
+
+---
+
+## 🤖 Jules AI Implementation Guide
+
+### Quick Environment Check
+Verify tools are working
+node -v # Should show v18+
+pnpm -v # Should show v8+
+pnpm exec eslint --version # Should show v8.57.1
+pnpm exec jest --version # Should show v29.7.0
+
+text
+
+### Jules Setup Validation
+Test all critical commands work
+pnpm install # Dependencies ready
+pnpm lint # ESLint configured
+pnpm test # Jest configured
+pnpm build # TypeScript compiled
+pnpm db:generate # Prisma client generated
+
+text
+
+### Common Jules Development Tasks
+
+#### 1. Creating New Module (Example: Products)
+1. Create feature branch
+git checkout -b feature/products-crud
+
+2. Create module structure
+mkdir -p apps/api/src/products/{dto,entities}
+
+3. Implement files:
+- products.module.ts
+- products.service.ts
+- products.controller.ts
+- dto/create-product.dto.ts
+- entities/product.entity.ts
+- products.service.spec.ts
+4. Test & validate
+pnpm test # Unit tests pass
+pnpm test:e2e # E2E tests pass
+pnpm lint:fix # Code quality check
+pnpm build:api # Build succeeds
+
+5. Create PR
+git add .
+git commit -m "feat(products): [P2-001] Implement products CRUD module"
+git push origin feature/products-crud
+
+text
+
+#### 2. Multi-tenant Implementation Pattern
+// ✅ ALWAYS use this pattern in services
+@Injectable()
+export class ProductsService {
+async findAll(organizationId: string) {
+return this.prisma.product.findMany({
+where: { organizationId }, // CRITICAL: Always filter by org
+});
+}
+
+async create(organizationId: string, data: CreateProductDto) {
+return this.prisma.product.create({
+data: {
+...data,
+organizationId, // CRITICAL: Always set org
+},
+});
+}
+}
+
+// ✅ ALWAYS use this pattern in controllers
+@Controller('products')
+@UseGuards(JwtAuthGuard) // REQUIRED on all controllers
+export class ProductsController {
+@Get()
+async findAll(@CurrentUser() user: UserEntity) {
+return this.service.findAll(user.organizationId); // CRITICAL
+}
+}
+
+text
+
+#### 3. Testing Multi-tenant Data Isolation
+describe('ProductsService', () => {
+let service: ProductsService;
+let orgA: Organization;
+let orgB: Organization;
+
+beforeEach(async () => {
+// Create test organizations
+orgA = await prisma.organization.create({
+data: { name: 'Org A', code: 'ORGA' }
+});
+orgB = await prisma.organization.create({
+data: { name: 'Org B', code: 'ORGB' }
+});
+});
+
+it('should isolate data between organizations', async () => {
+// Create product for Org A only
+await service.create(orgA.id, productData);
+
+text
+// Org B should not see Org A's products
+const orgBProducts = await service.findAll(orgB.id);
+expect(orgBProducts).toHaveLength(0);
+
+// Org A should see their own products
+const orgAProducts = await service.findAll(orgA.id);
+expect(orgAProducts).toHaveLength(1);
+});
+});
+
+text
+
+#### 4. API Documentation with Swagger
+// Controller với Swagger decorators
+@Controller('products')
+@ApiTags('Products')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+export class ProductsController {
+@Get()
+@ApiOperation({ summary: 'Get all products' })
+@ApiResponse({ status: 200, description: 'Products retrieved successfully' })
+async findAll(@CurrentUser() user: UserEntity) {
+return this.service.findAll(user.organizationId);
+}
+
+@Post()
+@ApiOperation({ summary: 'Create new product' })
+@ApiResponse({ status: 201, description: 'Product created successfully' })
+async create(
+@Body() data: CreateProductDto,
+@CurrentUser() user: UserEntity,
+) {
+return this.service.create(user.organizationId, data);
+}
+}
+
+text
+
+### Jules Quality Checklist
+
+#### Before Creating PR:
+- [ ] All tests pass: `pnpm test`
+- [ ] Code coverage ≥80%: `pnpm test:cov`
+- [ ] No linting errors: `pnpm lint`
+- [ ] Builds successfully: `pnpm build`
+- [ ] Multi-tenant isolation tested
+- [ ] Swagger docs updated
+- [ ] Environment variables documented
+
+#### Code Quality Rules:
+- Use TypeScript strict mode
+- Add JSDoc comments for public methods
+- Use class-validator DTOs for all inputs
+- Add unit tests for all service methods
+- Add E2E tests for all controllers
+- Follow NestJS best practices
+- Use Prisma for all database operations
+
+### Common Jules Pitfalls to Avoid
+
+#### ❌ Data Isolation Violations
+// WRONG - Will leak data between organizations
+const users = await this.prisma.user.findMany();
+
+// CORRECT - Always filter by organization
+const users = await this.prisma.user.findMany({
+where: { organizationId }
+});
+
+text
+
+#### ❌ Missing Authentication Guards
+// WRONG - Unauthenticated endpoint
+@Controller('products')
+export class ProductsController {}
+
+// CORRECT - Always protect with guards
+@Controller('products')
+@UseGuards(JwtAuthGuard)
+export class ProductsController {}
+
+text
+
+#### ❌ Incomplete Test Coverage
+// WRONG - Only happy path
+it('should create product', () => {
+expect(service.create(data)).resolves.toBeTruthy();
+});
+
+// CORRECT - Test edge cases + isolation
+it('should create product with organization isolation', () => {
+const product = await service.create(orgId, data);
+expect(product.organizationId).toBe(orgId);
+
+// Test other org cannot see it
+const otherOrgProducts = await service.findAll(otherOrgId);
+expect(otherOrgProducts).not.toContainEqual(product);
+});
+
+text
+
+### Tools & Resources Available
+
+#### Development Tools
+- **API Documentation:** http://localhost:2003/api (Swagger UI)
+- **Database Management:** `pnpm db:studio` (Prisma Studio)
+- **Testing:** `pnpm test:watch` (Jest watch mode)
+- **Coverage:** `pnpm test:cov` (Coverage reports)
+- **Linting:** `pnpm lint` (ESLint + Prettier)
+
+#### Project Resources
+- **Notion Task Board:** (Task tracking and requirements)
+- **GitHub Repo:** https://github.com/shine391-org/meocrm
+- **Architecture Docs:** docs/ folder in repo
+- **API Specs:** docs/api/ folder
+
+### Ready to Build MeoCRM! 🚀
+
+**Jules is now fully equipped with:**
+- ✅ Complete development environment
+- ✅ All necessary tools and dependencies
+- ✅ Multi-tenant architecture understanding
+- ✅ Testing and quality standards
+- ✅ Security best practices
+- ✅ Clear development workflow
+
+Start building the future of Vietnamese retail CRM! 🇻🇳
+
+---
