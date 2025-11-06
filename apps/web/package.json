@@ -7,6 +7,6 @@
     "build": "next build",
     "start": "next start",
     "test": "jest",
-    "lint": "next lint"
+    "lint": "eslint "app/**/*.{js,ts,tsx}" || next lint"
   }
 }
