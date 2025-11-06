@@ -1,26 +1,33 @@
 {
   "name": "meocrm",
   "version": "1.0.0",
-  "description": "Multi-tenant CRM system inspired by KiotViet - Monorepo with NestJS + Next.js 14",
+  "description": "Multi-tenant CRM system inspired by KiotViet",
   "private": true,
   "scripts": {
     "dev": "concurrently \"pnpm dev:api\" \"pnpm dev:web\"",
     "dev:api": "pnpm --filter @meocrm/api dev",
     "dev:web": "pnpm --filter @meocrm/web dev",
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "test:e2e": "pnpm --filter @meocrm/api test:e2e",
-    "lint": "pnpm -r lint",
-    "db:generate": "pnpm --filter @meocrm/api db:generate",
-    "db:push": "pnpm --filter @meocrm/api db:push",
-    "db:migrate": "pnpm --filter @meocrm/api db:migrate",
-    "db:studio": "pnpm --filter @meocrm/api db:studio",
-    "db:seed": "pnpm --filter @meocrm/api db:seed",
-    "docker:dev": "docker compose -f docker-compose.dev.yml up -d",
-    "docker:down": "docker compose down",
-    "setup": "pnpm install && pnpm docker:dev && pnpm db:generate && pnpm db:push"
+    "build": "pnpm build:api && pnpm build:web",
+    "build:api": "pnpm --filter @meocrm/api build",
+    "build:web": "pnpm --filter @meocrm/web build",
+    "lint": "eslint \"apps/**/*.{ts,tsx}\" --max-warnings 100",
+    "lint:fix": "eslint \"apps/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm --filter @meocrm/api test",
+    "test:cov": "pnpm --filter @meocrm/api test:cov",
+    "test:e2e": "pnpm --filter @meocrm/api test:e2e"
   },
-  "packageManager": "pnpm@8.10.5",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.3.3"
+  },
+  "packageManager": "pnpm@8.15.6",
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"

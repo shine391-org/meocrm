@@ -1,0 +1,12 @@
+{
+  "name": "@meocrm/web",
+  "version": "1.0.0",
+  "description": "MeoCRM Next.js Web App",
+  "scripts": {
+    "dev": "next dev --port 2004",
+    "build": "next build",
+    "start": "next start",
+    "test": "jest",
+    "lint": "eslint "app/**/*.{js,ts,tsx}" || next lint"
+  }
+}
