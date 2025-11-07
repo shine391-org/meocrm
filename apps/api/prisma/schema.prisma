@@ -7,42 +7,366 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Multi-tenant base models
+enum UserRole {
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
+  CASHIER
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  E_WALLET
+  BANK_TRANSFER
+  COD
+}
+
+enum ShippingStatus {
+  PENDING
+  PICKING_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
+enum TransferStatus {
+  PENDING
+  IN_TRANSIT
+  RECEIVED
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
+  code      String   @unique
+  email     String?
+  phone     String?
+  address   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
-  products  Product[]
+  users          User[]
+  branches       Branch[]
+  products       Product[]
+  categories     Category[]
+  customers      Customer[]
+  suppliers      Supplier[]
+  orders         Order[]
+  shippingOrders ShippingOrder[]
 
   @@map("organizations")
 }
 
-model User {
-  id             String @id @default(cuid())
-  email          String @unique
-  password       String
+model Branch {
+  id             String       @id @default(cuid())
   organizationId String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
   organization   Organization @relation(fields: [organizationId], references: [id])
 
+  name    String
+  code    String
+  address String
+  phone   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inventory     Inventory[]
+  transfersFrom Transfer[]  @relation("TransferFrom")
+  transfersTo   Transfer[]  @relation("TransferTo")
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("branches")
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  email    String   @unique
+  password String
+  name     String
+  role     UserRole @default(STAFF)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
   @@map("users")
 }
 
-model Product {
-  id             String @id @default(cuid())
-  name           String
-  sku            String
+model Category {
+  id             String       @id @default(cuid())
   organizationId String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
   organization   Organization @relation(fields: [organizationId], references: [id])
 
+  name     String
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@index([organizationId])
+  @@index([parentId])
+  @@map("categories")
+}
+
+model Product {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  sku         String
+  name        String
+  description String?
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+
+  costPrice Decimal @db.Decimal(12, 2)
+  sellPrice Decimal @db.Decimal(12, 2)
+
+  stock    Int @default(0)
+  minStock Int @default(0)
+  maxStock Int @default(999999)
+
+  images String[]
+  weight Int?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  variants   ProductVariant[]
+  inventory  Inventory[]
+  orderItems OrderItem[]
+
   @@unique([sku, organizationId])
+  @@index([organizationId])
+  @@index([categoryId])
+  @@index([sku])
   @@map("products")
+}
+
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  sku       String
+  name      String
+  sellPrice Decimal  @default(0) @db.Decimal(12, 2)
+  stock     Int      @default(0)
+  images    String[]
+
+  organizationId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sku, organizationId])
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model Customer {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  code  String
+  name  String
+  phone String
+  email String?
+
+  address  String?
+  province String?
+  district String?
+  ward     String?
+
+  segment     String?
+  totalSpent  Decimal   @default(0) @db.Decimal(12, 2)
+  totalOrders Int       @default(0)
+  debt        Decimal   @default(0) @db.Decimal(12, 2)
+  lastOrderAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+  @@index([phone])
+  @@map("customers")
+}
+
+model Supplier {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  code    String
+  name    String
+  email   String?
+  phone   String?
+  address String?
+
+  totalOrders Int     @default(0)
+  totalValue  Decimal @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+  @@map("suppliers")
+}
+
+model Order {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  code       String
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  subtotal Decimal @db.Decimal(12, 2)
+  discount Decimal @default(0) @db.Decimal(12, 2)
+  total    Decimal @db.Decimal(12, 2)
+
+  paymentMethod PaymentMethod
+  isPaid        Boolean       @default(false)
+  paidAmount    Decimal       @default(0) @db.Decimal(12, 2)
+
+  status OrderStatus @default(PENDING)
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items          OrderItem[]
+  shippingOrders ShippingOrder[]
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+  @@index([customerId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity  Int
+  price     Decimal @db.Decimal(12, 2)
+  discount  Decimal @default(0) @db.Decimal(12, 2)
+  lineTotal Decimal @db.Decimal(12, 2)
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model ShippingOrder {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  trackingCode String @unique
+
+  recipientName     String
+  recipientPhone    String
+  recipientAddress  String
+  recipientWard     String?
+  recipientDistrict String?
+  recipientProvince String?
+
+  shippingFee Decimal @db.Decimal(12, 2)
+  codAmount   Decimal @default(0) @db.Decimal(12, 2)
+
+  status ShippingStatus @default(PENDING)
+
+  weight Int?
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([orderId])
+  @@map("shipping_orders")
+}
+
+model Inventory {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  quantity Int @default(0)
+
+  @@unique([productId, branchId])
+  @@index([branchId])
+  @@map("inventory")
+}
+
+model InventoryTransaction {
+  id        String   @id @default(cuid())
+  type      String
+  quantity  Int
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@map("inventory_transactions")
+}
+
+model Transfer {
+  id   String @id @default(cuid())
+  code String @unique
+
+  fromBranchId String
+  fromBranch   Branch @relation("TransferFrom", fields: [fromBranchId], references: [id])
+
+  toBranchId String
+  toBranch   Branch @relation("TransferTo", fields: [toBranchId], references: [id])
+
+  value  Decimal        @db.Decimal(12, 2)
+  status TransferStatus @default(PENDING)
+
+  transferredAt DateTime?
+  receivedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@map("transfers")
 }
