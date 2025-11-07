@@ -1,0 +1,187 @@
+import { 
+  Injectable, 
+  NotFoundException, 
+  BadRequestException,
+  ConflictException 
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateCustomerDto } from './dto/create-customer.dto';
+import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { Prisma } from '@prisma/client';
+
+@Injectable()
+export class CustomersService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(dto: CreateCustomerDto, organizationId: string) {
+    const code = await this.generateCode(organizationId);
+
+    const existingPhone = await this.prisma.customer.findFirst({
+      where: {
+        organizationId,
+        phone: dto.phone,
+        deletedAt: null,
+      },
+    });
+
+    if (existingPhone) {
+      throw new ConflictException('Phone number already exists for this organization');
+    }
+
+    return this.prisma.customer.create({
+      data: {
+        ...dto,
+        code,
+        organization: {
+          connect: { id: organizationId },
+        },
+      },
+    });
+  }
+
+  async findAll(
+    page: number,
+    limit: number,
+    organizationId: string,
+    search?: string,
+    sortBy: string = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc',
+    segment?: string,
+  ) {
+    const where: Prisma.CustomerWhereInput = {
+      organizationId,
+      deletedAt: null,
+    };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (segment) {
+      where.segment = segment;
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.customer.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.customer.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findOne(id: string, organizationId: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { 
+        id, 
+        organizationId, 
+        deletedAt: null 
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException(`Customer ${id} not found`);
+    }
+
+    return customer;
+  }
+
+  async update(id: string, dto: UpdateCustomerDto, organizationId: string) {
+    const customer = await this.findOne(id, organizationId);
+
+    if (dto.phone && dto.phone !== customer.phone) {
+      const existingPhone = await this.prisma.customer.findFirst({
+        where: {
+          organizationId,
+          phone: dto.phone,
+          deletedAt: null,
+          id: { not: id },
+        },
+      });
+
+      if (existingPhone) {
+        throw new ConflictException('Phone number already exists for another customer');
+      }
+    }
+
+    return this.prisma.customer.update({
+      where: { id },
+      data: dto,
+    });
+  }
+
+  async remove(id: string, organizationId: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { 
+        id, 
+        organizationId, 
+        deletedAt: null 
+      },
+      include: { 
+        orders: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException(`Customer ${id} not found`);
+    }
+
+    if (customer.orders && customer.orders.length > 0) {
+      throw new BadRequestException(
+        `Cannot delete customer with existing orders. Customer has ${customer.orders.length} order(s) in history.`
+      );
+    }
+
+    await this.prisma.customer.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
+    return { message: 'Customer deleted successfully' };
+  }
+
+  private async generateCode(organizationId: string): Promise<string> {
+    const lastCustomer = await this.prisma.customer.findFirst({
+      where: { 
+        organizationId,
+        deletedAt: null,
+      },
+      orderBy: { code: 'desc' },
+      select: { code: true },
+    });
+
+    if (!lastCustomer) {
+      return 'KH000001';
+    }
+
+    const codeNumber = lastCustomer.code.substring(2);
+    const lastNumber = parseInt(codeNumber, 10);
+    
+    if (isNaN(lastNumber)) {
+      throw new Error(`Invalid customer code format: ${lastCustomer.code}`);
+    }
+
+    const nextNumber = lastNumber + 1;
+    return `KH${nextNumber.toString().padStart(6, '0')}`;
+  }
+}
