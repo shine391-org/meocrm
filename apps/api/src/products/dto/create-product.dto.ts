@@ -6,12 +6,12 @@ export class CreateProductDto {
   @ApiProperty({ example: 'VDNT09' })
   @IsString()
   @IsNotEmpty()
-  sku: string;
+  sku!: string;
 
   @ApiProperty({ example: 'Ví da nam Tribeca' })
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @ApiPropertyOptional({ example: 'Ví da bò thật cao cấp' })
   @IsString()
@@ -27,13 +27,13 @@ export class CreateProductDto {
   @IsNumber()
   @Type(() => Number)
   @Min(0)
-  costPrice: number;
+  costPrice!: number;
 
   @ApiProperty({ example: 450000 })
   @IsNumber()
   @Type(() => Number)
   @Min(0)
-  sellPrice: number;
+  sellPrice!: number;
 
   @ApiPropertyOptional({ example: 100 })
   @IsNumber()

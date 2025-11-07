@@ -2,22 +2,22 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CategoryEntity {
   @ApiProperty()
-  id: string;
+  id!: string;
 
   @ApiProperty()
-  organizationId: string;
+  organizationId!: string;
 
   @ApiProperty()
-  name: string;
+  name!: string;
 
   @ApiProperty({ nullable: true })
-  parentId: string | null;
+  parentId!: string | null;
 
   @ApiProperty()
-  createdAt: Date;
+  createdAt!: Date;
 
   @ApiProperty()
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @ApiProperty({ type: () => [CategoryEntity] })
   children?: CategoryEntity[];

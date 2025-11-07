@@ -1,54 +1,55 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Decimal } from '@prisma/client/runtime/library';
 
 export class ProductEntity {
   @ApiProperty()
-  id: string;
+  id!: string;
 
   @ApiProperty()
-  organizationId: string;
+  organizationId!: string;
 
   @ApiProperty()
-  sku: string;
+  sku!: string;
 
   @ApiProperty()
-  name: string;
+  name!: string;
 
   @ApiProperty({ nullable: true })
-  description: string | null;
+  description!: string | null;
 
   @ApiProperty({ nullable: true })
-  categoryId: string | null;
+  categoryId!: string | null;
+
+  @ApiProperty({ type: 'number' })
+  costPrice!: Decimal;
+
+  @ApiProperty({ type: 'number' })
+  sellPrice!: Decimal;
 
   @ApiProperty()
-  costPrice: number;
+  stock!: number;
 
   @ApiProperty()
-  sellPrice: number;
+  minStock!: number;
 
   @ApiProperty()
-  stock: number;
-
-  @ApiProperty()
-  minStock: number;
-
-  @ApiProperty()
-  maxStock: number;
+  maxStock!: number;
 
   @ApiProperty({ type: [String] })
-  images: string[];
+  images!: string[];
 
   @ApiProperty({ nullable: true })
-  weight: number | null;
+  weight!: number | null;
 
   @ApiProperty()
-  isActive: boolean;
+  isActive!: boolean;
 
   @ApiProperty()
-  createdAt: Date;
+  createdAt!: Date;
 
   @ApiProperty()
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @ApiProperty({ nullable: true })
-  deletedAt: Date | null;
+  deletedAt!: Date | null;
 }
