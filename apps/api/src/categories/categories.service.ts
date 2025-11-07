@@ -8,7 +8,6 @@ export class CategoriesService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateCategoryDto) {
-    // If parentId provided, verify it exists
     if (dto.parentId) {
       const parent = await this.prisma.category.findUnique({
         where: { id: dto.parentId },
@@ -19,11 +18,20 @@ export class CategoriesService {
       }
     }
 
+    // Build create data with proper relations
+    const createData: any = {
+      name: dto.name,
+    };
+
+    // Add parent relation if provided
+    if (dto.parentId) {
+      createData.parent = {
+        connect: { id: dto.parentId },
+      };
+    }
+
     return this.prisma.category.create({
-      data: {
-        name: dto.name,
-        parentId: dto.parentId || null,
-      },
+      data: createData,
       include: {
         parent: true,
         children: true,
@@ -45,13 +53,12 @@ export class CategoriesService {
   }
 
   async findTree() {
-    // Get all root categories (no parent)
     const rootCategories = await this.prisma.category.findMany({
       where: { parentId: null },
       include: {
         children: {
           include: {
-            children: true, // 3 levels deep
+            children: true,
           },
         },
       },
@@ -68,7 +75,7 @@ export class CategoriesService {
         parent: true,
         children: true,
         products: {
-          take: 10, // Preview first 10 products
+          take: 10,
           select: {
             id: true,
             sku: true,
@@ -88,7 +95,6 @@ export class CategoriesService {
   }
 
   async update(id: string, dto: UpdateCategoryDto) {
-    // Check category exists
     const category = await this.prisma.category.findUnique({
       where: { id },
     });
@@ -97,7 +103,6 @@ export class CategoriesService {
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
-    // If updating parentId, verify it exists and not circular
     if (dto.parentId) {
       if (dto.parentId === id) {
         throw new BadRequestException('Category cannot be its own parent');
@@ -112,12 +117,26 @@ export class CategoriesService {
       }
     }
 
+    // Build update data with proper relations
+    const updateData: any = {
+      name: dto.name,
+    };
+
+    if (dto.parentId !== undefined) {
+      if (dto.parentId === null) {
+        updateData.parent = {
+          disconnect: true,
+        };
+      } else {
+        updateData.parent = {
+          connect: { id: dto.parentId },
+        };
+      }
+    }
+
     return this.prisma.category.update({
       where: { id },
-      data: {
-        name: dto.name,
-        parentId: dto.parentId,
-      },
+      data: updateData,
       include: {
         parent: true,
         children: true,
@@ -126,7 +145,6 @@ export class CategoriesService {
   }
 
   async remove(id: string) {
-    // Check category exists
     const category = await this.prisma.category.findUnique({
       where: { id },
       include: {
@@ -139,12 +157,10 @@ export class CategoriesService {
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
-    // Check if has children
     if (category.children.length > 0) {
       throw new BadRequestException('Cannot delete category with sub-categories');
     }
 
-    // Check if has products
     if (category.products.length > 0) {
       throw new BadRequestException('Cannot delete category with products');
     }

@@ -10,7 +10,6 @@ export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateProductDto) {
-    // Check SKU uniqueness
     const existingSku = await this.prisma.product.findFirst({
       where: {
         sku: dto.sku,
@@ -22,7 +21,6 @@ export class ProductsService {
       throw new ConflictException('SKU already exists');
     }
 
-    // If categoryId provided, verify it exists
     if (dto.categoryId) {
       const category = await this.prisma.category.findUnique({
         where: { id: dto.categoryId },
@@ -33,21 +31,30 @@ export class ProductsService {
       }
     }
 
+    // Build create data with proper relations
+    const createData: any = {
+      sku: dto.sku,
+      name: dto.name,
+      description: dto.description,
+      costPrice: dto.costPrice,
+      sellPrice: dto.sellPrice,
+      stock: dto.stock ?? 0,
+      minStock: dto.minStock ?? 0,
+      maxStock: dto.maxStock ?? 999999,
+      images: dto.images ?? [],
+      weight: dto.weight,
+      isActive: dto.isActive ?? true,
+    };
+
+    // Add category relation if provided
+    if (dto.categoryId) {
+      createData.category = {
+        connect: { id: dto.categoryId },
+      };
+    }
+
     return this.prisma.product.create({
-      data: {
-        sku: dto.sku,
-        name: dto.name,
-        description: dto.description,
-        categoryId: dto.categoryId,
-        costPrice: dto.costPrice,
-        sellPrice: dto.sellPrice,
-        stock: dto.stock ?? 0,
-        minStock: dto.minStock ?? 0,
-        maxStock: dto.maxStock ?? 999999,
-        images: dto.images ?? [],
-        weight: dto.weight,
-        isActive: dto.isActive ?? true,
-      },
+      data: createData,
       include: {
         category: true,
         variants: true,
@@ -119,7 +126,6 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    // Check SKU uniqueness if changing
     if (dto.sku && dto.sku !== product.sku) {
       const existingSku = await this.prisma.product.findFirst({
         where: {
@@ -134,7 +140,6 @@ export class ProductsService {
       }
     }
 
-    // Verify category if provided
     if (dto.categoryId) {
       const category = await this.prisma.category.findUnique({
         where: { id: dto.categoryId },
@@ -145,9 +150,19 @@ export class ProductsService {
       }
     }
 
+    // Build update data with proper relations
+    const updateData: any = { ...dto };
+    
+    if (dto.categoryId) {
+      delete updateData.categoryId;
+      updateData.category = {
+        connect: { id: dto.categoryId },
+      };
+    }
+
     return this.prisma.product.update({
       where: { id },
-      data: dto,
+      data: updateData,
       include: {
         category: true,
         variants: true,
@@ -167,7 +182,6 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    // Soft delete
     await this.prisma.product.update({
       where: { id },
       data: { deletedAt: new Date() },
@@ -190,7 +204,6 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    // Check SKU uniqueness
     const existingSku = await this.prisma.productVariant.findFirst({
       where: { sku: dto.sku },
     });
@@ -201,7 +214,12 @@ export class ProductsService {
 
     return this.prisma.productVariant.create({
       data: {
-        productId,
+        product: {
+          connect: { id: productId },
+        },
+        organization: {
+          connect: { id: product.organizationId },
+        },
         sku: dto.sku,
         name: dto.name,
         sellPrice: dto.sellPrice,
@@ -238,7 +256,6 @@ export class ProductsService {
       throw new NotFoundException(`Variant with ID ${variantId} not found`);
     }
 
-    // Check SKU uniqueness if changing
     if (dto.sku && dto.sku !== variant.sku) {
       const existingSku = await this.prisma.productVariant.findFirst({
         where: {

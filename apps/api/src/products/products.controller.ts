@@ -34,7 +34,7 @@ export class ProductsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all products (paginated)' }}
+  @ApiOperation({ summary: 'Get all products (paginated)' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiResponse({ status: 200, description: 'List of products' })
