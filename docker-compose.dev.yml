@@ -1,33 +1,46 @@
-version: '3.8'
 services:
   postgres-dev:
     image: postgres:15-alpine
     container_name: meocrm-postgres-dev
-    environment:
-      POSTGRES_DB: meocrm_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: meocrm_dev
+    restart: unless-stopped
     ports:
-      - "2001:5432"
+      - "2002:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev_2025
+      POSTGRES_DB: meocrm_dev
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - meocrm-dev-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis-dev:
     image: redis:7-alpine
     container_name: meocrm-redis-dev
+    restart: unless-stopped
     ports:
-      - "2002:6379"
+      - "2003:6379"  # ← FIX: EXPOSE PORT!
     volumes:
       - redis_dev_data:/data
-
-  adminer-dev:
-    image: adminer:latest
-    container_name: meocrm-adminer-dev
-    ports:
-      - "2006:8080"
-    depends_on:
-      - postgres-dev
+    networks:
+      - meocrm-dev-network
+    command: redis-server --appendonly yes --requirepass redis_dev_2025
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "redis_dev_2025", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_dev_data:
   redis_dev_data:
+
+networks:
+  meocrm-dev-network:
+    driver: bridge
