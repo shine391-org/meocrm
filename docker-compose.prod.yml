@@ -4,7 +4,7 @@ services:
     container_name: meocrm-postgres-prod
     restart: always
     ports:
-      - "2022:5432"
+      - "5001:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres_prod_2025
@@ -26,7 +26,7 @@ services:
     container_name: meocrm-redis-prod
     restart: always
     ports:
-      - "2023:6379"
+      - "5002:6379"
     volumes:
       - redis_prod_data:/data
     networks:

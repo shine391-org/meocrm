@@ -4,7 +4,7 @@ services:
     container_name: meocrm-postgres-dev
     restart: unless-stopped
     ports:
-      - "2002:5432"
+      - "2001:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres_dev_2025
@@ -25,7 +25,7 @@ services:
     container_name: meocrm-redis-dev
     restart: unless-stopped
     ports:
-      - "2003:6379"  # ← FIX: EXPOSE PORT!
+      - "2002:6379"  # ← FIX: EXPOSE PORT!
     volumes:
       - redis_dev_data:/data
     networks:
