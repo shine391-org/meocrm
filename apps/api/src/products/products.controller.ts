@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  UseGuards,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -18,6 +8,7 @@ import { UpdateVariantDto } from './dto/update-variant.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ProductEntity } from './entities/product.entity';
 import { VariantEntity } from './entities/variant.entity';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Products')
 @Controller('products')
@@ -28,84 +19,70 @@ export class ProductsController {
 
   @Post()
   @ApiOperation({ summary: 'Create new product' })
-  @ApiResponse({ status: 201, description: 'Product created', type: ProductEntity })
-  create(@Body() createProductDto: CreateProductDto) {
-    return this.productsService.create(createProductDto);
+  @ApiResponse({ status: 201, type: ProductEntity })
+  create(@Body() dto: CreateProductDto, @CurrentUser() user: any) {
+    return this.productsService.create(dto, user.organizationId);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all products (paginated)' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
-  @ApiResponse({ status: 200, description: 'List of products' })
-  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+  @ApiResponse({ status: 200 })
+  findAll(@Query('page') page?: string, @Query('limit') limit?: string, @CurrentUser() user?: any) {
     return this.productsService.findAll(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 20,
+      user.organizationId,
     );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get product by ID' })
-  @ApiResponse({ status: 200, description: 'Product detail', type: ProductEntity })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+  @ApiResponse({ status: 200, type: ProductEntity })
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.productsService.findOne(id, user.organizationId);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update product' })
-  @ApiResponse({ status: 200, description: 'Product updated', type: ProductEntity })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
-    return this.productsService.update(id, updateProductDto);
+  @ApiResponse({ status: 200, type: ProductEntity })
+  update(@Param('id') id: string, @Body() dto: UpdateProductDto, @CurrentUser() user: any) {
+    return this.productsService.update(id, dto, user.organizationId);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete product (soft delete)' })
-  @ApiResponse({ status: 200, description: 'Product deleted' })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  remove(@Param('id') id: string) {
-    return this.productsService.remove(id);
+  @ApiOperation({ summary: 'Delete product' })
+  @ApiResponse({ status: 200 })
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.productsService.remove(id, user.organizationId);
   }
 
-  // ==================== VARIANTS ====================
-
   @Post(':id/variants')
-  @ApiOperation({ summary: 'Create variant for product' })
-  @ApiResponse({ status: 201, description: 'Variant created', type: VariantEntity })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  createVariant(
-    @Param('id') productId: string,
-    @Body() createVariantDto: CreateVariantDto,
-  ) {
-    return this.productsService.createVariant(productId, createVariantDto);
+  @ApiOperation({ summary: 'Create variant' })
+  @ApiResponse({ status: 201, type: VariantEntity })
+  createVariant(@Param('id') productId: string, @Body() dto: CreateVariantDto, @CurrentUser() user: any) {
+    return this.productsService.createVariant(productId, dto, user.organizationId);
   }
 
   @Get(':id/variants')
-  @ApiOperation({ summary: 'Get all variants of a product' })
-  @ApiResponse({ status: 200, description: 'List of variants', type: [VariantEntity] })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  findVariants(@Param('id') productId: string) {
-    return this.productsService.findVariants(productId);
+  @ApiOperation({ summary: 'Get variants' })
+  @ApiResponse({ status: 200, type: [VariantEntity] })
+  findVariants(@Param('id') productId: string, @CurrentUser() user: any) {
+    return this.productsService.findVariants(productId, user.organizationId);
   }
 
   @Patch('variants/:id')
   @ApiOperation({ summary: 'Update variant' })
-  @ApiResponse({ status: 200, description: 'Variant updated', type: VariantEntity })
-  @ApiResponse({ status: 404, description: 'Variant not found' })
-  updateVariant(
-    @Param('id') variantId: string,
-    @Body() updateVariantDto: UpdateVariantDto,
-  ) {
-    return this.productsService.updateVariant(variantId, updateVariantDto);
+  @ApiResponse({ status: 200, type: VariantEntity })
+  updateVariant(@Param('id') variantId: string, @Body() dto: UpdateVariantDto, @CurrentUser() user: any) {
+    return this.productsService.updateVariant(variantId, dto, user.organizationId);
   }
 
   @Delete('variants/:id')
   @ApiOperation({ summary: 'Delete variant' })
-  @ApiResponse({ status: 200, description: 'Variant deleted' })
-  @ApiResponse({ status: 404, description: 'Variant not found' })
-  removeVariant(@Param('id') variantId: string) {
-    return this.productsService.removeVariant(variantId);
+  @ApiResponse({ status: 200 })
+  removeVariant(@Param('id') variantId: string, @CurrentUser() user: any) {
+    return this.productsService.removeVariant(variantId, user.organizationId);
   }
 }
