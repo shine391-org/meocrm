@@ -1,33 +1,34 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Decimal } from '@prisma/client/runtime/library';
 
 export class VariantEntity {
   @ApiProperty()
-  id: string;
+  id!: string;
 
   @ApiProperty()
-  productId: string;
+  productId!: string;
 
   @ApiProperty()
-  sku: string;
+  sku!: string;
 
   @ApiProperty()
-  name: string;
+  name!: string;
+
+  @ApiProperty({ type: 'number' })
+  sellPrice!: Decimal;
 
   @ApiProperty()
-  sellPrice: number;
-
-  @ApiProperty()
-  stock: number;
+  stock!: number;
 
   @ApiProperty({ type: [String] })
-  images: string[];
+  images!: string[];
 
   @ApiProperty()
-  organizationId: string;
+  organizationId!: string;
 
   @ApiProperty()
-  createdAt: Date;
+  createdAt!: Date;
 
   @ApiProperty()
-  updatedAt: Date;
+  updatedAt!: Date;
 }

@@ -6,18 +6,18 @@ export class CreateVariantDto {
   @ApiProperty({ example: 'VDNT09-D' })
   @IsString()
   @IsNotEmpty()
-  sku: string;
+  sku!: string;
 
   @ApiProperty({ example: 'Màu đen' })
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @ApiProperty({ example: 450000 })
   @IsNumber()
   @Type(() => Number)
   @Min(0)
-  sellPrice: number;
+  sellPrice!: number;
 
   @ApiPropertyOptional({ example: 50 })
   @IsNumber()

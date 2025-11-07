@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
-    "test": "jest --passWithNoTests"
+    "test": "jest --config ../../jest.config.js --passWithNoTests"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
