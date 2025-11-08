@@ -22,6 +22,7 @@ export async function setupTestApp(): Promise<{
   }).compile();
 
   const app = moduleFixture.createNestApplication();
+
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const prisma = app.get<PrismaService>(PrismaService);

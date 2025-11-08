@@ -1,23 +1,14 @@
-// TODO: E2E tests require full app context with auth
-// Will be added in Phase 6 with proper test database setup
-// TODO: E2E tests require full app context with auth
-// Will be added in Phase 6 with proper test database setup
-// TODO: E2E tests require full app context with auth
-// Will be added in Phase 6 with proper test database setup
-// TODO: E2E tests require full app context with auth
-// Will be added in Phase 6 with proper test database setup
-import { INestApplication } from '@nestjs/common';
-import { PrismaService } from 'apps/api/src/prisma/prisma.service';
-import { setupTestApp } from 'apps/api/src/test-utils';
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import { Customer, Product, UserRole } from '@prisma/client';
-import { AuthService } from 'apps/api/src/auth/auth.service';
-import * as bcrypt from 'bcryptjs';
+import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/prisma/prisma.service';
+import { Customer, Product } from '@prisma/client';
 
-describe.skip('Orders E2E Tests (TODO: Phase 6)', () => {
+describe('Orders E2E', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let accessToken: string;
+  let authToken: string;
   let organizationId: string;
 
   // Test data
@@ -26,17 +17,69 @@ describe.skip('Orders E2E Tests (TODO: Phase 6)', () => {
   let product2: Product;
 
   beforeAll(async () => {
-    ({ app, prisma, accessToken, organizationId } = await setupTestApp());
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule], // Import FULL AppModule
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+
+    // Apply same pipes as main.ts
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
     await app.init();
+
+    prisma = app.get<PrismaService>(PrismaService);
+
+    // Clean database
+    await prisma.orderItem.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.customer.deleteMany();
+    await prisma.product.deleteMany();
+    await prisma.user.deleteMany();
+    await prisma.organization.deleteMany();
   });
 
-  beforeEach(async () => {
-    // Clean up database before each test
-    await prisma.order.deleteMany({ where: { organizationId } });
-    await prisma.customer.deleteMany({ where: { organizationId } });
-    await prisma.product.deleteMany({ where: { organizationId } });
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule], // Import FULL AppModule
+    }).compile();
 
-    // Seed test data
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+    prisma = app.get<PrismaService>(PrismaService);
+
+    // Clean database before all tests
+    await prisma.orderItem.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.customer.deleteMany();
+    await prisma.product.deleteMany();
+    await prisma.user.deleteMany();
+    await prisma.organization.deleteMany();
+
+    // Create an organization first to get a valid code
+    const org = await prisma.organization.create({
+      data: {
+        name: 'Test Org E2E',
+        code: `E2E${Date.now()}`,
+      },
+    });
+    organizationId = org.id; // CRITICAL: Assign organizationId here
+
+    // Register and login to get auth token
+    const registerRes = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email: `test-${Date.now()}@example.com`,
+        password: 'Password123',
+        name: 'Test User',
+        organizationCode: org.code,
+      })
+      .expect(201);
+
+    authToken = registerRes.body.accessToken;
+
+    // Seed test data after we have organizationId
     customer = await prisma.customer.create({
       data: {
         name: 'E2E Test Customer',
@@ -70,143 +113,130 @@ describe.skip('Orders E2E Tests (TODO: Phase 6)', () => {
   });
 
   afterAll(async () => {
-    // Clean up test data
-    await prisma.order.deleteMany({ where: { organizationId } });
-    await prisma.customer.deleteMany({ where: { organizationId } });
-    await prisma.product.deleteMany({ where: { organizationId } });
     await app.close();
   });
 
-  it('should be defined', () => {
-    expect(app).toBeDefined();
+  beforeEach(async () => {
+    // Clean up order data before each test
+    await prisma.orderItem.deleteMany({ where: { organizationId } });
+    await prisma.order.deleteMany({ where: { organizationId } });
+    // Reset customer stats
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: { totalSpent: 0, totalOrders: 0 },
+    });
   });
 
-  describe('Order Lifecycle', () => {
-    let orderId: string;
-
-    it('POST /orders -> should create a new order', async () => {
-      const createOrderDto = {
+  it('should fail to create order without auth token', async () => {
+    await request(app.getHttpServer())
+      .post('/orders')
+      .send({
         customerId: customer.id,
         items: [{ productId: product1.id, quantity: 1 }],
         paymentMethod: 'CASH',
-        shipping: 0,
-        discount: 0,
-      };
+      })
+      .expect(401); // Unauthorized
+  });
 
-      const { body } = await request(app.getHttpServer())
+  describe('PUT /orders/:id', () => {
+    it('should update order when status is PENDING', async () => {
+        const { body: order } = await request(app.getHttpServer())
+          .post('/orders')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            customerId: customer.id,
+            items: [{ productId: product1.id, quantity: 1 }],
+            paymentMethod: 'CASH',
+          })
+          .expect(201);
+
+        const { body } = await request(app.getHttpServer())
+          .put(`/orders/${order.id}`)
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({ notes: 'Updated note' })
+          .expect(200);
+
+        expect(body.notes).toBe('Updated note');
+      });
+
+      it('should NOT update order when status is not PENDING', async () => {
+        const { body: order } = await request(app.getHttpServer())
+          .post('/orders')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            customerId: customer.id,
+            items: [{ productId: product1.id, quantity: 1 }],
+            paymentMethod: 'CASH',
+          })
+          .expect(201);
+
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'CONFIRMED' },
+        });
+
+        await request(app.getHttpServer())
+          .put(`/orders/${order.id}`)
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({ notes: 'Another update' })
+          .expect(400);
+      });
+  });
+
+  describe('DELETE /orders/:id', () => {
+    it('should soft delete order when status is PENDING', async () => {
+      const { body: order } = await request(app.getHttpServer())
         .post('/orders')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send(createOrderDto)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          customerId: customer.id,
+          items: [{ productId: product1.id, quantity: 1 }],
+          paymentMethod: 'CASH',
+        })
         .expect(201);
 
-      expect(body.code).toMatch(/^ORD\d{3}$/);
-      expect(body.total).toBe(110000); // 100k (subtotal) + 10k (tax)
-      orderId = body.id;
+      await request(app.getHttpServer())
+        .delete(`/orders/${order.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      // Verify soft deleted
+      await request(app.getHttpServer())
+        .get(`/orders/${order.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(404);
     });
 
-    it('should have updated customer stats', async () => {
-      const updatedCustomer = await prisma.customer.findUnique({
+    it('should revert customer stats on delete', async () => {
+      await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          customerId: customer.id,
+          items: [{ productId: product1.id, quantity: 2 }], // 200k + 20k tax = 220k
+          paymentMethod: 'CASH',
+        })
+        .expect(201);
+
+      const order = await prisma.order.findFirst({ where: { customerId: customer.id }});
+
+      const customerBefore = await prisma.customer.findUnique({
         where: { id: customer.id },
       });
-      expect(updatedCustomer?.totalSpent).toBe(110000);
-      expect(updatedCustomer?.lastOrderAt).not.toBeNull();
-    });
 
-    it('PATCH /orders/:id/status -> should allow a valid status transition', async () => {
+        expect(Number(customerBefore?.totalSpent)).toBe(220000);
+      expect(customerBefore?.totalOrders).toBe(1);
+
       await request(app.getHttpServer())
-        .patch(`/orders/${orderId}/status`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ status: 'CONFIRMED' })
+        .delete(`/orders/${order!.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
-    });
 
-    it('PATCH /orders/:id/status -> should reject an invalid status transition', async () => {
-      await request(app.getHttpServer())
-        .patch(`/orders/${orderId}/status`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ status: 'DELIVERED' }) // Invalid: CONFIRMED -> DELIVERED
-        .expect(400);
-    });
-  });
-
-  describe('Calculation Logic', () => {
-    it('should calculate order totals correctly', async () => {
-      const dto = {
-        customerId: customer.id,
-        items: [
-          { productId: product1.id, quantity: 2 }, // 100k * 2 = 200k
-          { productId: product2.id, quantity: 1 }, // 50k * 1 = 50k
-        ],
-        paymentMethod: 'CASH',
-        shipping: 30000,
-        discount: 10000,
-      };
-
-      const { body } = await request(app.getHttpServer())
-        .post('/orders')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send(dto)
-        .expect(201);
-
-      // subtotal = 200k + 50k = 250k
-      // tax = 250k * 0.1 = 25k
-      // total = 250k + 25k + 30k - 10k = 295k
-      expect(body.subtotal).toBe(250000);
-      expect(body.tax).toBe(25000);
-      expect(body.total).toBe(295000);
-    });
-  });
-
-  describe('Multi-Tenancy', () => {
-    let orgBToken: string;
-    let orgBCustomer: Customer;
-
-    beforeAll(async () => {
-      // Create a second organization and user
-      const authService = app.get<AuthService>(AuthService);
-      const orgB = await prisma.organization.create({
-        data: { name: 'Org B E2E', code: `E2E_B_${Date.now()}` },
+      const customerAfter = await prisma.customer.findUnique({
+        where: { id: customer.id },
       });
-      const hashedPassword = await bcrypt.hash('passwordB', 10);
-      const userB = await prisma.user.create({
-        data: {
-          email: `user-b-${Date.now()}@e2e.com`,
-          name: 'User B',
-          password: hashedPassword,
-          organizationId: orgB.id,
-          role: UserRole.OWNER,
-        },
-      });
-      const { accessToken } = await authService.login({
-        email: userB.email,
-        password: 'passwordB',
-      } as any);
-      orgBToken = accessToken;
-
-      orgBCustomer = await prisma.customer.create({
-        data: {
-          name: 'Customer in Org B',
-          phone: '1112223334',
-          code: 'KHB999',
-          organizationId: orgB.id,
-        },
-      });
-    });
-
-    it('should NOT allow creating an order in Org B using a product from Org A', async () => {
-      const dto = {
-        customerId: orgBCustomer.id,
-        items: [{ productId: product1.id, quantity: 1 }], // product1 belongs to Org A
-        paymentMethod: 'CASH',
-      };
-
-      const { body } = await request(app.getHttpServer())
-        .post('/orders')
-        .set('Authorization', `Bearer ${orgBToken}`) // Authenticated as Org B user
-        .send(dto)
-        .expect(404);
-
-      expect(body.message).toContain(`Product ${product1.id} not found`);
+      expect(Number(customerAfter?.totalSpent)).toBe(0);
+      expect(customerAfter?.totalOrders).toBe(0);
     });
   });
 });

@@ -7,6 +7,8 @@ import {
   Post,
   Query,
   UseGuards,
+  Put,
+  Delete,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import {
@@ -22,6 +24,7 @@ import { QueryOrdersDto } from './dto/query-orders.dto';
 import { User } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderEntity } from './entities/order.entity';
+import { UpdateOrderDto } from './dto/update-order.dto';
 
 @ApiTags('orders')
 @ApiBearerAuth()
@@ -65,6 +68,28 @@ export class OrdersController {
   @ApiResponse({ status: 404, description: 'Order not found' })
   findOne(@Param('id') id: string, @CurrentUser() user: User) {
     return this.ordersService.findOne(id, user.organizationId);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update order details' })
+  @ApiResponse({ status: 200, description: 'Order updated' })
+  @ApiResponse({ status: 400, description: 'Cannot update order' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.ordersService.update(id, dto, user.organizationId);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Soft delete order' })
+  @ApiResponse({ status: 200, description: 'Order deleted' })
+  @ApiResponse({ status: 400, description: 'Cannot delete order' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  remove(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.ordersService.remove(id, user.organizationId);
   }
 
   @Patch(':id/status')

@@ -8,9 +8,11 @@ import { CustomersModule } from './customers/customers.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { OrdersModule } from './orders/orders.module';
+import { RequestContextModule } from './common/context/request-context.module';
 
 @Module({
   imports: [
+    RequestContextModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
