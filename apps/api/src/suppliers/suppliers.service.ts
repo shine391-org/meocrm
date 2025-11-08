@@ -171,7 +171,10 @@ return this.prisma.supplier.update({
 
 private async generateCode(organizationId: string): Promise<string> {
 const lastSupplier = await this.prisma.supplier.findFirst({
-where: { organizationId }, // Should check all suppliers, even deleted ones, to avoid code reuse
+where: {
+  organizationId,
+  deletedAt: null,
+},
 orderBy: { code: 'desc' },
 select: { code: true },
 });
@@ -180,7 +183,8 @@ if (!lastSupplier) {
   return 'DT000001';
 }
 
-const lastNumber = parseInt(lastSupplier.code.substring(2));
+const parsed = parseInt(lastSupplier.code.substring(2), 10);
+const lastNumber = Number.isNaN(parsed) ? 0 : parsed;
 const nextNumber = lastNumber + 1;
 return `DT${nextNumber.toString().padStart(6, '0')}`;
 }

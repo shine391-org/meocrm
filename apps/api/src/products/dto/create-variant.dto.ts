@@ -4,7 +4,7 @@ import { Type } from 'class-transformer';
 export class CreateVariantDto {
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsObject()
   @IsOptional()
@@ -13,7 +13,7 @@ export class CreateVariantDto {
   @IsNumber()
   @Type(() => Number)
   @Min(0)
-  price: number;
+  price!: number;
 
   @IsNumber()
   @Type(() => Number)

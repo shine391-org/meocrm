@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { 
   ApiTags, 
   ApiBearerAuth, 
@@ -20,13 +10,11 @@ import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { ListCustomersDto } from './dto/list-customers.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('customers')
 @ApiBearerAuth()
 @Controller('customers')
-@UseGuards(JwtAuthGuard)
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
@@ -49,13 +37,17 @@ export class CustomersController {
   @ApiResponse({ status: 200, description: 'Customer list retrieved' })
   findAll(@CurrentUser() user: any, @Query() query: ListCustomersDto) {
     const { page, limit, search, sortBy, sortOrder, segment } = query;
+    const pageNumber = page ?? 1;
+    const limitNumber = limit ?? 20;
+    const sortField = sortBy ?? 'createdAt';
+    const sortDirection = sortOrder ?? 'desc';
     return this.customersService.findAll(
-      page,
-      limit,
+      pageNumber,
+      limitNumber,
       user.organizationId,
       search,
-      sortBy,
-      sortOrder,
+      sortField,
+      sortDirection,
       segment,
     );
   }

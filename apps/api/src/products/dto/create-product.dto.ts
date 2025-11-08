@@ -4,7 +4,7 @@ import { Type } from 'class-transformer';
 export class CreateProductDto {
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsString()
   @IsOptional()
@@ -17,7 +17,7 @@ export class CreateProductDto {
   @IsNumber()
   @Type(() => Number)
   @Min(0)
-  basePrice: number;
+  basePrice!: number;
 
   @IsNumber()
   @Type(() => Number)

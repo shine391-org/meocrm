@@ -17,7 +17,7 @@ export class CreateCustomerDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  name: string;
+  name!: string;
 
   @ApiProperty({ 
     example: '0901234567', 
@@ -26,7 +26,7 @@ export class CreateCustomerDto {
   @IsString()
   @IsNotEmpty()
   @Matches(/^[0-9]{10,11}$/, { message: 'Phone must be 10-11 digits' })
-  phone: string;
+  phone!: string;
 
   @ApiPropertyOptional({ 
     example: 'nguyenva@example.com', 

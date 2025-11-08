@@ -4,4 +4,8 @@ dist/
 coverage/
 *.log
 .env*
+!.env.example
+!.env.*.example
+!apps/**/.env.example
 pnpm-lock.yaml
+apps/api/prisma/*.backup*
