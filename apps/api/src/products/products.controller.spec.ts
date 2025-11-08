@@ -1,0 +1,54 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { ProductsController } from './products.controller';
+import { ProductsService } from './products.service';
+
+describe('ProductsController', () => {
+  let controller: ProductsController;
+  let service: ProductsService;
+
+  const mockProductsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [ProductsController],
+      providers: [{ provide: ProductsService, useValue: mockProductsService }],
+    }).compile();
+
+    controller = module.get<ProductsController>(ProductsController);
+    service = module.get<ProductsService>(ProductsService);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  describe('findAll', () => {
+    it('should return paginated products', async () => {
+      const mockResult = { data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } };
+      const mockReq = { user: { organizationId: 'org1' } };
+      mockProductsService.findAll.mockResolvedValue(mockResult);
+
+      const result = await controller.findAll('1', '20', undefined, mockReq);
+
+      expect(result).toEqual(mockResult);
+      expect(service.findAll).toHaveBeenCalledWith(1, 20, 'org1', undefined);
+    });
+  });
+
+  describe('findOne', () => {
+    it('should return a product', async () => {
+      const mockProduct = { id: '1', name: 'Product 1' };
+      const mockReq = { user: { organizationId: 'org1' } };
+      mockProductsService.findOne.mockResolvedValue(mockProduct);
+
+      const result = await controller.findOne('1', mockReq);
+      expect(result).toEqual(mockProduct);
+    });
+  });
+});
