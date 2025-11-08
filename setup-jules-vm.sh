@@ -45,22 +45,39 @@ else
     exit 1
 fi
 
-# 5. Configure Redis port 2002
-REDISCONF="/etc/redis/redis.conf"
-if [ ! -f "$REDISCONF" ]; then
-    REDISCONF="/etc/redis/redis-server.conf"
-fi
-if [ -f "$REDISCONF" ]; then
-    sudo sed -i "s/^port .*/port 2002/" "$REDISCONF"
-else
-    echo "WARN: Redis config not found, using default port"
-fi
+# 5. Configure Redis port 2002 (OPTION A: Create config)
+echo "Configuring Redis port 2002..."
+sudo mkdir -p /etc/redis /var/run/redis /var/log/redis /var/lib/redis
+sudo chown redis:redis /var/run/redis /var/log/redis /var/lib/redis 2>/dev/null || true
+sudo tee /etc/redis/redis-2002.conf > /dev/null <<'REDIS_EOF'
+port 2002
+bind 127.0.0.1
+daemonize yes
+pidfile /var/run/redis/redis-2002.pid
+logfile /var/log/redis/redis-2002.log
+dir /var/lib/redis
+supervised no
+databases 16
+save 900 1
+save 300 10
+save 60 10000
+REDIS_EOF
+REDISCONF="/etc/redis/redis-2002.conf"
+echo "✅ Redis config created at $REDISCONF"
 
 # 6. Restart services with fallbacks
 echo "Starting services..."
 sudo systemctl restart postgresql || sudo service postgresql restart || sudo pg_ctlcluster 15 main restart
-sudo systemctl restart redis-server || sudo service redis-server restart || redis-server --daemonize yes
-sleep 5
+
+# Stop any existing Redis
+sudo pkill -9 redis-server 2>/dev/null || true
+sudo systemctl stop redis-server 2>/dev/null || true
+sleep 2
+
+# Start Redis with custom config
+sudo redis-server "$REDISCONF"
+sleep 3
+echo "✅ Redis started with custom config"
 
 # 7. Database setup (idempotent)
 echo "Setting up database..."
@@ -119,10 +136,10 @@ pnpm --filter @meocrm/api prisma generate
 # VALIDATION
 echo ""
 echo "=== VALIDATION ==="
-psql --version && echo "✅ PostgreSQL" || echo "❌ PostgreSQL"
-redis-server --version && echo "✅ Redis" || echo "❌ Redis"
-nest --version && echo "✅ NestJS CLI" || echo "❌ NestJS"
-PGPASSWORD='meocrm_dev_password' psql -h localhost -p 2001 -U meocrm_user -d meocrm_dev -c "SELECT 1;" >/dev/null 2>&1 && echo "✅ DB connected" || echo "❌ DB failed"
-redis-cli -p 2002 ping >/dev/null 2>&1 && echo "✅ Redis connected" || echo "❌ Redis failed"
+psql --version && echo "✅ PostgreSQL" || { echo "❌ PostgreSQL"; exit 1; }
+redis-server --version && echo "✅ Redis" || { echo "❌ Redis"; exit 1; }
+nest --version && echo "✅ NestJS CLI" || { echo "❌ NestJS"; exit 1; }
+PGPASSWORD='meocrm_dev_password' psql -h localhost -p 2001 -U meocrm_user -d meocrm_dev -c "SELECT 1;" >/dev/null 2>&1 && echo "✅ DB connected" || { echo "❌ DB failed"; exit 1; }
+redis-cli -p 2002 ping >/dev/null 2>&1 && echo "✅ Redis connected" || { echo "❌ Redis failed"; exit 1; }
 echo "================="
 echo "✅ Setup complete!"
