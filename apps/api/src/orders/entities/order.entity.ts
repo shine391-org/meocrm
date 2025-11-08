@@ -70,6 +70,12 @@ export class OrderEntity implements Partial<Order> {
   @ApiProperty()
   total!: Decimal;
 
+  @ApiProperty({ description: 'Whether order is fully paid' })
+  isPaid!: boolean;
+
+  @ApiProperty({ description: 'Amount paid by customer' })
+  paidAmount!: Decimal;
+
   @ApiProperty({ enum: OrderStatus })
   status!: OrderStatus;
 

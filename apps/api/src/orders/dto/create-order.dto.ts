@@ -7,6 +7,7 @@ import {
   IsNumber,
   Min,
   ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -59,4 +60,23 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({
+    required: false,
+    default: false,
+    description: 'Whether order is fully paid',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isPaid?: boolean;
+
+  @ApiProperty({
+    required: false,
+    example: 0,
+    description: 'Amount already paid by customer (for partial payments)',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  paidAmount?: number;
 }

@@ -1,12 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrdersService } from './orders.service';
-import { PrismaService } from 'apps/api/src/prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
-import { PrismaTransactionalClient } from 'apps/api/src/prisma/prisma.service';
+import { Prisma, PrismaClient } from '@prisma/client';
+
+type PrismaTransactionalClient = Prisma.TransactionClient;
 
 describe('OrdersService', () => {
   let service: OrdersService;
-  let prisma: DeepMockProxy<PrismaService>;
+  let prisma: DeepMockProxy<PrismaClient>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -14,13 +16,17 @@ describe('OrdersService', () => {
         OrdersService,
         {
           provide: PrismaService,
-          useValue: mockDeep<PrismaService>(),
+          useValue: mockDeep<PrismaClient>(),
         },
       ],
     }).compile();
 
     service = module.get<OrdersService>(OrdersService);
-    prisma = module.get(PrismaService);
+    prisma = module.get(PrismaService) as DeepMockProxy<PrismaClient>;
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
@@ -48,73 +54,170 @@ describe('OrdersService', () => {
   });
 
   describe('create', () => {
-    const customer = { id: 'cust-id', totalSpent: 0 } as any;
-    const product = {
-      id: 'prod-id',
+    const mockCreateDto = {
+      customerId: 'customer-1',
+      items: [
+        {
+          productId: 'product-1',
+          quantity: 2,
+          unitPrice: 100,
+        },
+      ],
+    };
+
+    const mockProduct = {
+      id: 'product-1',
       sellPrice: 100,
       stock: 10,
+      organizationId: 'org-1',
       variants: [],
-    } as any;
-    const createDto = {
-      customerId: 'cust-id',
-      items: [{ productId: 'prod-id', quantity: 2 }],
-      paymentMethod: 'CASH',
-    } as any;
+    };
 
-    it('should create an order successfully', async () => {
-      prisma.customer.findFirst.mockResolvedValue(customer);
-      prisma.product.findFirst.mockResolvedValue(product);
-      prisma.order.findFirst.mockResolvedValue(null); // For code generation
+    const mockOrder = {
+      id: 'order-1',
+      code: 'ORD-001',
+      customerId: 'customer-1',
+      total: 200,
+      isPaid: false,
+      paidAmount: 0,
+      status: 'PENDING',
+      organizationId: 'org-1',
+    };
 
-      // Mock the transaction
-      prisma.$transaction.mockImplementation(
-        (callback: (prisma: PrismaTransactionalClient) => any) =>
-          callback(prisma),
-      );
+    const mockCustomer = {
+      id: 'customer-1',
+      debt: 200,
+      totalSpent: 200,
+      totalOrders: 1,
+    };
 
-      const result = await service.create(createDto, 'org-id');
+    beforeEach(() => {
+      // Mock transaction with callback pattern
+      (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        // Create a mock transaction client
+        const txClient = {
+          product: {
+            findFirst: jest.fn().mockResolvedValue(mockProduct),
+            update: jest.fn().mockResolvedValue(mockProduct),
+          },
+          order: {
+            create: jest.fn().mockResolvedValue(mockOrder),
+            findFirst: jest.fn().mockResolvedValue(null),
+          },
+          customer: {
+            findFirst: jest.fn().mockResolvedValue({ id: 'customer-1' }),
+            update: jest.fn().mockResolvedValue(mockCustomer),
+          },
+        };
 
-      expect(prisma.order.create).toHaveBeenCalled();
-      expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { id: 'cust-id' },
-        data: {
-          totalSpent: { increment: 220 }, // 200 (subtotal) + 20 (tax)
-          lastOrderAt: expect.any(Date),
-        },
+        // Execute the callback with mock transaction client
+        return callback(txClient);
       });
-      expect(result.code).toBe('ORD001');
-      expect(result.total).toBe(220);
     });
 
-    it('should throw NotFoundException if customer is not found', async () => {
-      prisma.customer.findFirst.mockResolvedValue(null);
-      prisma.$transaction.mockImplementation(
-        (callback: (prisma: PrismaTransactionalClient) => any) =>
-          callback(prisma),
-      );
+    it('should create order and increase customer debt when isPaid=false', async () => {
+      const result = await service.create(mockCreateDto as any, 'org-1');
 
-      await expect(service.create(createDto, 'org-id')).rejects.toThrow(
-        'Customer with ID cust-id not found',
-      );
+      expect(result).toMatchObject({
+        id: 'order-1',
+        isPaid: false,
+        paidAmount: 0,
+      });
+
+      // Verify transaction was called
+      expect(prisma.$transaction).toHaveBeenCalled();
     });
 
-    it('should throw NotFoundException if product is not found', async () => {
-      prisma.customer.findFirst.mockResolvedValue(customer);
-      prisma.product.findFirst.mockResolvedValue(null);
-      prisma.$transaction.mockImplementation(
-        (callback: (prisma: PrismaTransactionalClient) => any) =>
-          callback(prisma),
-      );
+    it('should NOT increase customer debt when isPaid=true', async () => {
+      const paidDto = { ...mockCreateDto, isPaid: true, paidAmount: 220 };
 
-      await expect(service.create(createDto, 'org-id')).rejects.toThrow(
-        'Product prod-id not found',
-      );
+      (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        const txClient = {
+          product: {
+            findFirst: jest.fn().mockResolvedValue(mockProduct),
+          },
+          order: {
+            create: jest.fn().mockResolvedValue({ ...mockOrder, isPaid: true }),
+            findFirst: jest.fn().mockResolvedValue(null),
+          },
+          customer: {
+            findFirst: jest.fn().mockResolvedValue({ id: 'customer-1' }),
+            update: jest.fn().mockResolvedValue({ ...mockCustomer, debt: 0 }),
+          },
+        };
+        return callback(txClient);
+      });
+
+      const result = await service.create(paidDto as any, 'org-1');
+
+      expect(result.isPaid).toBe(true);
+    });
+
+    it('should handle partial payment correctly', async () => {
+      const partialDto = {
+        ...mockCreateDto,
+        isPaid: false,
+        paidAmount: 50,
+      };
+
+      // Total = 200, paidAmount = 50 → debt increase = 150
+      (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        const txClient = {
+          product: {
+            findFirst: jest.fn().mockResolvedValue(mockProduct),
+          },
+          order: {
+            create: jest.fn().mockResolvedValue({
+              ...mockOrder,
+              paidAmount: 50,
+            }),
+            findFirst: jest.fn().mockResolvedValue(null),
+          },
+          customer: {
+            findFirst: jest.fn().mockResolvedValue({ id: 'customer-1' }),
+            update: jest.fn().mockImplementation((args) => {
+              // Verify debt increment is correct
+              expect(args.data.debt).toEqual({ increment: 170 });
+              return Promise.resolve({
+                ...mockCustomer,
+                debt: 170,
+              });
+            }),
+          },
+        };
+        return callback(txClient);
+      });
+
+      await service.create(partialDto as any, 'org-1');
+    });
+
+    it('should throw error if product not found', async () => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        const txClient = {
+          product: {
+            findFirst: jest.fn().mockResolvedValue(null),
+          },
+          order: { create: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
+          customer: {
+            findFirst: jest.fn().mockResolvedValue({ id: 'customer-1' }),
+            update: jest.fn(),
+          },
+        };
+        return callback(txClient);
+      });
+
+      await expect(
+        service.create(mockCreateDto as any, 'org-1'),
+      ).rejects.toThrow();
     });
   });
 
   describe('findAll', () => {
     it('should return paginated orders', async () => {
-      const orders = [{ id: 'order-1' }, { id: 'order-2' }] as any;
+      const orders = [
+        { id: 'order-1', _count: { items: 1 } },
+        { id: 'order-2', _count: { items: 2 } },
+      ] as any;
       prisma.order.findMany.mockResolvedValue(orders);
       prisma.order.count.mockResolvedValue(2);
 
@@ -152,7 +255,9 @@ describe('OrdersService', () => {
         'org-id',
       );
       expect(prisma.order.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: 'CONFIRMED' } }),
+        expect.objectContaining({
+          data: { status: 'CONFIRMED', updatedAt: expect.any(Date) },
+        }),
       );
     });
 

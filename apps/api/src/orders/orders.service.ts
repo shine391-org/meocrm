@@ -3,12 +3,13 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from 'apps/api/src/prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { Prisma, Order } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
-import { PrismaTransactionalClient } from 'apps/api/src/prisma/prisma.service';
+
+type PrismaTransactionalClient = Prisma.TransactionClient;
 
 @Injectable()
 export class OrdersService {
@@ -60,7 +61,7 @@ export class OrdersService {
           throw new NotFoundException(`Product ${item.productId} not found`);
         }
 
-        let unitPrice = product.sellPrice.toNumber();
+        let unitPrice = Number(product.sellPrice);
         let selectedVariant = null;
 
         if (item.variantId) {
@@ -68,7 +69,7 @@ export class OrdersService {
           if (!variant) {
             throw new NotFoundException(`Variant ${item.variantId} not found`);
           }
-          unitPrice = variant.sellPrice.toNumber();
+          unitPrice = Number(variant.sellPrice);
           selectedVariant = variant;
         }
 
@@ -100,6 +101,18 @@ export class OrdersService {
       const total =
         subtotal + tax + (dto.shipping || 0) - (dto.discount || 0);
 
+      if (dto.paidAmount && dto.paidAmount > total) {
+        throw new BadRequestException(
+          `paidAmount (${dto.paidAmount}) cannot exceed order total (${total})`,
+        );
+      }
+
+      if (dto.isPaid === true && dto.paidAmount !== total) {
+        throw new BadRequestException(
+          `When isPaid is true, paidAmount must equal total (${total})`,
+        );
+      }
+
       // 4. Generate code
       const code = await this.generateOrderCode(organizationId, prisma);
 
@@ -113,6 +126,8 @@ export class OrdersService {
           shipping: dto.shipping || 0,
           discount: dto.discount || 0,
           total,
+          isPaid: dto.isPaid || false,
+          paidAmount: dto.paidAmount || 0,
           status: 'PENDING',
           paymentMethod: dto.paymentMethod,
           notes: dto.notes,
@@ -135,6 +150,10 @@ export class OrdersService {
         where: { id: dto.customerId },
         data: {
           totalSpent: { increment: total },
+          totalOrders: { increment: 1 },
+          debt: {
+            increment: dto.isPaid ? 0 : total - (dto.paidAmount || 0),
+          },
           lastOrderAt: new Date(),
         },
       });

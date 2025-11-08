@@ -15,9 +15,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'apps/api/src/auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { CurrentUser } from 'apps/api/src/auth/decorators/current-user.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { User } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
