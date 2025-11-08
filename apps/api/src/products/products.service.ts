@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
@@ -58,21 +59,81 @@ export class ProductsService {
     });
   }
 
-  async findAll(page: number, limit: number, organizationId: string, categoryId?: string) {
+  async findAll(
+    page: number,
+    limit: number,
+    organizationId: string,
+    filters?: QueryProductsDto,
+  ) {
     const skip = (page - 1) * limit;
-    const where: any = { organizationId, deletedAt: null };
-    if (categoryId) where.categoryId = categoryId;
+
+    // Build where clause
+    const where: any = {
+      organizationId,
+      deletedAt: null,  // ⚠️ CRITICAL: Soft delete filter
+    };
+
+    // Task 2: Filters
+    if (filters?.categoryId) {
+      where.categoryId = filters.categoryId;
+    }
+
+    if (filters?.minPrice !== undefined || filters?.maxPrice !== undefined) {
+      where.sellPrice = {};
+      if (filters.minPrice !== undefined) {
+        where.sellPrice.gte = filters.minPrice;
+      }
+      if (filters.maxPrice !== undefined) {
+        where.sellPrice.lte = filters.maxPrice;
+      }
+    }
+
+    if (filters?.inStock === true) {
+      where.stock = { gt: 0 };
+    }
+
+    // Task 3: Search
+    if (filters?.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { sku: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Task 4: Sorting
+    const orderBy: any = {};
+    const sortBy = filters?.sortBy || 'createdAt';
+    const sortOrder = filters?.sortOrder || 'desc';
+
+    orderBy[sortBy] = sortOrder;
+
+    // Execute queries
     const [data, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
-        include: { category: true, variants: true },
-        orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
+        orderBy,
+        include: {
+          category: true,
+        },
       }),
       this.prisma.product.count({ where }),
     ]);
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
   }
 
   async findOne(id: string, organizationId: string) {

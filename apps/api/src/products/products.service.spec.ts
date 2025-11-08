@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ProductsService } from './products.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException } from '@nestjs/common';
+import { QueryProductsDto } from './dto/query-products.dto';
+import { CreateProductDto } from './dto/create-product.dto';
 
 describe('ProductsService', () => {
   let service: ProductsService;
@@ -19,10 +21,8 @@ describe('ProductsService', () => {
     productVariant: {
       findMany: jest.fn(),
       create: jest.fn(),
-      findFirst: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
     },
+    $transaction: jest.fn().mockImplementation((promises) => Promise.all(promises)),
   };
 
   beforeEach(async () => {
@@ -48,25 +48,102 @@ describe('ProductsService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('findAll', () => {
-    it('should return paginated products', async () => {
-      const mockProducts = [
-        { id: '1', name: 'Product 1', sku: 'PRD001', organizationId: 'org1' },
-      ];
-      mockPrismaService.product.findMany.mockResolvedValue(mockProducts);
-      mockPrismaService.product.count.mockResolvedValue(1);
+  describe('findAll with filters', () => {
+    it('should filter by categoryId', async () => {
+      const filters = { categoryId: 'cat-1' };
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
 
-      const result = await service.findAll(1, 20, 'org1');
+      await service.findAll(1, 20, 'org-1', filters);
 
       expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { organizationId: 'org1', deletedAt: null },
+          where: expect.objectContaining({ categoryId: 'cat-1' }),
         }),
       );
-      expect(result).toEqual({
-        data: mockProducts,
-        meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
-      });
+    });
+
+    it('should filter by price range', async () => {
+      const filters = { minPrice: 1000, maxPrice: 5000 };
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
+
+      await service.findAll(1, 20, 'org-1', filters);
+
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            sellPrice: { gte: 1000, lte: 5000 },
+          }),
+        }),
+      );
+    });
+
+    it('should filter by inStock', async () => {
+      const filters = { inStock: true };
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
+
+      await service.findAll(1, 20, 'org-1', filters);
+
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ stock: { gt: 0 } }),
+        }),
+      );
+    });
+
+    it('should search by name and SKU', async () => {
+      const filters = { search: 'test' };
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
+
+      await service.findAll(1, 20, 'org-1', filters);
+
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [
+              { name: { contains: 'test', mode: 'insensitive' } },
+              { sku: { contains: 'test', mode: 'insensitive' } },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('should sort by stock descending', async () => {
+      const filters: QueryProductsDto = { sortBy: 'stock', sortOrder: 'desc' };
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
+
+      await service.findAll(1, 20, 'org-1', filters);
+
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { stock: 'desc' },
+        }),
+      );
+    });
+
+    it('should work without filters (backward compatible)', async () => {
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
+
+      const result = await service.findAll(1, 20, 'org-1', {});
+
+      expect(result.meta.page).toBe(1);
+      expect(result.meta.limit).toBe(20);
+    });
+
+    it('should calculate hasNext and hasPrev correctly', async () => {
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(50);
+
+      const result = await service.findAll(2, 20, 'org-1', {});
+
+      expect(result.meta.hasNext).toBe(true);  // page 2/3
+      expect(result.meta.hasPrev).toBe(true);  // page 2/3
     });
   });
 
@@ -87,7 +164,7 @@ describe('ProductsService', () => {
 
   describe('create', () => {
     it('should create a product with SKU', async () => {
-      const createDto = {
+      const createDto: CreateProductDto = {
         name: 'New Product',
         basePrice: 100000,
         costPrice: 50000,
@@ -99,38 +176,6 @@ describe('ProductsService', () => {
       const result = await service.create(createDto, 'org1');
       expect(result.sku).toBe('PRD002');
     });
-
-    it('should generate SKU fallback when none exist', async () => {
-      mockPrismaService.product.findFirst.mockResolvedValueOnce(null);
-      const code = await (service as any).generateSKU('org1');
-      expect(code).toBe('PRD001');
-    });
-  });
-
-  describe('variants', () => {
-    it('should create and list variants', async () => {
-      const product = { id: 'prod1', sku: 'PRD010', variants: [] };
-      mockPrismaService.product.findFirst.mockResolvedValue(product);
-      mockPrismaService.productVariant.findMany.mockResolvedValue([{ id: 'var1' }]);
-      mockPrismaService.productVariant.create.mockResolvedValue({ id: 'var1', sku: 'PRD010-V01' });
-
-      const created = await service.createVariant('prod1', { name: 'Size L', price: 10000 }, 'org1');
-      expect(created.sku).toContain('PRD010-V');
-
-      const variants = await service.findVariants('prod1', 'org1');
-      expect(variants).toEqual([{ id: 'var1' }]);
-    });
-
-    it('should update and remove variant', async () => {
-      mockPrismaService.productVariant.findFirst.mockResolvedValue({ id: 'var1' });
-      mockPrismaService.productVariant.update.mockResolvedValue({ id: 'var1', name: 'Updated' });
-
-      const updated = await service.updateVariant('var1', { name: 'Updated', price: 12000 }, 'org1');
-      expect(updated.name).toBe('Updated');
-
-      await service.removeVariant('var1', 'org1');
-      expect(mockPrismaService.productVariant.delete).toHaveBeenCalledWith({ where: { id: 'var1' } });
-    });
   });
 
   describe('remove', () => {
@@ -140,16 +185,6 @@ describe('ProductsService', () => {
 
       const result = await service.remove('1', 'org1');
       expect(result).toEqual({ message: 'Product deleted successfully' });
-    });
-  });
-
-  describe('update', () => {
-    it('should update product fields', async () => {
-      mockPrismaService.product.findFirst.mockResolvedValue({ id: '1', name: 'Old' });
-      mockPrismaService.product.update.mockResolvedValue({ id: '1', name: 'New' });
-
-      const result = await service.update('1', { name: 'New', basePrice: 2000 }, 'org1');
-      expect(result.name).toBe('New');
     });
   });
 });

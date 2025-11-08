@@ -5,14 +5,8 @@ module.exports = {
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
-  collectCoverageFrom: [
-    'apps/api/src/auth/auth.service.ts',
-    'apps/api/src/customers/customers.service.ts',
-    'apps/api/src/products/products.controller.ts',
-    'apps/api/src/products/products.service.ts',
-    'apps/api/src/suppliers/suppliers.service.ts',
-  ],
-  coverageDirectory: 'coverage',
+  collectCoverageFrom: ['**/*.(t|j)s'],
+  coverageDirectory: './coverage',
   testEnvironment: 'node',
   roots: ['<rootDir>/apps/'],
   globals: {
