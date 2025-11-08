@@ -1,55 +1,58 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Decimal } from '@prisma/client/runtime/library';
 
-export class CustomerEntity {
-  @ApiProperty()
-  id: string;
+export class Customer {
+  @ApiProperty({ description: 'Customer ID' })
+  id!: string;
 
-  @ApiProperty()
-  organizationId: string;
+  @ApiProperty({ description: 'Organization ID' })
+  organizationId!: string;
 
-  @ApiProperty({ example: 'CUS001' })
-  code: string;
+  @ApiProperty({ description: 'Customer code (KH000001)' })
+  code!: string;
 
-  @ApiProperty()
-  name: string;
+  @ApiProperty({ description: 'Customer name' })
+  name!: string;
 
-  @ApiProperty()
-  phone: string;
+  @ApiProperty({ description: 'Phone number' })
+  phone!: string;
 
-  @ApiProperty({ nullable: true })
-  email: string | null;
+  @ApiPropertyOptional({ description: 'Email address' })
+  email?: string;
 
-  @ApiProperty({ nullable: true })
-  address: string | null;
+  @ApiPropertyOptional({ description: 'Street address' })
+  address?: string;
 
-  @ApiProperty({ nullable: true })
-  province: string | null;
+  @ApiPropertyOptional({ description: 'Province/City' })
+  province?: string;
 
-  @ApiProperty({ nullable: true })
-  district: string | null;
+  @ApiPropertyOptional({ description: 'District' })
+  district?: string;
 
-  @ApiProperty({ nullable: true })
-  ward: string | null;
+  @ApiPropertyOptional({ description: 'Ward' })
+  ward?: string;
 
-  @ApiProperty({ nullable: true })
-  segment: string | null;
+  @ApiPropertyOptional({ description: 'Customer segment' })
+  segment?: string;
 
-  @ApiProperty({ type: 'number' })
-  totalSpent: Decimal;
+  @ApiProperty({ description: 'Total amount spent' })
+  totalSpent!: Decimal;
 
-  @ApiProperty()
-  totalOrders: number;
+  @ApiProperty({ description: 'Total number of orders' })
+  totalOrders!: number;
 
-  @ApiProperty({ type: 'number' })
-  debt: Decimal;
+  @ApiProperty({ description: 'Outstanding debt' })
+  debt!: Decimal;
 
-  @ApiProperty({ nullable: true })
-  lastOrderAt: Date | null;
+  @ApiPropertyOptional({ description: 'Last order date' })
+  lastOrderAt?: Date;
 
-  @ApiProperty()
-  createdAt: Date;
+  @ApiProperty({ description: 'Created date' })
+  createdAt!: Date;
 
-  @ApiProperty()
-  updatedAt: Date;
+  @ApiProperty({ description: 'Last updated date' })
+  updatedAt!: Date;
+
+  @ApiPropertyOptional({ description: 'Deleted date (soft delete)' })
+  deletedAt?: Date;
 }
