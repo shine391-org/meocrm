@@ -1,7 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProductsService } from './products.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { QueryProductsDto, ProductSortBy, SortOrder } from './dto/query-products.dto';
+import { CreateProductDto } from './dto/create-product.dto';
 
 describe('ProductsService', () => {
   let service: ProductsService;
@@ -20,6 +22,7 @@ describe('ProductsService', () => {
       findMany: jest.fn(),
       create: jest.fn(),
     },
+    $transaction: jest.fn().mockImplementation((promises) => Promise.all(promises)),
   };
 
   beforeEach(async () => {
@@ -46,19 +49,81 @@ describe('ProductsService', () => {
   });
 
   describe('findAll', () => {
-    it('should return paginated products', async () => {
-      const mockProducts = [
-        { id: '1', name: 'Product 1', sku: 'PRD001', organizationId: 'org1' },
-      ];
+    const organizationId = 'org1';
+    const mockProducts = [{ id: '1', name: 'Product 1', sku: 'PRD001', organizationId }];
+
+    it('should return paginated products with hasNext and hasPrev', async () => {
       mockPrismaService.product.findMany.mockResolvedValue(mockProducts);
-      mockPrismaService.product.count.mockResolvedValue(1);
+      mockPrismaService.product.count.mockResolvedValue(10); // 10 items total
 
-      const result = await service.findAll(1, 20, 'org1');
+      const query: QueryProductsDto = { page: 2, limit: 3 };
+      const result = await service.findAll(query, organizationId);
 
-      expect(result).toEqual({
-        data: mockProducts,
-        meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
-      });
+      expect(result.meta.total).toBe(10);
+      expect(result.meta.page).toBe(2);
+      expect(result.meta.limit).toBe(3);
+      expect(result.meta.totalPages).toBe(4);
+      expect(result.meta.hasNext).toBe(true);
+      expect(result.meta.hasPrev).toBe(true);
+    });
+
+    it('should throw BadRequestException if minPrice > maxPrice', async () => {
+      const query: QueryProductsDto = { minPrice: 100, maxPrice: 50 };
+      await expect(service.findAll(query, organizationId)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should filter by search term', async () => {
+      const query: QueryProductsDto = { search: 'Test' };
+      await service.findAll(query, organizationId);
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [
+            { name: { contains: 'Test', mode: 'insensitive' } },
+            { sku: { contains: 'Test', mode: 'insensitive' } },
+            { description: { contains: 'Test', mode: 'insensitive' } },
+          ],
+        }),
+      }));
+    });
+
+    it('should filter by price range', async () => {
+      const query: QueryProductsDto = { minPrice: 10, maxPrice: 100 };
+      await service.findAll(query, organizationId);
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          sellPrice: { gte: 10, lte: 100 },
+        }),
+      }));
+    });
+
+    it('should filter by inStock', async () => {
+      const query: QueryProductsDto = { inStock: true };
+      await service.findAll(query, organizationId);
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          stock: { gt: 0 },
+        }),
+      }));
+    });
+
+    it('should sort by name ascending', async () => {
+      const query: QueryProductsDto = { sortBy: ProductSortBy.name, order: SortOrder.asc };
+      await service.findAll(query, organizationId);
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        orderBy: { name: 'asc' },
+      }));
+    });
+
+    it('should handle pagination correctly', async () => {
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
+
+      const query: QueryProductsDto = { page: 3, limit: 15 };
+      await service.findAll(query, organizationId);
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        skip: 30,
+        take: 15,
+      }));
     });
   });
 
@@ -79,7 +144,7 @@ describe('ProductsService', () => {
 
   describe('create', () => {
     it('should create a product with SKU', async () => {
-      const createDto = {
+      const createDto: CreateProductDto = {
         name: 'New Product',
         basePrice: 100000,
         costPrice: 50000,

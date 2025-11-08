@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
@@ -58,21 +59,81 @@ export class ProductsService {
     });
   }
 
-  async findAll(page: number, limit: number, organizationId: string, categoryId?: string) {
+  async findAll(query: QueryProductsDto, organizationId: string) {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      categoryId,
+      minPrice,
+      maxPrice,
+      inStock,
+      sortBy = 'createdAt',
+      order = 'desc',
+    } = query;
+
+    if (minPrice && maxPrice && minPrice > maxPrice) {
+      throw new BadRequestException('minPrice cannot be greater than maxPrice');
+    }
+
     const skip = (page - 1) * limit;
-    const where: any = { organizationId, deletedAt: null };
-    if (categoryId) where.categoryId = categoryId;
-    const [data, total] = await Promise.all([
+    const where: any = {
+      organizationId,
+      deletedAt: null,
+    };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (categoryId) {
+      where.categoryId = categoryId;
+    }
+
+    if (minPrice !== undefined) {
+      where.sellPrice = { ...where.sellPrice, gte: minPrice };
+    }
+
+    if (maxPrice !== undefined) {
+      where.sellPrice = { ...where.sellPrice, lte: maxPrice };
+    }
+
+    if (inStock) {
+      where.stock = { gt: 0 };
+    }
+
+    const orderBy = { [sortBy]: order };
+
+    const [data, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
         include: { category: true, variants: true },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),
       this.prisma.product.count({ where }),
     ]);
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+
+    const totalPages = Math.ceil(total / limit);
+    const hasNext = page < totalPages;
+    const hasPrev = page > 1;
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNext,
+        hasPrev,
+      },
+    };
   }
 
   async findOne(id: string, organizationId: string) {

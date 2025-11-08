@@ -5,6 +5,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { QueryProductsDto } from './dto/query-products.dto';
 
 @Controller('products')
 @UseGuards(JwtAuthGuard)
@@ -17,8 +18,8 @@ export class ProductsController {
   }
 
   @Get()
-  findAll(@Query('page') page: string = '1', @Query('limit') limit: string = '20', @Query('categoryId') categoryId: string, @Req() req: any) {
-    return this.productsService.findAll(parseInt(page), parseInt(limit), req.user.organizationId, categoryId);
+  findAll(@Query() query: QueryProductsDto, @Req() req: any) {
+    return this.productsService.findAll(query, req.user.organizationId);
   }
 
   @Get(':id')
