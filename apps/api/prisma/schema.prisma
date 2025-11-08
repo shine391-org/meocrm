@@ -62,6 +62,7 @@ model Organization {
   categories      Category[]
   products        Product[]
   customers       Customer[]
+  customerGroups  CustomerGroup[]
   suppliers       Supplier[]
   orders          Order[]
   shippingOrders  ShippingOrder[]
@@ -100,9 +101,10 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization  Organization   @relation(fields: [organizationId], references: [id])
-  orders        Order[]
-  refreshTokens RefreshToken[]
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  orders           Order[]
+  refreshTokens    RefreshToken[]
+  createdCustomers Customer[]     @relation("CustomerCreator")
 
   @@index([organizationId])
   @@map("users")
@@ -193,25 +195,38 @@ model ProductVariant {
 }
 
 model Customer {
-  id             String       @id @default(cuid())
+  id             String         @id @default(cuid())
   organizationId String
   code           String
   name           String
   phone          String
+  gender         String?
+  birthday       DateTime?
+  facebook       String?
+  groupId        String?
+  group          CustomerGroup? @relation(fields: [groupId], references: [id])
+  source         String?
+  taxCode        String?
+  idNumber       String?
+  bank           String?
+  note           String?
+  status         CustomerStatus @default(ACTIVE)
+  createdBy      String?
+  creator        User?          @relation("CustomerCreator", fields: [createdBy], references: [id])
   email          String?
   address        String?
   province       String?
   district       String?
   ward           String?
   segment        String?
-  totalSpent     Decimal      @default(0) @db.Decimal(12, 2)
-  totalOrders    Int          @default(0)
-  debt           Decimal      @default(0) @db.Decimal(12, 2)
+  totalSpent     Decimal        @default(0) @db.Decimal(12, 2)
+  totalOrders    Int            @default(0)
+  debt           Decimal        @default(0) @db.Decimal(12, 2)
   lastOrderAt    DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  deletedAt      DateTime?    @map("deleted_at")
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?      @map("deleted_at")
+  organization   Organization   @relation(fields: [organizationId], references: [id])
   orders         Order[]
 
   @@unique([code, organizationId])
@@ -361,4 +376,25 @@ model Transfer {
   @@index([fromBranchId])
   @@index([toBranchId])
   @@map("transfers")
+}
+
+model CustomerGroup {
+  id             String       @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  customers      Customer[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
 }
