@@ -64,6 +64,11 @@ describe('SuppliersService', () => {
       prisma.supplier.findFirst.mockResolvedValue(null);
       const code = await service['generateCode']('org_123');
       expect(code).toBe('DT000001');
+      expect(prisma.supplier.findFirst).toHaveBeenCalledWith({
+        where: { organizationId: 'org_123', deletedAt: null },
+        orderBy: { code: 'desc' },
+        select: { code: true },
+      });
     });
 
     it('should generate next code (DT000002) if suppliers exist', async () => {

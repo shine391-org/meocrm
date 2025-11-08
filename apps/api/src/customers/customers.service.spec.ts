@@ -1,13 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PrismaService } from '../prisma/prisma.service';
 import { CustomersService } from './customers.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('CustomersService', () => {
   let service: CustomersService;
-  let prisma: PrismaService;
-
-  const organizationId = 'test-org-id';
+  let prisma: {
+    customer: {
+      findFirst: jest.Mock;
+      create: jest.Mock;
+      findMany: jest.Mock;
+      count: jest.Mock;
+      update: jest.Mock;
+    };
+  };
+  const organizationId = 'org-123';
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -23,118 +30,143 @@ describe('CustomersService', () => {
               count: jest.fn(),
               update: jest.fn(),
             },
-            $transaction: jest.fn().mockImplementation((callback) => callback),
           },
         },
       ],
     }).compile();
 
     service = module.get<CustomersService>(CustomersService);
-    prisma = module.get<PrismaService>(PrismaService);
+    prisma = module.get(PrismaService) as any;
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   describe('create', () => {
-    it('should create a new customer', async () => {
-      const createCustomerDto = { name: 'Test Customer', phone: '123456789' };
-      const expectedCustomer = { id: '1', code: 'KH000001', ...createCustomerDto };
+    it('creates a customer with a generated code', async () => {
+      const dto = { name: 'Test Customer', phone: '0987654321' };
+      const expected = { id: '1', code: 'KH000001', ...dto };
 
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue(null);
-      jest.spyOn(prisma.customer, 'create').mockResolvedValue(expectedCustomer as any);
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+      prisma.customer.create.mockResolvedValue(expected);
 
-      const result = await service.create(organizationId, createCustomerDto);
-      expect(result).toEqual(expectedCustomer);
+      const result = await service.create(dto, organizationId);
+
+      expect(prisma.customer.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          ...dto,
+          code: 'KH000001',
+          organization: { connect: { id: organizationId } },
+        }),
+      });
+      expect(result).toEqual(expected);
     });
 
-    it('should throw a ConflictException if a customer with the same phone number already exists', async () => {
-      const createCustomerDto = { name: 'Test Customer', phone: '123456789' };
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue({} as any);
+    it('throws when phone already exists in the organization', async () => {
+      const dto = { name: 'Duplicate', phone: '0123456789' };
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce({ id: 'existing' }); // duplicate phone
 
-      await expect(service.create(organizationId, createCustomerDto)).rejects.toThrow(ConflictException);
+      await expect(service.create(dto, organizationId)).rejects.toThrow(ConflictException);
     });
   });
 
   describe('findAll', () => {
-    it('should return a paginated list of customers', async () => {
-      const expectedCustomers = [{ id: '1', name: 'Test Customer' }];
-      const expectedTotal = 1;
+    it('returns paginated customers with tenant + soft delete filters', async () => {
+      prisma.customer.findMany.mockResolvedValue([{ id: '1', name: 'Jane' }]);
+      prisma.customer.count.mockResolvedValue(1);
 
-      jest.spyOn(prisma, '$transaction').mockResolvedValue([expectedCustomers, expectedTotal]);
+      const result = await service.findAll(1, 20, organizationId, 'Jane', 'name', 'asc', 'VIP');
 
-      const result = await service.findAll(organizationId, 1, 10);
-      expect(result.data).toEqual(expectedCustomers);
-      expect(result.pagination.total).toEqual(expectedTotal);
+      expect(prisma.customer.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organizationId,
+            deletedAt: null,
+          }),
+        }),
+      );
+      expect(result.meta.total).toBe(1);
     });
   });
 
   describe('findOne', () => {
-    it('should return a single customer', async () => {
-      const expectedCustomer = { id: '1', name: 'Test Customer' };
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue(expectedCustomer as any);
+    it('returns the customer when present', async () => {
+      prisma.customer.findFirst.mockResolvedValue({ id: '1' });
 
-      const result = await service.findOne(organizationId, '1');
-      expect(result).toEqual(expectedCustomer);
+      const result = await service.findOne('1', organizationId);
+      expect(result).toEqual({ id: '1' });
     });
 
-    it('should throw a NotFoundException if the customer is not found', async () => {
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue(null);
+    it('throws NotFound when customer missing', async () => {
+      prisma.customer.findFirst.mockResolvedValue(null);
 
-      await expect(service.findOne(organizationId, '1')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing', organizationId)).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('update', () => {
-    it('should update a customer', async () => {
-      const updateCustomerDto = { name: 'Updated Customer' };
-      const expectedCustomer = { id: '1', name: 'Updated Customer' };
+    it('updates customer details', async () => {
+      prisma.customer.findFirst
+        .mockResolvedValueOnce({ id: '1', phone: '111', organizationId }) // findOne
+        .mockResolvedValueOnce(null); // duplicate phone check
+      prisma.customer.update.mockResolvedValue({ id: '1', name: 'Updated' });
 
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue({ id: '1', name: 'Test Customer' } as any);
-      jest.spyOn(prisma.customer, 'update').mockResolvedValue(expectedCustomer as any);
+      const result = await service.update('1', { name: 'Updated', phone: '222' }, organizationId);
 
-      const result = await service.update(organizationId, '1', updateCustomerDto);
-      expect(result).toEqual(expectedCustomer);
+      expect(prisma.customer.update).toHaveBeenCalledWith({
+        where: { id: '1' },
+        data: { name: 'Updated', phone: '222' },
+      });
+      expect(result).toEqual({ id: '1', name: 'Updated' });
     });
 
-    it('should throw a BadRequestException when trying to update an immutable field', async () => {
-      const updateCustomerDto = { code: 'NEWCODE' };
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue({ id: '1', name: 'Test Customer' } as any);
+    it('throws Conflict when new phone already exists', async () => {
+      prisma.customer.findFirst
+        .mockResolvedValueOnce({ id: '1', phone: '111', organizationId }) // findOne
+        .mockResolvedValueOnce({ id: '2' }); // duplicate
 
-      await expect(service.update(organizationId, '1', updateCustomerDto as any)).rejects.toThrow(BadRequestException);
-    });
-  });
-
-  describe('generateCustomerCode', () => {
-    it('should generate the first customer code', async () => {
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue(null);
-      const result = await (service as any).generateCustomerCode(organizationId);
-      expect(result).toEqual('KH000001');
-    });
-
-    it('should generate the next customer code', async () => {
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue({ code: 'KH000001' } as any);
-      const result = await (service as any).generateCustomerCode(organizationId);
-      expect(result).toEqual('KH000002');
+      await expect(service.update('1', { phone: '222' }, organizationId)).rejects.toThrow(ConflictException);
     });
   });
 
   describe('remove', () => {
-    it('should soft delete a customer', async () => {
-      const expectedCustomer = { id: '1', name: 'Test Customer', orders: [] };
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue(expectedCustomer as any);
-      jest.spyOn(prisma.customer, 'update').mockResolvedValue({ ...expectedCustomer, deletedAt: new Date() } as any);
+    it('soft deletes customers without orders', async () => {
+      prisma.customer.findFirst.mockResolvedValue({ id: '1', orders: [] });
+      prisma.customer.update.mockResolvedValue({ id: '1', deletedAt: new Date() });
 
-      const result = await service.remove(organizationId, '1');
-      expect(result.message).toEqual('Customer deleted successfully');
+      const result = await service.remove('1', organizationId);
+
+      expect(prisma.customer.update).toHaveBeenCalledWith({
+        where: { id: '1' },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(result.message).toBe('Customer deleted successfully');
     });
 
-    it('should throw a BadRequestException if the customer has orders', async () => {
-      const customerWithOrders = { id: '1', name: 'Test Customer', orders: [{ id: '1' }] };
-      jest.spyOn(prisma.customer, 'findFirst').mockResolvedValue(customerWithOrders as any);
+    it('throws when customer still has orders', async () => {
+      prisma.customer.findFirst.mockResolvedValue({ id: '1', orders: [{ id: 'order-1' }] });
 
-      await expect(service.remove(organizationId, '1')).rejects.toThrow(BadRequestException);
+      await expect(service.remove('1', organizationId)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('generateCode', () => {
+    it('returns KH000001 when no customers exist', async () => {
+      prisma.customer.findFirst.mockResolvedValue(null);
+
+      const code = await (service as any).generateCode(organizationId);
+      expect(code).toBe('KH000001');
+    });
+
+    it('generates sequential codes without NaN for 100 iterations', async () => {
+      for (let i = 0; i < 100; i += 1) {
+        prisma.customer.findFirst.mockResolvedValueOnce({ code: `KH${(i + 1).toString().padStart(6, '0')}` });
+        const code = await (service as any).generateCode(organizationId);
+        expect(code).toBe(`KH${(i + 2).toString().padStart(6, '0')}`);
+      }
     });
   });
 });

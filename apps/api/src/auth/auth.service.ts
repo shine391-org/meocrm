@@ -94,7 +94,7 @@ export class AuthService {
 
   async refreshAccessToken(refreshToken: string) {
     try {
-      const payload = this.jwtService.verify(refreshToken, {
+      this.jwtService.verify(refreshToken, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
 
