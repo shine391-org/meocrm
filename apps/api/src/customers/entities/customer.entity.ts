@@ -3,19 +3,19 @@ import { Decimal } from '@prisma/client/runtime/library';
 
 export class Customer {
   @ApiProperty({ description: 'Customer ID' })
-  id: string;
+  id!: string;
 
   @ApiProperty({ description: 'Organization ID' })
-  organizationId: string;
+  organizationId!: string;
 
   @ApiProperty({ description: 'Customer code (KH000001)' })
-  code: string;
+  code!: string;
 
   @ApiProperty({ description: 'Customer name' })
-  name: string;
+  name!: string;
 
   @ApiProperty({ description: 'Phone number' })
-  phone: string;
+  phone!: string;
 
   @ApiPropertyOptional({ description: 'Email address' })
   email?: string;
@@ -36,22 +36,22 @@ export class Customer {
   segment?: string;
 
   @ApiProperty({ description: 'Total amount spent' })
-  totalSpent: Decimal;
+  totalSpent!: Decimal;
 
   @ApiProperty({ description: 'Total number of orders' })
-  totalOrders: number;
+  totalOrders!: number;
 
   @ApiProperty({ description: 'Outstanding debt' })
-  debt: Decimal;
+  debt!: Decimal;
 
   @ApiPropertyOptional({ description: 'Last order date' })
   lastOrderAt?: Date;
 
   @ApiProperty({ description: 'Created date' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @ApiProperty({ description: 'Last updated date' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @ApiPropertyOptional({ description: 'Deleted date (soft delete)' })
   deletedAt?: Date;
