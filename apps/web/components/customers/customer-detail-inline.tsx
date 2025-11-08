@@ -4,7 +4,7 @@ import CustomerStatsCards from './customer-stats-cards';
 import OrderHistoryMiniTable from './order-history-mini';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
-import { formatAddress } from '@/lib/utils';
+import { formatAddress, formatCurrency } from '@/lib/utils';
 import { Edit, Trash2 } from 'lucide-react';
 
 const CustomerDetailInline = ({ customer, onDelete }) => {

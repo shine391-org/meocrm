@@ -36,7 +36,15 @@ import { deleteCustomer } from '@/lib/api/customers';
 import { toast } from 'sonner';
 import { useSWRConfig } from 'swr';
 
-const CustomerTable = ({ data, isLoading, error, page, setPage }) => {
+interface CustomerTableProps {
+  data: any;
+  isLoading: boolean;
+  error: any;
+  page: number;
+  setPage: (page: number) => void;
+}
+
+const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableProps) => {
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const [expandedId, setExpandedId] = useState<string | null>(null);

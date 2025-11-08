@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 
 // Mock fetcher for now, replace with actual API call
 // The real fetcher will need auth headers.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003';
 const fetchOrders = (url: string) => fetch(url, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}`}}).then(res => res.json());
 
 const getStatusVariant = (status: string) => {
@@ -31,7 +32,7 @@ const OrderHistoryMiniTable = ({ customerId }: OrderHistoryMiniTableProps) => {
   const router = useRouter();
   // As per our discussion, a separate API call is needed for orders.
   const { data: ordersResponse, error, isLoading } = useSWR(
-    `http://localhost:2003/api/orders?customerId=${customerId}&limit=10`,
+    `${API_BASE_URL}/api/orders?customerId=${customerId}&limit=10`,
     fetchOrders
   );
 
