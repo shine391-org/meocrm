@@ -304,6 +304,26 @@ For more details, see:
 
 ---
 
+## 🗑️ Maintenance
+
+### Backup Files
+Backup files (`*.backup`) are gitignored. To manually take a snapshot of the Prisma schema:
+
+```bash
+cp apps/api/prisma/schema.prisma apps/api/prisma/schema.prisma.backup.$(date +%Y%m%d)
+```
+
+### Port Configuration
+
+| Service      | Dev | Staging | Prod |
+|--------------|-----|---------|------|
+| API          | 3000 | 3001 | 3002 |
+| Web          | 3100 | 3101 | 3102 |
+| PostgreSQL   | 5432 | 5432 | 5432 |
+| Redis        | 6379 | 6379 | 6379 |
+
+Ensure `.env` files mirror these assignments to avoid conflicts across environments.
+
 ## 🤖 Jules AI Implementation Guide
 
 ### Quick Environment Check
