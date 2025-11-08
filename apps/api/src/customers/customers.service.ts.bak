@@ -8,13 +8,10 @@ export class CustomersService {
   constructor(private prisma: PrismaService) {}
 
   async generateCustomerCode(organizationId: string): Promise<string> {
-    // Get last customer with valid code format
+    // Get last customer to generate next code
     const lastCustomer = await this.prisma.customer.findFirst({
-      where: { 
-        organizationId,
-        code: { startsWith: 'CUS' }
-      },
-      orderBy: { code: 'desc' },
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
       select: { code: true },
     });
 
@@ -23,14 +20,10 @@ export class CustomersService {
     }
 
     // Extract number from code (CUS001 -> 1)
-    const codeNumber = lastCustomer.code.substring(3);
-    const lastNumber = parseInt(codeNumber, 10);
-    
-    if (isNaN(lastNumber)) {
-      return 'CUS001';
-    }
-
+    const lastNumber = parseInt(lastCustomer.code.replace('CUS', ''));
     const nextNumber = lastNumber + 1;
+    
+    // Format with leading zeros (CUS002, CUS010, etc.)
     return `CUS${nextNumber.toString().padStart(3, '0')}`;
   }
 

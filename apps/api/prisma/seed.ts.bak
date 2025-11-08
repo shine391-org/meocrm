@@ -76,8 +76,8 @@ async function main() {
 
   await prisma.supplier.createMany({
     data: [
-      { name: 'NCC Da Việt', code: 'DT000001', phone: '0901000001', organizationId: org.id },
-      { name: 'NCC Phụ kiện', code: 'DT000002', phone: '0901000002', organizationId: org.id },
+      { name: 'NCC Da Việt', code: 'DT000001', organizationId: org.id },
+      { name: 'NCC Phụ kiện', code: 'DT000002', organizationId: org.id },
     ],
   });
 
