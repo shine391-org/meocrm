@@ -6,70 +6,87 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { 
+  ApiTags, 
+  ApiBearerAuth, 
+  ApiOperation, 
+  ApiResponse,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { ListCustomersDto } from './dto/list-customers.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CustomerEntity } from './entities/customer.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
-@ApiTags('Customers')
+@ApiTags('customers')
+@ApiBearerAuth()
 @Controller('customers')
 @UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create new customer' })
-  @ApiResponse({ status: 201, type: CustomerEntity })
-  create(@Body() dto: CreateCustomerDto, @CurrentUser() user: any) {
+  @ApiResponse({ status: 201, description: 'Customer created successfully' })
+  @ApiResponse({ status: 409, description: 'Phone number already exists' })
+  create(@CurrentUser() user: any, @Body() dto: CreateCustomerDto) {
     return this.customersService.create(dto, user.organizationId);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all customers (paginated)' })
-  @ApiQuery({ name: 'page', required: false, example: 1 })
-  @ApiQuery({ name: 'limit', required: false, example: 20 })
-  @ApiResponse({ status: 200 })
-  findAll(@Query('page') page?: string, @Query('limit') limit?: string, @CurrentUser() user?: any) {
+  @ApiOperation({ summary: 'List customers with pagination and filters' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['name', 'code', 'totalSpent', 'createdAt'] })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'segment', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'Customer list retrieved' })
+  findAll(@CurrentUser() user: any, @Query() query: ListCustomersDto) {
+    const { page, limit, search, sortBy, sortOrder, segment } = query;
     return this.customersService.findAll(
-      page ? parseInt(page) : 1,
-      limit ? parseInt(limit) : 20,
+      page,
+      limit,
       user.organizationId,
+      search,
+      sortBy,
+      sortOrder,
+      segment,
     );
-  }
-
-  @Get('search')
-  @ApiOperation({ summary: 'Search customers by name, phone, email, or code' })
-  @ApiQuery({ name: 'q', required: true, example: 'Nguyễn' })
-  @ApiResponse({ status: 200, type: [CustomerEntity] })
-  search(@Query('q') query: string, @CurrentUser() user: any) {
-    return this.customersService.search(query, user.organizationId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get customer by ID' })
-  @ApiResponse({ status: 200, type: CustomerEntity })
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+  @ApiResponse({ status: 200, description: 'Customer found' })
+  @ApiResponse({ status: 404, description: 'Customer not found' })
+  findOne(@CurrentUser() user: any, @Param('id') id: string) {
     return this.customersService.findOne(id, user.organizationId);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update customer' })
-  @ApiResponse({ status: 200, type: CustomerEntity })
-  update(@Param('id') id: string, @Body() dto: UpdateCustomerDto, @CurrentUser() user: any) {
+  @ApiResponse({ status: 200, description: 'Customer updated' })
+  @ApiResponse({ status: 404, description: 'Customer not found' })
+  @ApiResponse({ status: 409, description: 'Phone number already exists' })
+  update(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateCustomerDto,
+  ) {
     return this.customersService.update(id, dto, user.organizationId);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete customer' })
-  @ApiResponse({ status: 200 })
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
+  @ApiOperation({ summary: 'Delete customer (soft delete)' })
+  @ApiResponse({ status: 200, description: 'Customer deleted' })
+  @ApiResponse({ status: 400, description: 'Customer has orders' })
+  @ApiResponse({ status: 404, description: 'Customer not found' })
+  remove(@CurrentUser() user: any, @Param('id') id: string) {
     return this.customersService.remove(id, user.organizationId);
   }
 }

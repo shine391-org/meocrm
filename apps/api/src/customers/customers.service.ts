@@ -1,95 +1,80 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { 
+  Injectable, 
+  NotFoundException, 
+  BadRequestException,
+  ConflictException 
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class CustomersService {
-  constructor(private prisma: PrismaService) {}
-
-  async generateCustomerCode(organizationId: string): Promise<string> {
-    // Get last customer with valid code format
-    const lastCustomer = await this.prisma.customer.findFirst({
-      where: { 
-        organizationId,
-        code: { startsWith: 'CUS' }
-      },
-      orderBy: { code: 'desc' },
-      select: { code: true },
-    });
-
-    if (!lastCustomer) {
-      return 'CUS001';
-    }
-
-    // Extract number from code (CUS001 -> 1)
-    const codeNumber = lastCustomer.code.substring(3);
-    const lastNumber = parseInt(codeNumber, 10);
-    
-    if (isNaN(lastNumber)) {
-      return 'CUS001';
-    }
-
-    const nextNumber = lastNumber + 1;
-    return `CUS${nextNumber.toString().padStart(3, '0')}`;
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateCustomerDto, organizationId: string) {
-    // Check phone uniqueness
+    const code = await this.generateCode(organizationId);
+
     const existingPhone = await this.prisma.customer.findFirst({
-      where: { phone: dto.phone, organizationId },
+      where: {
+        organizationId,
+        phone: dto.phone,
+        deletedAt: null,
+      },
     });
 
     if (existingPhone) {
-      throw new ConflictException('Customer with this phone already exists');
+      throw new ConflictException('Phone number already exists for this organization');
     }
-
-    // Check email uniqueness if provided
-    if (dto.email) {
-      const existingEmail = await this.prisma.customer.findFirst({
-        where: { email: dto.email, organizationId },
-      });
-
-      if (existingEmail) {
-        throw new ConflictException('Customer with this email already exists');
-      }
-    }
-
-    // Generate customer code
-    const code = await this.generateCustomerCode(organizationId);
 
     return this.prisma.customer.create({
       data: {
+        ...dto,
         code,
-        name: dto.name,
-        phone: dto.phone,
-        email: dto.email,
-        address: dto.address,
-        province: dto.province,
-        district: dto.district,
-        ward: dto.ward,
-        segment: dto.segment,
-        organizationId,
-        totalSpent: 0,
-        totalOrders: 0,
-        debt: 0,
+        organization: {
+          connect: { id: organizationId },
+        },
       },
     });
   }
 
-  async findAll(page: number, limit: number, organizationId: string) {
+  async findAll(
+    page: number,
+    limit: number,
+    organizationId: string,
+    search?: string,
+    sortBy: string = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc',
+    segment?: string,
+  ) {
+    const where: Prisma.CustomerWhereInput = {
+      organizationId,
+      deletedAt: null,
+    };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (segment) {
+      where.segment = segment;
+    }
+
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
       this.prisma.customer.findMany({
-        where: { organizationId },
-        orderBy: { createdAt: 'desc' },
+        where,
         skip,
         take: limit,
+        orderBy: { [sortBy]: sortOrder },
       }),
-      this.prisma.customer.count({
-        where: { organizationId },
-      }),
+      this.prisma.customer.count({ where }),
     ]);
 
     return {
@@ -105,19 +90,10 @@ export class CustomersService {
 
   async findOne(id: string, organizationId: string) {
     const customer = await this.prisma.customer.findFirst({
-      where: { id, organizationId },
-      include: {
-        orders: {
-          take: 10,
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            code: true,
-            total: true,
-            status: true,
-            createdAt: true,
-          },
-        },
+      where: { 
+        id, 
+        organizationId, 
+        deletedAt: null 
       },
     });
 
@@ -129,33 +105,20 @@ export class CustomersService {
   }
 
   async update(id: string, dto: UpdateCustomerDto, organizationId: string) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { id, organizationId },
-    });
+    const customer = await this.findOne(id, organizationId);
 
-    if (!customer) {
-      throw new NotFoundException(`Customer ${id} not found`);
-    }
-
-    // Check phone uniqueness if changing
     if (dto.phone && dto.phone !== customer.phone) {
-      const existing = await this.prisma.customer.findFirst({
-        where: { phone: dto.phone, organizationId, id: { not: id } },
+      const existingPhone = await this.prisma.customer.findFirst({
+        where: {
+          organizationId,
+          phone: dto.phone,
+          deletedAt: null,
+          id: { not: id },
+        },
       });
 
-      if (existing) {
-        throw new ConflictException('Customer with this phone already exists');
-      }
-    }
-
-    // Check email uniqueness if changing
-    if (dto.email && dto.email !== customer.email) {
-      const existing = await this.prisma.customer.findFirst({
-        where: { email: dto.email, organizationId, id: { not: id } },
-      });
-
-      if (existing) {
-        throw new ConflictException('Customer with this email already exists');
+      if (existingPhone) {
+        throw new ConflictException('Phone number already exists for another customer');
       }
     }
 
@@ -167,35 +130,58 @@ export class CustomersService {
 
   async remove(id: string, organizationId: string) {
     const customer = await this.prisma.customer.findFirst({
-      where: { id, organizationId },
-      include: { orders: true },
+      where: { 
+        id, 
+        organizationId, 
+        deletedAt: null 
+      },
+      include: { 
+        orders: {
+          select: { id: true },
+        },
+      },
     });
 
     if (!customer) {
       throw new NotFoundException(`Customer ${id} not found`);
     }
 
-    if (customer.orders.length > 0) {
-      throw new ConflictException('Cannot delete customer with existing orders');
+    if (customer.orders && customer.orders.length > 0) {
+      throw new BadRequestException(
+        `Cannot delete customer with existing orders. Customer has ${customer.orders.length} order(s) in history.`
+      );
     }
 
-    await this.prisma.customer.delete({ where: { id } });
+    await this.prisma.customer.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
     return { message: 'Customer deleted successfully' };
   }
 
-  async search(query: string, organizationId: string) {
-    return this.prisma.customer.findMany({
-      where: {
+  private async generateCode(organizationId: string): Promise<string> {
+    const lastCustomer = await this.prisma.customer.findFirst({
+      where: { 
         organizationId,
-        OR: [
-          { name: { contains: query, mode: 'insensitive' } },
-          { phone: { contains: query } },
-          { email: { contains: query, mode: 'insensitive' } },
-          { code: { contains: query, mode: 'insensitive' } },
-        ],
+        deletedAt: null,
       },
-      take: 20,
-      orderBy: { name: 'asc' },
+      orderBy: { code: 'desc' },
+      select: { code: true },
     });
+
+    if (!lastCustomer) {
+      return 'KH000001';
+    }
+
+    const codeNumber = lastCustomer.code.substring(2);
+    const lastNumber = parseInt(codeNumber, 10);
+    
+    if (isNaN(lastNumber)) {
+      throw new Error(`Invalid customer code format: ${lastCustomer.code}`);
+    }
+
+    const nextNumber = lastNumber + 1;
+    return `KH${nextNumber.toString().padStart(6, '0')}`;
   }
 }
