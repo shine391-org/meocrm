@@ -7,16 +7,14 @@ Patch,
 Param,
 Delete,
 Query,
-UseGuards,
 HttpCode,
 HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SuppliersService } from './suppliers.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { ListSuppliersDto } from './dto/list-suppliers.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { SupplierEntity } from './entities/supplier.entity';
@@ -24,7 +22,6 @@ import { SupplierEntity } from './entities/supplier.entity';
 @ApiTags('suppliers')
 @ApiBearerAuth()
 @Controller('suppliers')
-@UseGuards(JwtAuthGuard)
 export class SuppliersController {
 constructor(private readonly suppliersService: SuppliersService) {}
 

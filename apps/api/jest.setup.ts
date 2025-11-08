@@ -1,15 +1,24 @@
 import { PrismaClient } from '@prisma/client';
 
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined;
+}
+
 // Setup test database
-global.prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.TEST_DATABASE_URL,
+if (!global.prisma) {
+  global.prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.TEST_DATABASE_URL,
+      },
     },
-  },
-});
+  });
+}
 
 // Clean up after each test
 afterEach(async () => {
-  await global.prisma.$disconnect();
+  if (global.prisma) {
+    await global.prisma.$disconnect();
+  }
 });
