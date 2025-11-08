@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model branches {
+  id                                         String        @id
+  organizationId                             String
+  name                                       String
+  code                                       String
+  address                                    String
+  phone                                      String?
+  createdAt                                  DateTime      @default(now())
+  updatedAt                                  DateTime
+  organizations                              organizations @relation(fields: [organizationId], references: [id])
+  inventory                                  inventory[]
+  transfers_transfers_fromBranchIdTobranches transfers[]   @relation("transfers_fromBranchIdTobranches")
+  transfers_transfers_toBranchIdTobranches   transfers[]   @relation("transfers_toBranchIdTobranches")
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model categories {
+  id               String        @id
+  organizationId   String
+  name             String
+  parentId         String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime
+  organizations    organizations @relation(fields: [organizationId], references: [id])
+  categories       categories?   @relation("categoriesTocategories", fields: [parentId], references: [id])
+  other_categories categories[]  @relation("categoriesTocategories")
+  products         products[]
+
+  @@index([organizationId])
+  @@index([parentId])
+}
+
+model customers {
+  id             String        @id
+  organizationId String
+  code           String
+  name           String
+  phone          String
+  email          String?
+  address        String?
+  province       String?
+  district       String?
+  ward           String?
+  segment        String?
+  totalSpent     Decimal       @default(0) @db.Decimal(12, 2)
+  totalOrders    Int           @default(0)
+  debt           Decimal       @default(0) @db.Decimal(12, 2)
+  lastOrderAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  organizations  organizations @relation(fields: [organizationId], references: [id])
+  orders         orders[]
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+  @@index([phone])
+}
+
+model inventory {
+  id        String   @id
+  productId String
+  branchId  String
+  quantity  Int      @default(0)
+  branches  branches @relation(fields: [branchId], references: [id])
+  products  products @relation(fields: [productId], references: [id])
+
+  @@unique([productId, branchId])
+  @@index([branchId])
+}
+
+model inventory_transactions {
+  id        String   @id
+  type      String
+  quantity  Int
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+model order_items {
+  id        String   @id
+  orderId   String
+  productId String
+  quantity  Int
+  price     Decimal  @db.Decimal(12, 2)
+  discount  Decimal  @default(0) @db.Decimal(12, 2)
+  lineTotal Decimal  @db.Decimal(12, 2)
+  orders    orders   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  products  products @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model orders {
+  id              String            @id
+  organizationId  String
+  code            String
+  customerId      String?
+  subtotal        Decimal           @db.Decimal(12, 2)
+  discount        Decimal           @default(0) @db.Decimal(12, 2)
+  total           Decimal           @db.Decimal(12, 2)
+  paymentMethod   PaymentMethod
+  isPaid          Boolean           @default(false)
+  paidAmount      Decimal           @default(0) @db.Decimal(12, 2)
+  status          OrderStatus       @default(PENDING)
+  createdBy       String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime
+  order_items     order_items[]
+  users           users?            @relation(fields: [createdBy], references: [id])
+  customers       customers?        @relation(fields: [customerId], references: [id])
+  organizations   organizations     @relation(fields: [organizationId], references: [id])
+  shipping_orders shipping_orders[]
+
+  @@unique([code, organizationId])
+  @@index([customerId])
+  @@index([organizationId])
+}
+
+model organizations {
+  id               String             @id
+  name             String
+  code             String             @unique
+  email            String?
+  phone            String?
+  address          String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  branches         branches[]
+  categories       categories[]
+  customers        customers[]
+  orders           orders[]
+  product_variants product_variants[]
+  products         products[]
+  shipping_orders  shipping_orders[]
+  suppliers        suppliers[]
+  users            users[]
+}
+
+model product_variants {
+  id             String        @id
+  productId      String
+  sku            String
+  name           String
+  sellPrice      Decimal       @default(0) @db.Decimal(12, 2)
+  stock          Int           @default(0)
+  images         String[]
+  organizationId String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  organizations  organizations @relation(fields: [organizationId], references: [id])
+  products       products      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([sku, organizationId])
+  @@index([productId])
+}
+
+model products {
+  id               String             @id
+  organizationId   String
+  sku              String
+  name             String
+  description      String?
+  categoryId       String?
+  costPrice        Decimal            @db.Decimal(12, 2)
+  sellPrice        Decimal            @db.Decimal(12, 2)
+  stock            Int                @default(0)
+  minStock         Int                @default(0)
+  maxStock         Int                @default(999999)
+  images           String[]
+  weight           Int?
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  deletedAt        DateTime?
+  inventory        inventory[]
+  order_items      order_items[]
+  product_variants product_variants[]
+  categories       categories?        @relation(fields: [categoryId], references: [id])
+  organizations    organizations      @relation(fields: [organizationId], references: [id])
+
+  @@unique([sku, organizationId])
+  @@index([categoryId])
+  @@index([organizationId])
+  @@index([sku])
+}
+
+model refresh_tokens {
+  id        String   @id
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  users     users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model shipping_orders {
+  id                String         @id
+  organizationId    String
+  orderId           String
+  trackingCode      String         @unique
+  recipientName     String
+  recipientPhone    String
+  recipientAddress  String
+  recipientWard     String?
+  recipientDistrict String?
+  recipientProvince String?
+  shippingFee       Decimal        @db.Decimal(12, 2)
+  codAmount         Decimal        @default(0) @db.Decimal(12, 2)
+  status            ShippingStatus @default(PENDING)
+  weight            Int?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime
+  orders            orders         @relation(fields: [orderId], references: [id])
+  organizations     organizations  @relation(fields: [organizationId], references: [id])
+
+  @@index([orderId])
+  @@index([organizationId])
+}
+
+model suppliers {
+  id             String        @id
+  organizationId String
+  code           String
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  totalOrders    Int           @default(0)
+  totalValue     Decimal       @default(0) @db.Decimal(12, 2)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  organizations  organizations @relation(fields: [organizationId], references: [id])
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+}
+
+model transfers {
+  id                                        String         @id
+  code                                      String         @unique
+  fromBranchId                              String
+  toBranchId                                String
+  value                                     Decimal        @db.Decimal(12, 2)
+  status                                    TransferStatus @default(PENDING)
+  transferredAt                             DateTime?
+  receivedAt                                DateTime?
+  createdAt                                 DateTime       @default(now())
+  updatedAt                                 DateTime
+  branches_transfers_fromBranchIdTobranches branches       @relation("transfers_fromBranchIdTobranches", fields: [fromBranchId], references: [id])
+  branches_transfers_toBranchIdTobranches   branches       @relation("transfers_toBranchIdTobranches", fields: [toBranchId], references: [id])
+
+  @@index([fromBranchId])
+  @@index([toBranchId])
+}
+
+model users {
+  id             String           @id
+  organizationId String
+  email          String           @unique
+  password       String
+  name           String
+  role           UserRole         @default(STAFF)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+  orders         orders[]
+  refresh_tokens refresh_tokens[]
+  organizations  organizations    @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  E_WALLET
+  BANK_TRANSFER
+  COD
+}
+
+enum ShippingStatus {
+  PENDING
+  PICKING_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
+enum TransferStatus {
+  PENDING
+  IN_TRANSIT
+  RECEIVED
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
+  CASHIER
+}
