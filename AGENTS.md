@@ -12,6 +12,12 @@ MeoCRM is a modern CRM system for retail businesses, inspired by KiotViet (Vietn
 - **Testing**: Jest + Supertest + Playwright
 - **DevOps**: Docker + GitHub Actions
 
+## Database Setup
+
+Jules VM uses PostgreSQL service (NOT Docker)
+DO NOT run docker-compose
+Verify: sudo service postgresql status
+
 ## AI Agent Setup (Jules/Claude)
 ### Required Development Tools
 Before starting any development task, ensure these tools are available:
