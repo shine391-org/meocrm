@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
@@ -59,79 +59,79 @@ export class ProductsService {
     });
   }
 
-  async findAll(query: QueryProductsDto, organizationId: string) {
-    const {
-      page = 1,
-      limit = 20,
-      search,
-      categoryId,
-      minPrice,
-      maxPrice,
-      inStock,
-      sortBy = 'createdAt',
-      order = 'desc',
-    } = query;
-
-    if (minPrice && maxPrice && minPrice > maxPrice) {
-      throw new BadRequestException('minPrice cannot be greater than maxPrice');
-    }
-
+  async findAll(
+    page: number,
+    limit: number,
+    organizationId: string,
+    filters?: QueryProductsDto,
+  ) {
     const skip = (page - 1) * limit;
+
+    // Build where clause
     const where: any = {
       organizationId,
-      deletedAt: null,
+      deletedAt: null,  // ⚠️ CRITICAL: Soft delete filter
     };
 
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { sku: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
+    // Task 2: Filters
+    if (filters?.categoryId) {
+      where.categoryId = filters.categoryId;
     }
 
-    if (categoryId) {
-      where.categoryId = categoryId;
+    if (filters?.minPrice !== undefined || filters?.maxPrice !== undefined) {
+      where.sellPrice = {};
+      if (filters.minPrice !== undefined) {
+        where.sellPrice.gte = filters.minPrice;
+      }
+      if (filters.maxPrice !== undefined) {
+        where.sellPrice.lte = filters.maxPrice;
+      }
     }
 
-    if (minPrice !== undefined) {
-      where.sellPrice = { ...where.sellPrice, gte: minPrice };
-    }
-
-    if (maxPrice !== undefined) {
-      where.sellPrice = { ...where.sellPrice, lte: maxPrice };
-    }
-
-    if (inStock) {
+    if (filters?.inStock === true) {
       where.stock = { gt: 0 };
     }
 
-    const orderBy = { [sortBy]: order };
+    // Task 3: Search
+    if (filters?.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { sku: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
 
-    const [data, total] = await this.prisma.$transaction([
+    // Task 4: Sorting
+    const orderBy: any = {};
+    const sortBy = filters?.sortBy || 'createdAt';
+    const sortOrder = filters?.sortOrder || 'desc';
+
+    orderBy[sortBy] = sortOrder;
+
+    // Execute queries
+    const [data, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
-        include: { category: true, variants: true },
-        orderBy,
         skip,
         take: limit,
+        orderBy,
+        include: {
+          category: true,
+        },
       }),
       this.prisma.product.count({ where }),
     ]);
 
     const totalPages = Math.ceil(total / limit);
-    const hasNext = page < totalPages;
-    const hasPrev = page > 1;
 
     return {
       data,
       meta: {
-        total,
         page,
         limit,
+        total,
         totalPages,
-        hasNext,
-        hasPrev,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
       },
     };
   }

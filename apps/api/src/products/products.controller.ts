@@ -6,7 +6,10 @@ import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { QueryProductsDto } from './dto/query-products.dto';
+import { ApiQuery, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('Products')
+@ApiBearerAuth()
 @Controller('products')
 @UseGuards(JwtAuthGuard)
 export class ProductsController {
@@ -18,8 +21,18 @@ export class ProductsController {
   }
 
   @Get()
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'categoryId', required: false, type: String })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number })
+  @ApiQuery({ name: 'inStock', required: false, type: Boolean })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['name', 'sellPrice', 'stock', 'createdAt'] })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   findAll(@Query() query: QueryProductsDto, @Req() req: any) {
-    return this.productsService.findAll(query, req.user.organizationId);
+    const { page = 1, limit = 20, ...filters } = query;
+    return this.productsService.findAll(page, limit, req.user.organizationId, filters);
   }
 
   @Get(':id')

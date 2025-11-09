@@ -38,7 +38,7 @@ describe('ProductsController', () => {
       const result = await controller.findAll(queryDto, mockReq);
 
       expect(result).toEqual(mockResult);
-      expect(service.findAll).toHaveBeenCalledWith(queryDto, 'org1');
+      expect(service.findAll).toHaveBeenCalledWith(1, 20, 'org1', {});
     });
   });
 
