@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { RequestContextService } from '../common/context/request-context.service';
 
 const MULTI_TENANT_MODELS = new Map<string, string>([
@@ -56,7 +56,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       },
     });
 
-    this.$use(async (params: Prisma.MiddlewareParams, next: (params: Prisma.MiddlewareParams) => Promise<any>) => {
+    this.$use(async (params, next) => {
       const organizationId = this.requestContext.organizationId;
       const modelName = params.model;
 

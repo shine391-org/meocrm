@@ -3,13 +3,10 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/a
 
 const getAuthHeaders = () => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  const headers: Record<string, string> = {
+  return {
     'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
 };
 
 export async function getCustomers(page: number = 1, limit: number = 20, search: string = '') {

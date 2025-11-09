@@ -22,6 +22,29 @@ describe('Orders E2E', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+
+    // Apply same pipes as main.ts
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+    await app.init();
+
+    prisma = app.get<PrismaService>(PrismaService);
+
+    // Clean database
+    await prisma.orderItem.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.customer.deleteMany();
+    await prisma.product.deleteMany();
+    await prisma.user.deleteMany();
+    await prisma.organization.deleteMany();
+  });
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule], // Import FULL AppModule
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
     prisma = app.get<PrismaService>(PrismaService);

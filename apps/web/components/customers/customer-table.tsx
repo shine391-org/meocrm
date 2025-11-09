@@ -59,7 +59,7 @@ const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableP
     try {
       await deleteCustomer(customerToDelete.id);
       toast.success(`Đã xóa khách hàng ${customerToDelete.name}`);
-      mutate('/api/customers');
+      mutate(key => Array.isArray(key) && key[0] === 'customers');
       closeDialog();
     } catch (err) {
       toast.error(err.message || 'Xóa thất bại');
