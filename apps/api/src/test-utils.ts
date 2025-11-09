@@ -6,6 +6,42 @@ import { AuthService } from './auth/auth.service';
 import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
+export const DEFAULT_TEST_ORG_PREFIX = 'E2E_';
+
+export async function cleanupTestOrganizations(
+  prisma: PrismaService,
+  prefix: string = DEFAULT_TEST_ORG_PREFIX,
+) {
+  const orgs = await prisma.organization.findMany({
+    where: { code: { startsWith: prefix } },
+    select: { id: true },
+  });
+
+  const orgIds = orgs.map((org) => org.id);
+
+  if (!orgIds.length) {
+    return;
+  }
+
+  await prisma.shippingOrder.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.orderItem.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.order.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.inventory.deleteMany({
+    where: { product: { organizationId: { in: orgIds } } },
+  });
+  await prisma.productVariant.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.product.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.category.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.branch.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.customer.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.supplier.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.refreshToken.deleteMany({
+    where: { user: { organizationId: { in: orgIds } } },
+  });
+  await prisma.user.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
+}
+
 /**
  * Sets up and returns a fully initialized NestJS application instance for E2E testing.
  * This includes creating a mock organization and user, and generating a valid JWT access token.
@@ -22,43 +58,36 @@ export async function setupTestApp(): Promise<{
   }).compile();
 
   const app = moduleFixture.createNestApplication();
-
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const prisma = app.get<PrismaService>(PrismaService);
   const authService = app.get<AuthService>(AuthService);
 
-  // Clean up previous test data
-  await prisma.supplier.deleteMany({});
-  await prisma.user.deleteMany({});
-  await prisma.organization.deleteMany({});
+  await cleanupTestOrganizations(prisma);
 
-  // 1. Create a mock Organization
   const organization = await prisma.organization.create({
     data: {
       name: 'Test Organization E2E',
-      code: `E2E_${Date.now()}`
+      code: `${DEFAULT_TEST_ORG_PREFIX}${Date.now()}`,
     },
   });
   const organizationId = organization.id;
 
-  // 2. Create a mock User associated with the Organization
   const hashedPassword = await bcrypt.hash('password', 10);
   const user = await prisma.user.create({
     data: {
       email: `test-user-${Date.now()}@e2e.com`,
       name: 'E2E Test User',
       password: hashedPassword,
-      organizationId: organizationId,
+      organizationId,
       role: UserRole.OWNER,
     },
   });
   const userId = user.id;
 
-  // 3. Generate a JWT token for the user
   const { accessToken } = await authService.login({
     email: user.email,
-    password: 'password', // Use the raw password for login
+    password: 'password',
   } as any);
 
   return { app, prisma, accessToken, organizationId, userId };
