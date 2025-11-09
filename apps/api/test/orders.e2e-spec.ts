@@ -4,12 +4,14 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { Customer, Product } from '@prisma/client';
+import { cleanupTestOrganizations } from '../src/test-utils';
 
 describe('Orders E2E', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let authToken: string;
   let organizationId: string;
+  const TEST_ORG_CODE_PREFIX = 'E2E-ORDERS-';
 
   // Test data
   let customer: Customer;
@@ -22,46 +24,17 @@ describe('Orders E2E', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-
-    // Apply same pipes as main.ts
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-
-    await app.init();
-
-    prisma = app.get<PrismaService>(PrismaService);
-
-    // Clean database
-    await prisma.orderItem.deleteMany();
-    await prisma.order.deleteMany();
-    await prisma.customer.deleteMany();
-    await prisma.product.deleteMany();
-    await prisma.user.deleteMany();
-    await prisma.organization.deleteMany();
-  });
-
-  beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule], // Import FULL AppModule
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
     prisma = app.get<PrismaService>(PrismaService);
 
-    // Clean database before all tests
-    await prisma.orderItem.deleteMany();
-    await prisma.order.deleteMany();
-    await prisma.customer.deleteMany();
-    await prisma.product.deleteMany();
-    await prisma.user.deleteMany();
-    await prisma.organization.deleteMany();
+    await cleanupTestOrganizations(prisma, TEST_ORG_CODE_PREFIX);
 
     // Create an organization first to get a valid code
     const org = await prisma.organization.create({
       data: {
         name: 'Test Org E2E',
-        code: `E2E${Date.now()}`,
+        code: `${TEST_ORG_CODE_PREFIX}${Date.now()}`,
       },
     });
     organizationId = org.id; // CRITICAL: Assign organizationId here
