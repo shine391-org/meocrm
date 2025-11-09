@@ -10,7 +10,7 @@ import useSWR from 'swr';
 import { useDebounce } from 'use-debounce';
 import { getCustomers } from '@/lib/api/customers';
 
-const fetcher = ([page, search]) => getCustomers(page, 20, search);
+const fetcher = ([page, search]: [number, string]) => getCustomers(page, 20, search);
 
 export default function CustomersPage() {
   const router = useRouter();

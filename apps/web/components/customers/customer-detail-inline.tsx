@@ -1,13 +1,29 @@
 // apps/web/components/customers/customer-detail-inline.tsx
 import React from 'react';
-import CustomerStatsCards from './customer-stats-cards';
 import OrderHistoryMiniTable from './order-history-mini';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { formatAddress, formatCurrency } from '@/lib/utils';
 import { Edit, Trash2 } from 'lucide-react';
 
-const CustomerDetailInline = ({ customer, onDelete }) => {
+interface CustomerDetailInlineProps {
+  customer: {
+    id: string;
+    name: string;
+    phone: string;
+    email?: string | null;
+    street?: string | null;
+    ward?: string | null;
+    district?: string | null;
+    province?: string | null;
+    totalSpent: number | any; // Should be number, but Prisma Decimal needs parsing
+    debt: number | any; // Should be number, but Prisma Decimal needs parsing
+    totalOrders: number;
+  };
+  onDelete: () => void;
+}
+
+const CustomerDetailInline = ({ customer, onDelete }: CustomerDetailInlineProps) => {
   const router = useRouter();
 
   return (
