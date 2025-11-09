@@ -6,14 +6,7 @@
     "build": "nest build",
     "test": "jest --config ../../jest.config.js --runInBand --passWithNoTests",
     "test:e2e": "jest --config ../../jest.config.js --runInBand --testRegex=.*\\.e2e-spec\\.ts$",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prisma": "prisma",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio",
-    "prisma:push": "prisma db push",
-    "prisma:seed": "prisma db seed"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.8",
