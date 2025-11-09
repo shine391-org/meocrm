@@ -6,23 +6,41 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { getBrowserToken } from '@/lib/auth/token';
 
 // Mock fetcher for now, replace with actual API call
 // The real fetcher will need auth headers.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003';
-const fetchOrders = (url: string) => fetch(url, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}`}}).then(res => res.json());
-
-const getStatusVariant = (status: string) => {
-  switch (status) {
-    case 'PENDING': return 'warning';
-    case 'CONFIRMED': return 'info';
-    case 'PROCESSING': return 'primary';
-    case 'SHIPPED': return 'secondary';
-    case 'DELIVERED': return 'success';
-    case 'CANCELLED': return 'destructive';
-    default: return 'outline';
+const fetchOrders = async (url: string) => {
+  const headers: HeadersInit = {};
+  const token = getBrowserToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
-}
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    throw new Error('Không thể tải lịch sử đơn hàng');
+  }
+  return response.json();
+};
+
+type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
+const getStatusVariant = (status: string): BadgeVariant => {
+  switch (status) {
+    case 'PENDING':
+      return 'outline';
+    case 'CONFIRMED':
+    case 'PROCESSING':
+    case 'SHIPPED':
+    case 'DELIVERED':
+      return 'secondary';
+    case 'CANCELLED':
+      return 'destructive';
+    default:
+      return 'default';
+  }
+};
 
 interface OrderHistoryMiniTableProps {
   customerId: string;

@@ -27,6 +27,7 @@ describe('OrdersService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   it('should be defined', () => {
@@ -209,6 +210,116 @@ describe('OrdersService', () => {
       await expect(
         service.create(mockCreateDto as any, 'org-1'),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('update', () => {
+    const baseOrder = {
+      id: 'order-1',
+      customerId: 'customer-1',
+      status: 'PENDING',
+      subtotal: new Prisma.Decimal(100),
+      tax: new Prisma.Decimal(10),
+      shipping: new Prisma.Decimal(5),
+      discount: new Prisma.Decimal(0),
+      total: new Prisma.Decimal(115),
+      paidAmount: new Prisma.Decimal(20),
+      isPaid: false,
+      customer: { id: 'customer-1' },
+      items: [],
+    } as any;
+
+    beforeEach(() => {
+      jest.spyOn(service, 'findOne').mockResolvedValue(baseOrder);
+    });
+
+    it('updates customer stats when shipping changes', async () => {
+      const transactionContext = {
+        orderItem: { deleteMany: jest.fn() },
+        order: {
+          update: jest.fn().mockResolvedValue({
+            ...baseOrder,
+            shipping: new Prisma.Decimal(15),
+            total: new Prisma.Decimal(125),
+          }),
+        },
+        customer: {
+          update: jest.fn().mockResolvedValue({ id: baseOrder.customerId }),
+        },
+      };
+
+      (prisma.$transaction as jest.Mock).mockImplementation(async (callback) =>
+        callback(transactionContext),
+      );
+
+      await service.update(
+        baseOrder.id,
+        { shipping: 15 } as any,
+        'org-1',
+      );
+
+      expect(transactionContext.order.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            shipping: 15,
+            total: 125,
+          }),
+        }),
+      );
+
+      expect(transactionContext.customer.update).toHaveBeenCalledWith({
+        where: { id: baseOrder.customerId },
+        data: {
+          totalSpent: { increment: 10 },
+          debt: { increment: 10 },
+        },
+      });
+    });
+  });
+
+  describe('remove', () => {
+    const removableOrder = {
+      id: 'order-1',
+      customerId: 'customer-1',
+      status: 'PENDING',
+      subtotal: new Prisma.Decimal(100),
+      tax: new Prisma.Decimal(10),
+      shipping: new Prisma.Decimal(20),
+      discount: new Prisma.Decimal(0),
+      total: new Prisma.Decimal(130),
+      paidAmount: new Prisma.Decimal(30),
+      isPaid: false,
+      customer: { id: 'customer-1', debt: new Prisma.Decimal(80) },
+    } as any;
+
+    beforeEach(() => {
+      jest.spyOn(service, 'findOne').mockResolvedValue(removableOrder);
+    });
+
+    it('reverts customer debt using computed totals', async () => {
+      const transactionContext = {
+        customer: {
+          update: jest.fn(),
+        },
+        order: {
+          update: jest.fn().mockResolvedValue({ id: removableOrder.id }),
+        },
+      };
+
+      (prisma.$transaction as jest.Mock).mockImplementation(async (callback) =>
+        callback(transactionContext),
+      );
+
+      await service.remove(removableOrder.id, 'org-1');
+
+      expect(transactionContext.customer.update).toHaveBeenCalledWith({
+        where: { id: removableOrder.customerId },
+        data: {
+          totalSpent: { decrement: 130 },
+          totalOrders: { decrement: 1 },
+          debt: { decrement: 80 },
+        },
+      });
     });
   });
 

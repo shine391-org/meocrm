@@ -1,0 +1,11 @@
+{
+  "extends": ["next/core-web-vitals", "plugin:@typescript-eslint/recommended"],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "sourceType": "module"
+  },
+  "ignorePatterns": ["node_modules/", ".next/", "dist/"],
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "off"
+  }
+}

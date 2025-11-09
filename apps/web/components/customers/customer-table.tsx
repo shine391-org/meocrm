@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, ChevronDown, ChevronRight, Edit, Trash2 } from 'lucide-react';
+import { MoreHorizontal, ChevronDown, ChevronRight } from 'lucide-react';
 import CustomerDetailInline from './customer-detail-inline';
 import { formatCurrency, getSegmentVariant } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -39,10 +39,26 @@ import { useSWRConfig } from 'swr';
 interface CustomerTableProps {
   data: any;
   isLoading: boolean;
-  error: any;
+  error?: unknown;
   page: number;
   setPage: (page: number) => void;
 }
+
+type CustomerListItem = {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  totalSpent: number;
+  debt: number;
+  totalOrders: number;
+  segment?: string | null;
+  addressLine1?: string | null;
+  city?: string | null;
+  district?: string | null;
+  ward?: string | null;
+};
 
 const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableProps) => {
   const router = useRouter();
@@ -59,10 +75,11 @@ const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableP
     try {
       await deleteCustomer(customerToDelete.id);
       toast.success(`Đã xóa khách hàng ${customerToDelete.name}`);
-      mutate(key => Array.isArray(key) && key[0] === 'customers');
+      mutate('/api/customers');
       closeDialog();
-    } catch (err) {
-      toast.error(err.message || 'Xóa thất bại');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Xóa thất bại';
+      toast.error(message);
     }
   };
 
@@ -71,10 +88,14 @@ const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableP
   }
 
   if (error) {
-    return <div>Failed to load customers.</div>; // Replace with Error component
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Không thể tải danh sách khách hàng.';
+    return <div>{message}</div>; // Replace with Error component
   }
 
-  const customers = data?.data || [];
+  const customers: CustomerListItem[] = data?.data || [];
   const meta = data?.meta;
 
   return (
@@ -102,7 +123,7 @@ const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableP
                 </TableCell>
               </TableRow>
             ) : (
-              customers.map((customer) => (
+              customers.map((customer: CustomerListItem) => (
                 <React.Fragment key={customer.id}>
                   <TableRow
                     className="cursor-pointer hover:bg-muted/50"

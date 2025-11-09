@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
-    "test": "jest --config ../../jest.config.js --passWithNoTests"
+    "test": "jest --config ../../jest.config.js --runInBand --passWithNoTests",
+    "test:e2e": "jest --config ../../jest.config.js --runInBand --testRegex=.*\\.e2e-spec\\.ts$",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

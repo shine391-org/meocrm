@@ -1,12 +1,20 @@
 // apps/web/lib/api/customers.ts
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api';
+import { getBrowserToken } from '@/lib/auth/token';
 
-const getAuthHeaders = () => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  return {
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api';
+
+export const getAuthHeaders = () => {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
   };
+
+  const token = getBrowserToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
 };
 
 export async function getCustomers(page: number = 1, limit: number = 20, search: string = '') {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlusCircle } from 'lucide-react';
@@ -10,9 +10,18 @@ import useSWR from 'swr';
 import { useDebounce } from 'use-debounce';
 import { getCustomers } from '@/lib/api/customers';
 
-const fetcher = ([page, search]) => getCustomers(page, 20, search);
+type CustomersFetcherArgs = [number, string];
+const fetcher = ([page, search]: CustomersFetcherArgs) => getCustomers(page, 20, search);
 
 export default function CustomersPage() {
+  return (
+    <Suspense fallback={<div>Đang tải khách hàng...</div>}>
+      <CustomersPageContent />
+    </Suspense>
+  );
+}
+
+function CustomersPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

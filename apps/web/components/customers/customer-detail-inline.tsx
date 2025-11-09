@@ -1,13 +1,30 @@
 // apps/web/components/customers/customer-detail-inline.tsx
 import React from 'react';
-import CustomerStatsCards from './customer-stats-cards';
 import OrderHistoryMiniTable from './order-history-mini';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { formatAddress, formatCurrency } from '@/lib/utils';
 import { Edit, Trash2 } from 'lucide-react';
 
-const CustomerDetailInline = ({ customer, onDelete }) => {
+type CustomerDetailInlineProps = {
+  customer: {
+    id: string;
+    name: string;
+    phone: string;
+    email?: string | null;
+    totalSpent: number;
+    debt: number;
+    totalOrders: number;
+    segment?: string | null;
+    addressLine1?: string | null;
+    city?: string | null;
+    district?: string | null;
+    ward?: string | null;
+  };
+  onDelete: () => void;
+};
+
+const CustomerDetailInline: React.FC<CustomerDetailInlineProps> = ({ customer, onDelete }) => {
   const router = useRouter();
 
   return (

@@ -11,6 +11,13 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
+type OrderFinancialInput = {
+  subtotal: Prisma.Decimal | number;
+  tax: Prisma.Decimal | number;
+  shipping: Prisma.Decimal | number;
+  discount: Prisma.Decimal | number;
+  paidAmount: Prisma.Decimal | number;
+};
 
 @Injectable()
 export class OrdersService {
@@ -122,6 +129,7 @@ export class OrdersService {
 
   async update(id: string, dto: UpdateOrderDto, organizationId: string) {
     const order = await this.findOne(id, organizationId);
+    const previousFinancials = this.calculateOrderFinancials(order);
 
     // ⚠️ Only allow update if status = PENDING
     if (order.status !== 'PENDING') {
@@ -149,16 +157,18 @@ export class OrdersService {
         itemsData = calculated.itemsData;
       }
 
-      const shipping = dto.shipping ?? order.shipping;
-      const discount = dto.discount ?? order.discount;
-      const total =
-        subtotal +
-        tax +
-        Number(shipping) -
-        Number(discount);
+      const shipping = Number(dto.shipping ?? order.shipping);
+      const discount = Number(dto.discount ?? order.discount);
+      const total = subtotal + tax + shipping - discount;
+      const nextFinancials = this.calculateOrderFinancials({
+        subtotal,
+        tax,
+        shipping,
+        discount,
+        paidAmount: order.paidAmount,
+      });
 
-      // Update order
-      return prisma.order.update({
+      const orderUpdate = await prisma.order.update({
         where: { id },
         data: {
           customerId: dto.customerId,
@@ -168,12 +178,34 @@ export class OrdersService {
           tax: dto.items ? tax : undefined,
           shipping,
           discount,
-          total: dto.items ? total : undefined,
+          total,
           notes: dto.notes,
           updatedAt: new Date(),
         },
         include: { customer: true, items: true },
       });
+
+      const totalDelta =
+        nextFinancials.totalAmount - previousFinancials.totalAmount;
+      const debtDelta = order.isPaid
+        ? 0
+        : nextFinancials.outstanding - previousFinancials.outstanding;
+
+      if (totalDelta !== 0 || debtDelta !== 0) {
+        await prisma.customer.update({
+          where: { id: order.customerId },
+          data: {
+            ...(totalDelta !== 0 && {
+              totalSpent: { increment: totalDelta },
+            }),
+            ...(!order.isPaid && debtDelta !== 0 && {
+              debt: { increment: debtDelta },
+            }),
+          },
+        });
+      }
+
+      return orderUpdate;
     });
   }
 
@@ -190,12 +222,30 @@ export class OrdersService {
     return this.prisma.$transaction(async (prisma) => {
       // Revert customer stats if order was counted
       if (order.status === 'PENDING') {
+        const { totalAmount, outstanding } = this.calculateOrderFinancials({
+          subtotal: order.subtotal,
+          tax: order.tax,
+          shipping: order.shipping,
+          discount: order.discount,
+          paidAmount: order.paidAmount,
+        });
+
+        const debtBefore = Number(order.customer?.debt ?? 0);
+        const debtDecrement = order.isPaid
+          ? 0
+          : Math.min(outstanding, debtBefore);
+        const totalSpentDecrement = Math.max(totalAmount, 0);
+
         await prisma.customer.update({
           where: { id: order.customerId },
           data: {
-            totalSpent: { decrement: order.total },
+            ...(totalSpentDecrement > 0 && {
+              totalSpent: { decrement: totalSpentDecrement },
+            }),
             totalOrders: { decrement: 1 },
-            debt: { decrement: Number(order.total) - Number(order.paidAmount) },
+            ...(debtDecrement > 0 && {
+              debt: { decrement: debtDecrement },
+            }),
           },
         });
       }
@@ -206,6 +256,19 @@ export class OrdersService {
         data: { deletedAt: new Date() },
       });
     });
+  }
+
+  private calculateOrderFinancials(data: OrderFinancialInput) {
+    const subtotal = Number(data.subtotal) || 0;
+    const tax = Number(data.tax) || 0;
+    const shipping = Number(data.shipping) || 0;
+    const discount = Number(data.discount) || 0;
+    const paidAmount = Number(data.paidAmount) || 0;
+
+    const totalAmount = subtotal + tax + shipping - discount;
+    const outstanding = Math.max(totalAmount - paidAmount, 0);
+
+    return { totalAmount, outstanding };
   }
 
   private async calculateOrderTotals(

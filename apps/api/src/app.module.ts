@@ -8,6 +8,7 @@ import { CustomersModule } from './customers/customers.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { OrdersModule } from './orders/orders.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 import { RequestContextModule } from './common/context/request-context.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { RequestContextModule } from './common/context/request-context.module';
     ProductsModule,
     CustomersModule,
     OrdersModule,
+    SuppliersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
