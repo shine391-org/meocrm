@@ -1,19 +1,106 @@
-# MeoCRM API - Agent Instructions
+pnpm --filter @meocrm/api dev     # Start on port 2003
 
-This document provides context for the `api` service (@meocrm/api). For project-wide instructions, see the root `AGENTS.md`.
+pnpm --filter @meocrm/api test    # Run tests
 
-## Testing
-To run tests specifically for the API service:
-```bash
-pnpm --filter @meocrm/api test
+pnpm --filter @meocrm/api db:studio # Prisma Studio
+
 ```
 
-## Architecture & Key Rules
--   **Framework:** [NestJS](https://nestjs.com/).
--   **Database:** Access is handled via `PrismaService`.
--   **Critical Rule:** All database queries MUST be filtered by `organizationId` to ensure multi-tenancy security.
+---
 
-## Key Documents
--   **API Reference:** `../../docs/04_API_REFERENCE.md`
--   **Database Schema:** `../../docs/03_DATABASE_SCHEMA.md`
--   **Business Logic:** `../../docs/01_BUSINESS_LOGIC.md`
+## Module Pattern
+
+**Controller:**
+```
+
+@Controller('products')
+
+@UseGuards(JwtAuthGuard)  // REQUIRED
+
+export class ProductsController {
+
+@Get()
+
+async findAll(@CurrentUser() user: UserEntity) {
+
+return this.service.findAll(user.organizationId);
+
+}
+
+}
+
+```
+
+**Service:**
+```
+
+@Injectable()
+
+export class ProductsService {
+
+async findAll(organizationId: string) {
+
+return this.prisma.product.findMany({
+
+where: { organizationId }  // REQUIRED
+
+});
+
+}
+
+}
+
+```
+
+---
+
+## Testing Pattern
+
+**E2E Tenant Isolation:**
+```
+
+it('prevents cross-tenant access', async () => {
+
+const orgA = await createOrg();
+
+const orgB = await createOrg();
+
+await service.create([orgA.id](http://orgA.id), data);
+
+const results = await service.findAll([orgB.id](http://orgB.id));
+
+expect(results).toHaveLength(0); // orgB cannot see orgA
+
+});
+
+```
+
+---
+
+## Module Checklist
+
+- [ ] Module/Service/Controller
+- [ ] DTOs with class-validator
+- [ ] organizationId in ALL queries
+- [ ] JwtAuthGuard on controller
+- [ ] Unit tests ≥80%
+- [ ] E2E tests with isolation
+- [ ] Swagger decorators
+
+---
+
+## Structure
+
+```
+
+src/
+
+├── auth/         # JWT + guards
+
+├── products/     # CRUD + variants
+
+├── customers/    # CRM + segments
+
+├── orders/       # Payments + shipping
+
+└── common/       # RequestContext + middleware
