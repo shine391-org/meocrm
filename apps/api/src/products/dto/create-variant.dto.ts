@@ -8,7 +8,7 @@ export class CreateVariantDto {
 
   @IsObject()
   @IsOptional()
-  attributes?: Record<string, any>;
+  attributes?: Record<string, unknown>;
 
   @IsNumber()
   @Type(() => Number)

@@ -219,5 +219,5 @@ PORT=2003
 NODE_ENV=development
 
 # CORS
-CORS_ORIGINS=http://localhost:2004
+CORS_ORIGIN=http://localhost:2004
 ```

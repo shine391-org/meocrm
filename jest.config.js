@@ -5,7 +5,15 @@ module.exports = {
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
-  collectCoverageFrom: ['**/*.(t|j)s'],
+  collectCoverageFrom: [
+    'apps/**/*.{ts,js}',
+    '!**/*.spec.ts',
+    '!**/*.e2e-spec.ts',
+    '!**/node_modules/**',
+    '!**/dist/**',
+    '!**/prisma/**',
+  ],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
   roots: ['<rootDir>/apps/'],

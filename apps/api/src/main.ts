@@ -6,12 +6,14 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
-  // Get config
+
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT', 2003);
-  
-  // Global validation pipe
+  const port = Number(
+    configService.get<string>('PORT') ??
+      configService.get<string>('API_PORT') ??
+      2003,
+  );
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -19,11 +21,13 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  
-  // CORS
-  app.enableCors();
-  
-  // Swagger setup
+
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  app.enableCors({
+    origin: corsOrigin ? corsOrigin.split(',').map((origin) => origin.trim()) : true,
+    credentials: true,
+  });
+
   const config = new DocumentBuilder()
     .setTitle('MeoCRM API')
     .setDescription('Multi-tenant CRM API for Vietnamese retail')
@@ -32,7 +36,7 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
-  
+
   await app.listen(port);
   console.log(`🚀 API running on: http://localhost:${port}`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api`);

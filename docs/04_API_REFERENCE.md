@@ -1,6 +1,6 @@
 # MeoCRM API Reference
 
-> **Base URL:** `http://localhost:2040/api` (development)
+> **Base URL:** `http://localhost:2003/api` (development)
 > 
 
 > **Authentication:** JWT Bearer token
