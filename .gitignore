@@ -10,3 +10,6 @@ coverage/
 pnpm-lock.yaml
 apps/api/prisma/*.backup*
 *.backup
+
+# Jules snapshots
+.jules/

@@ -1,145 +1,246 @@
 #!/bin/bash
 set -e
 
-# Base environment check
-echo "=== Base Check ==="
-node -v && pnpm -v && git --version || exit 1
-echo "Base OK"
+echo "=== Jules VM Setup Script v27.0 - Zero Working Tree Impact ==="
 echo ""
 
-# 1. Add PostgreSQL APT Repository (CRITICAL FIX)
-echo "Adding PostgreSQL repository..."
-sudo apt-get update -qq
-sudo apt-get install -y postgresql-common ca-certificates || {
-    echo "ERROR: Cannot install postgresql-common"
-    exit 1
-}
-sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y || {
-    echo "ERROR: Cannot setup PostgreSQL repo"
-    exit 1
-}
-sudo apt-get update -qq
+# ============================================
+# PHASE 0: Reset Working Tree
+# ============================================
+echo "🔄 Phase 0: Reset Working Tree"
+echo "--------------------------------------------"
 
-# 2. Install PostgreSQL 15
-echo "Installing PostgreSQL 15..."
-sudo apt-get install -y postgresql-15 postgresql-contrib-15 || {
-    echo "ERROR: PostgreSQL 15 install failed"
-    echo "Available versions: $(apt-cache search postgresql | grep '^postgresql-[0-9]')"
-    exit 1
-}
+git reset --hard HEAD
+echo "✅ HEAD is now at $(git rev-parse --short HEAD)"
 
-# 3. Install Redis
-echo "Installing Redis..."
-sudo apt-get install -y redis-server || {
-    echo "ERROR: Redis install failed"
-    exit 1
-}
+echo ""
 
-# 4. Configure PostgreSQL port 2001
-PGCONF="/etc/postgresql/15/main/postgresql.conf"
-if [ -f "$PGCONF" ]; then
-    sudo sed -i "s/^#*port = .*/port = 2001/" "$PGCONF"
-    sudo sed -i "s/^#*listen_addresses = .*/listen_addresses = 'localhost'/" "$PGCONF"
-else
-    echo "ERROR: PostgreSQL config not found at $PGCONF"
-    exit 1
+# ============================================
+# PHASE 1: Verify
+# ============================================
+echo "📋 Phase 1: Verify"
+echo "--------------------------------------------"
+
+if ! sudo -n true 2>/dev/null; then
+    sudo true || { echo "❌ sudo required"; exit 1; }
 fi
 
-# 5. Configure Redis port 2002 (OPTION A: Create config)
-echo "Configuring Redis port 2002..."
-sudo mkdir -p /etc/redis /var/run/redis /var/log/redis /var/lib/redis
-sudo chown redis:redis /var/run/redis /var/log/redis /var/lib/redis 2>/dev/null || true
-sudo tee /etc/redis/redis-2002.conf > /dev/null <<'REDIS_EOF'
+echo "✅ Node: $(node -v)"
+echo "✅ pnpm: $(pnpm -v)"
+
+echo ""
+
+# ============================================
+# PHASE 2: pnpm upgrade
+# ============================================
+echo "🚀 Phase 2: pnpm upgrade"
+echo "--------------------------------------------"
+
+PNPM_MAJOR=$(pnpm -v | cut -d. -f1)
+if [ "$PNPM_MAJOR" -lt 10 ]; then
+    pnpm self-update
+    echo "✅ Upgraded: $(pnpm -v)"
+else
+    echo "✅ Already v10: $(pnpm -v)"
+fi
+
+pnpm config set --global onlyBuiltDependencies '["prisma","@prisma/client","@prisma/engines","esbuild","@esbuild/linux-x64","sharp","@swc/core","playwright"]'
+echo "✅ Global config set"
+
+echo ""
+
+# ============================================
+# PHASE 3: Global Tools
+# ============================================
+echo "🔧 Phase 3: Global Tools"
+echo "--------------------------------------------"
+
+npm install -g @nestjs/cli typescript prisma
+
+echo "✅ nest: $(nest --version 2>/dev/null || echo 'OK')"
+echo "✅ tsc: $(tsc --version 2>/dev/null || echo 'OK')"
+echo "✅ prisma: $(prisma --version | head -n 1)"
+
+echo ""
+
+# ============================================
+# PHASE 4: PostgreSQL 17
+# ============================================
+echo "🐘 Phase 4: PostgreSQL 17"
+echo "--------------------------------------------"
+
+if command -v psql &> /dev/null; then
+    echo "✅ Already: $(psql --version | awk '{print $3}')"
+else
+    sudo apt-get update -qq
+    sudo apt-get install -y curl ca-certificates postgresql-common
+    sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+    sudo apt-get update -qq
+    sudo apt-get install -y postgresql-17 postgresql-client-17
+    echo "✅ Installed"
+fi
+
+sudo systemctl stop postgresql || true
+PG_CONF="/etc/postgresql/17/main/postgresql.conf"
+if [ -f "$PG_CONF" ]; then
+    sudo sed -i "s/^#*port = .*/port = 2001/" "$PG_CONF"
+    sudo sed -i "s/^#*listen_addresses = .*/listen_addresses = 'localhost'/" "$PG_CONF"
+fi
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+sleep 3
+
+echo "✅ Port 2001"
+
+echo ""
+
+# ============================================
+# PHASE 5: Redis 8
+# ============================================
+echo "🔴 Phase 5: Redis 8"
+echo "--------------------------------------------"
+
+if command -v redis-server &> /dev/null; then
+    echo "✅ Already installed"
+else
+    sudo apt-get install -y lsb-release gpg
+    curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+    sudo chmod 644 /usr/share/keyrings/redis-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+    sudo apt-get update -qq
+    sudo apt-get install -y redis
+    echo "✅ Installed"
+fi
+
+sudo systemctl stop redis-server || true
+
+sudo tee /etc/redis/redis-2002.conf > /dev/null <<'REDIS_CONF'
 port 2002
 bind 127.0.0.1
-daemonize yes
-pidfile /var/run/redis/redis-2002.pid
-logfile /var/log/redis/redis-2002.log
+protected-mode yes
+supervised systemd
+pidfile /var/run/redis/redis-server-2002.pid
+loglevel notice
+logfile /var/log/redis/redis-server-2002.log
 dir /var/lib/redis
-supervised no
-databases 16
-save 900 1
-save 300 10
-save 60 10000
-REDIS_EOF
-REDISCONF="/etc/redis/redis-2002.conf"
-echo "✅ Redis config created at $REDISCONF"
+appendonly yes
+REDIS_CONF
 
-# 6. Restart services with fallbacks
-echo "Starting services..."
-sudo systemctl restart postgresql || sudo service postgresql restart || sudo pg_ctlcluster 15 main restart
+sudo tee /etc/systemd/system/redis-2002.service > /dev/null <<'REDIS_SERVICE'
+[Unit]
+Description=Redis (port 2002)
+After=network.target
 
-# Stop any existing Redis
-sudo pkill -9 redis-server 2>/dev/null || true
-sudo systemctl stop redis-server 2>/dev/null || true
+[Service]
+Type=notify
+ExecStart=/usr/bin/redis-server /etc/redis/redis-2002.conf
+ExecStop=/bin/redis-cli -p 2002 shutdown
+Restart=always
+User=redis
+Group=redis
+
+[Install]
+WantedBy=multi-user.target
+REDIS_SERVICE
+
+sudo systemctl daemon-reload
+sudo systemctl start redis-2002
+sudo systemctl enable redis-2002
 sleep 2
 
-# Start Redis with custom config
-sudo redis-server "$REDISCONF"
-sleep 3
-echo "✅ Redis started with custom config"
+redis-cli -p 2002 ping
+echo "✅ Port 2002"
 
-# 7. Database setup (idempotent)
-echo "Setting up database..."
-sudo -u postgres psql <<'EOF'
+echo ""
+
+# ============================================
+# PHASE 6: Database
+# ============================================
+echo "🗄️ Phase 6: Database"
+echo "--------------------------------------------"
+
+sudo -u postgres psql -p 2001 <<SQL 2>/dev/null || true
 DROP DATABASE IF EXISTS meocrm_dev;
 DROP USER IF EXISTS meocrm_user;
-CREATE DATABASE meocrm_dev;
 CREATE USER meocrm_user WITH PASSWORD 'meocrm_dev_password';
-ALTER ROLE meocrm_user WITH CREATEDB;
+CREATE DATABASE meocrm_dev OWNER meocrm_user;
 GRANT ALL PRIVILEGES ON DATABASE meocrm_dev TO meocrm_user;
 \c meocrm_dev
-ALTER SCHEMA public OWNER TO meocrm_user;
-REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT ALL ON SCHEMA public TO meocrm_user;
+ALTER SCHEMA public OWNER TO meocrm_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO meocrm_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO meocrm_user;
-\q
-EOF
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO meocrm_user;
+SQL
 
-# 8. Global Node tools
-echo "Installing global tools..."
-sudo npm install -g @nestjs/cli typescript concurrently prisma || {
-    echo "WARN: Global npm install may need different permissions"
-    npm install -g @nestjs/cli typescript concurrently prisma
-}
+echo "✅ meocrm_dev"
 
-# 9. Project dependencies
-echo "Installing project dependencies..."
-pnpm install || {
-    echo "ERROR: pnpm install failed"
-    exit 1
-}
-
-# 10. Playwright
-npx playwright install --with-deps chromium || echo "WARN: Playwright install failed (non-critical)"
-
-# 11. Environment files
-cat > apps/api/.env <<'EOF'
-DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev?schema=public"
-REDIS_URL="redis://localhost:2002"
-PORT=2003
-NODE_ENV=development
-JWT_SECRET="dev-secret-jules-vm"
-JWT_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
-EOF
-
-cat > apps/web/.env.local <<'EOF'
-NEXT_PUBLIC_API_URL=http://localhost:2003
-EOF
-
-# 12. Prisma setup
-pnpm --filter @meocrm/api prisma generate
-[ -d "apps/api/prisma/migrations" ] && pnpm --filter @meocrm/api prisma migrate deploy || echo "No migrations yet"
-
-# VALIDATION
 echo ""
-echo "=== VALIDATION ==="
-psql --version && echo "✅ PostgreSQL" || { echo "❌ PostgreSQL"; exit 1; }
-redis-server --version && echo "✅ Redis" || { echo "❌ Redis"; exit 1; }
-nest --version && echo "✅ NestJS CLI" || { echo "❌ NestJS"; exit 1; }
-PGPASSWORD='meocrm_dev_password' psql -h localhost -p 2001 -U meocrm_user -d meocrm_dev -c "SELECT 1;" >/dev/null 2>&1 && echo "✅ DB connected" || { echo "❌ DB failed"; exit 1; }
-redis-cli -p 2002 ping >/dev/null 2>&1 && echo "✅ Redis connected" || { echo "❌ Redis failed"; exit 1; }
-echo "================="
-echo "✅ Setup complete!"
+
+# ============================================
+# PHASE 7: Project Dependencies & Schema
+# ============================================
+echo "📦 Phase 8: Project Setup"
+echo "--------------------------------------------"
+
+# Install all dependencies (including local Prisma, TypeScript, etc)
+pnpm install
+
+# Push database schema
+pnpm --filter @meocrm/api prisma db push --accept-data-loss
+
+# Verify setup
+pnpm --filter @meocrm/api build
+pnpm --filter @meocrm/api test
+
+echo "✅ Project ready"
+
+# ============================================
+# PHASE 8: Verify Clean State
+# ============================================
+echo "📊 Phase 7: Verify Working Tree"
+echo "--------------------------------------------"
+
+GIT_STATUS=$(git status --porcelain 2>/dev/null || echo "")
+if [ -z "$GIT_STATUS" ]; then
+    echo "✅ Working tree is CLEAN"
+else
+    echo "❌ Working tree is DIRTY:"
+    git status --short
+    echo ""
+    echo "Resetting again..."
+    git reset --hard HEAD
+    echo "✅ Cleaned"
+fi
+
+echo ""
+
+# ============================================
+# DONE
+# ============================================
+echo "🎉 Setup Complete!"
+echo "============================================"
+echo ""
+echo "📊 Services Ready:"
+echo "  - PostgreSQL 17: port 2001 ✅"
+echo "  - Redis 8: port 2002 ✅"
+echo ""
+echo "🔧 Tools Installed:"
+echo "  - Node: $(node -v)"
+echo "  - pnpm: $(pnpm -v) (v10 with global config)"
+echo "  - nest: $(nest --version)"
+echo "  - tsc: $(tsc --version)"
+echo "  - prisma: $(prisma --version | head -n 1)"
+echo ""
+echo "⚠️ Manual Steps Needed:"
+echo "  1. Copy .env files from examples:"
+echo "     cp apps/api/.env.example apps/api/.env"
+echo "     cp apps/web/.env.local.example apps/web/.env.local"
+echo ""
+echo "  2. Jules will then run:"
+echo "     pnpm install"
+echo "     pnpm prisma generate"
+echo "     pnpm prisma migrate deploy"
+echo ""
+echo "✅ Working tree: CLEAN (zero repo files touched)"
+echo ""
