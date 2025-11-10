@@ -44,7 +44,7 @@ else
     echo "✅ Already v10: $(pnpm -v)"
 fi
 
-pnpm config set --global onlyBuiltDependencies '["prisma","@prisma/client","@prisma/engines","esbuild","@esbuild/linux-x64","sharp","@swc/core","playwright"]'
+pnpm config set --global onlyBuiltDependencies '["prisma"," @prisma/client"," @prisma/engines","esbuild"," @esbuild/linux-x64","sharp"," @swc/core","playwright"]'
 echo "✅ Global config set"
 
 echo ""

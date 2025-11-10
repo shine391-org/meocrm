@@ -24,8 +24,9 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    const organizationCode = dto.organizationCode.trim().toUpperCase();
     const organization = await this.prisma.organization.findUnique({
-      where: { code: dto.organizationCode },
+      where: { code: organizationCode },
     });
 
     if (!organization) {
