@@ -45,6 +45,7 @@ describe('Customers E2E', () => {
     const otherOrg = await prisma.organization.create({
       data: {
         name: 'Isolated Org',
+        slug: `isolated-org-${Date.now()}`,
         code: `${DEFAULT_TEST_ORG_PREFIX}${Date.now()}-ALT`,
       },
     });

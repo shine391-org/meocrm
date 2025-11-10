@@ -12,8 +12,9 @@ export async function cleanupTestOrganizations(
   prisma: PrismaService,
   prefix: string = DEFAULT_TEST_ORG_PREFIX,
 ) {
+  const normalizedPrefix = prefix.toUpperCase();
   const orgs = await prisma.organization.findMany({
-    where: { code: { startsWith: prefix } },
+    where: { code: { startsWith: normalizedPrefix } },
     select: { id: true },
   });
 
@@ -23,7 +24,9 @@ export async function cleanupTestOrganizations(
     return;
   }
 
-  await prisma.shippingOrder.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.shippingOrder.deleteMany({
+    where: { order: { organizationId: { in: orgIds } } },
+  });
   await prisma.orderItem.deleteMany({ where: { organizationId: { in: orgIds } } });
   await prisma.order.deleteMany({ where: { organizationId: { in: orgIds } } });
   await prisma.inventory.deleteMany({
@@ -68,6 +71,7 @@ export async function setupTestApp(): Promise<{
   const organization = await prisma.organization.create({
     data: {
       name: 'Test Organization E2E',
+      slug: `test-org-${Date.now()}`,
       code: `${DEFAULT_TEST_ORG_PREFIX}${Date.now()}`,
     },
   });

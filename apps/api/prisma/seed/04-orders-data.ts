@@ -48,8 +48,15 @@ export async function seedOrdersData(
   console.log('  ✓ Created 30 customers');
   console.log('  Creating orders...');
 
-  const statuses: OrderStatus[] = ['COMPLETED', 'PROCESSING', 'PENDING', 'CANCELLED'];
-  const statusWeights = [50, 30, 15, 5];
+  const statuses: OrderStatus[] = [
+    OrderStatus.DELIVERED,
+    OrderStatus.SHIPPED,
+    OrderStatus.PROCESSING,
+    OrderStatus.CONFIRMED,
+    OrderStatus.PENDING,
+    OrderStatus.CANCELLED,
+  ];
+  const statusWeights = [40, 20, 15, 10, 10, 5];
   const threeMonthsAgo = new Date();
   threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
@@ -72,22 +79,26 @@ export async function seedOrdersData(
     for (let j = 0; j < numItems; j++) {
       const product = randomElement(productsData.products);
       const quantity = randomInt(1, 3);
-      const price = Number(product.sellPrice);
-      const lineTotal = price * quantity;
+      const unitPrice = Number(product.sellPrice);
+      const itemSubtotal = unitPrice * quantity;
 
       orderItems.push({
+        organizationId: orgId,
         productId: product.id,
         quantity,
-        price,
-        discount: 0,
-        lineTotal,
+        unitPrice,
+        subtotal: itemSubtotal,
       });
 
-      subtotal += lineTotal;
+      subtotal += itemSubtotal;
     }
 
-    const discount = 0;
-    const total = subtotal - discount;
+    const tax = Math.round(subtotal * 0.1);
+    const shipping = randomInt(10_000, 30_000);
+    const discount = randomInt(0, 20_000);
+    const total = subtotal + tax + shipping - discount;
+    const isPaid = status === OrderStatus.DELIVERED;
+    const paidAmount = isPaid ? total : 0;
 
     const order = await prisma.order.create({
       data: {
@@ -95,11 +106,13 @@ export async function seedOrdersData(
         code: generateCode('HD', i),
         customerId: customer.id,
         subtotal,
+        tax,
+        shipping,
         discount,
         total,
         paymentMethod: randomElement(paymentMethods),
-        isPaid: status === 'COMPLETED',
-        paidAmount: status === 'COMPLETED' ? total : 0,
+        isPaid,
+        paidAmount,
         status,
         createdAt: randomDate(threeMonthsAgo, new Date()),
         items: {
@@ -109,7 +122,7 @@ export async function seedOrdersData(
       select: { id: true, createdAt: true },
     });
 
-    if (status === 'COMPLETED') {
+    if (status === 'DELIVERED') {
       await prisma.customer.update({
         where: { id: customer.id },
         data: {

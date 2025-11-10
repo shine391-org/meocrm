@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, CreateOrderItemDto } from './dto/create-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
-import { Prisma, Order } from '@prisma/client';
+import { Prisma, Order, OrderStatus } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 
@@ -93,9 +93,9 @@ export class OrdersService {
           total,
           isPaid: dto.isPaid || false,
           paidAmount: dto.paidAmount || 0,
-          status: 'PENDING',
+          status: OrderStatus.PENDING,
           paymentMethod: dto.paymentMethod,
-          notes: dto.notes,
+          notes: dto.notes ?? null,
           organizationId,
           items: { create: itemsData },
         },
@@ -193,7 +193,7 @@ export class OrdersService {
 
       if (totalDelta !== 0 || debtDelta !== 0) {
         await prisma.customer.update({
-          where: { id: order.customerId },
+          where: { id: order.customerId! },
           data: {
             ...(totalDelta !== 0 && {
               totalSpent: { increment: totalDelta },
@@ -213,7 +213,11 @@ export class OrdersService {
     const order = await this.findOne(id, organizationId);
 
     // ⚠️ Only allow delete if status = PENDING or CANCELLED
-    if (!['PENDING', 'CANCELLED'].includes(order.status)) {
+    const removableStatuses: OrderStatus[] = [
+      OrderStatus.PENDING,
+      OrderStatus.CANCELLED,
+    ];
+    if (!removableStatuses.includes(order.status)) {
       throw new BadRequestException(
         `Cannot delete order with status ${order.status}. Only PENDING or CANCELLED orders can be deleted.`,
       );
@@ -221,7 +225,7 @@ export class OrdersService {
 
     return this.prisma.$transaction(async (prisma) => {
       // Revert customer stats if order was counted
-      if (order.status === 'PENDING') {
+      if (order.status === OrderStatus.PENDING && order.customerId) {
         const { totalAmount, outstanding } = this.calculateOrderFinancials({
           subtotal: order.subtotal,
           tax: order.tax,
@@ -424,13 +428,14 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${id} not found`);
     }
 
-    const VALID_TRANSITIONS: Record<Order['status'], Order['status'][]> = {
-      PENDING: ['CONFIRMED', 'CANCELLED'],
-      CONFIRMED: ['PROCESSING', 'CANCELLED'],
-      PROCESSING: ['SHIPPED', 'CANCELLED'],
-      SHIPPED: ['DELIVERED', 'CANCELLED'],
-      DELIVERED: [],
-      CANCELLED: [],
+    const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+      [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+      [OrderStatus.CONFIRMED]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+      [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
+      [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+      [OrderStatus.DELIVERED]: [],
+      [OrderStatus.CANCELLED]: [],
+      [OrderStatus.COMPLETED]: [],
     };
 
     const validTransitions = VALID_TRANSITIONS[order.status];

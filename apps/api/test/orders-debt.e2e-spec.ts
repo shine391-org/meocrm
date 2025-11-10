@@ -33,6 +33,7 @@ describe('Orders Debt Integrity E2E', () => {
     const organization = await prisma.organization.create({
       data: {
         name: 'Debt Test Org',
+        slug: `debt-test-org-${Date.now()}`,
         code: `${TEST_ORG_PREFIX}${Date.now()}`,
       },
     });

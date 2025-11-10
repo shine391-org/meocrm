@@ -25,23 +25,47 @@ export class OrganizationsService {
     return normalized;
   }
 
+  private normalizeCode(rawCode: string): string {
+    const normalized = rawCode
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    if (normalized.length < 3) {
+      throw new BadRequestException('Code phải có ít nhất 3 ký tự in hoa hoặc số');
+    }
+
+    return normalized;
+  }
+
   private handlePrismaUnique(error: unknown): never {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
-      throw new ConflictException('Slug đã tồn tại, vui lòng chọn slug khác');
+      const target = (error.meta?.target as string[]) ?? [];
+      if (target.includes('slug')) {
+        throw new ConflictException('Slug đã tồn tại, vui lòng chọn slug khác');
+      }
+      if (target.includes('code')) {
+        throw new ConflictException('Code đã tồn tại, vui lòng chọn code khác');
+      }
+      throw new ConflictException('Giá trị đã tồn tại, vui lòng kiểm tra lại');
     }
     throw error;
   }
 
   async create(dto: CreateOrganizationDto) {
     const slug = this.normalizeSlug(dto.slug);
+     const code = this.normalizeCode(dto.code);
     try {
       return await this.prisma.organization.create({
         data: {
           name: dto.name,
           slug,
+          code,
         },
       });
     } catch (error) {
@@ -82,6 +106,9 @@ export class OrganizationsService {
 
     if (dto.slug) {
       data.slug = this.normalizeSlug(dto.slug);
+    }
+    if (dto.code) {
+      data.code = this.normalizeCode(dto.code);
     }
 
     try {

@@ -49,6 +49,7 @@ export async function seedBaseData(prisma: PrismaClient): Promise<BaseSeedData> 
       data: {
         name: 'Lano Hanoi',
         slug: 'lano-hn',
+        code: 'LANO-HN',
       },
     });
 
@@ -56,6 +57,7 @@ export async function seedBaseData(prisma: PrismaClient): Promise<BaseSeedData> 
       data: {
         name: 'Lano Ho Chi Minh',
         slug: 'lano-hcm',
+        code: 'LANO-HCM',
       },
     });
 

@@ -20,4 +20,17 @@ export class CreateOrganizationDto {
   })
   @MaxLength(60)
   slug!: string;
+
+  @ApiProperty({
+    example: 'LANO-HN',
+    description: 'Unique organization code used during user registration',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(32)
+  @Matches(/^[A-Z0-9-]+$/, {
+    message: 'Code chỉ chấp nhận ký tự in hoa, số và dấu gạch ngang',
+  })
+  code!: string;
 }

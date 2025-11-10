@@ -95,14 +95,18 @@ export async function seedProductsData(
     const numVariants = randomInt(2, 3);
     for (let v = 0; v < numVariants; v++) {
       const variantCode = normalizeSkuSegment(colors[v]);
+      const variantPriceDelta = randomInt(-20_000, 50_000);
+      const baseSellPrice = Number(product.sellPrice);
       await prisma.productVariant.create({
         data: {
+          organizationId: orgId,
           productId: product.id,
           sku: `${product.sku}-${variantCode}`,
           name: colors[v],
-          additionalPrice: randomInt(0, 50_000),
+          sellPrice: Math.max(baseSellPrice + variantPriceDelta, 10_000),
           stock: randomInt(5, 30),
           images: [`https://via.placeholder.com/400x400?text=${colors[v]}`],
+          isActive: true,
         },
       });
     }
