@@ -5,6 +5,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -37,6 +38,7 @@ export class AuthController {
 
   @Post('logout')
   @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Logout and invalidate refresh token' })
   @ApiResponse({ status: 200, description: 'Logged out' })
   async logout(@CurrentUser() user: any, @Body('refreshToken') refreshToken: string) {
@@ -45,6 +47,7 @@ export class AuthController {
 
   @Get('me')
   @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get current user info' })
   @ApiResponse({ status: 200, description: 'User info retrieved' })
   async getCurrentUser(@CurrentUser() user: any) {

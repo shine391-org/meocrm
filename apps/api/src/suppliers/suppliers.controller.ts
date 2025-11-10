@@ -9,6 +9,7 @@ Delete,
 Query,
 HttpCode,
 HttpStatus,
+UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SuppliersService } from './suppliers.service';
@@ -18,9 +19,11 @@ import { ListSuppliersDto } from './dto/list-suppliers.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { SupplierEntity } from './entities/supplier.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('suppliers')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('suppliers')
 export class SuppliersController {
 constructor(private readonly suppliersService: SuppliersService) {}

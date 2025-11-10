@@ -1,210 +1,60 @@
-# MeoCRM - Multi-tenant CRM System
+# MeoCRM Agent Instructions
 
-**Tech Stack:** NestJS + Prisma + PostgreSQL 15 + Next.js 14  
-**Architecture:** Modular Monolith with tenant isolation  
-**Target:** 10-50 concurrent users per organization
+This document provides essential instructions for AI agents to work on the MeoCRM project.
 
----
+## 1. Onboarding: Environment Setup
 
-## 🖥️ Jules VM Environment
+To set up the development environment from a clean state, run the following command from the project root. This script is idempotent and can be re-run safely.
 
-### What's Pre-configured (via Snapshot)
-- ✅ PostgreSQL 15 on port 2001
-- ✅ Redis on port 2002  
-- ✅ Global tools: @nestjs/cli, typescript, prisma, concurrently
-- ✅ Project dependencies: node_modules installed
-- ✅ Playwright browsers
+```bash
+./setup-jules-vm.sh
+```
 
-### Verify Environment (Run these first)
-Check services are running
-sudo systemctl status postgresql || sudo systemctl start postgresql
-sudo systemctl status redis-server || sudo systemctl start redis-server
+After the script completes, you must copy the environment files:
 
-Verify connectivity
-PGPASSWORD='meocrm_dev_password' psql -h localhost -p 2001 -U meocrm_user -d meocrm_dev -c "SELECT 1;"
-redis-cli -p 2002 ping
+```bash
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.local.example apps/web/.env.local
+```
 
-Check tools
-nest --version && tsc --version && prisma --version
+## 2. Knowledge Base
 
-**Expected:** All commands return success (no errors)
+This project has complex business logic. Before starting any task, consult these documents in the `/docs` directory:
 
-### If Services Not Running
-Start PostgreSQL
-sudo systemctl start postgresql || sudo service postgresql restart
+1.  **[01_BUSINESS_LOGIC.md](./docs/01_BUSINESS_LOGIC.md)**: **(MANDATORY READING)** Contains all business rules for orders, inventory, payments, etc. All implemented logic must strictly follow this document.
+2.  **[02_IMPLEMENTATION_PLAN.md](./docs/02_IMPLEMENTATION_PLAN.md)**: To understand task priorities and dependencies.
+3.  **[03_DATABASE_SCHEMA.md](./docs/03_DATABASE_SCHEMA.md)**: For referencing Prisma models.
+4.  **[04_API_REFERENCE.md](./docs/04_API_REFERENCE.md)**: For existing API endpoints.
 
-Start Redis
-sudo systemctl start redis-server || sudo service redis-server restart
+For module-specific instructions, see the `AGENTS.md` file within that module's directory (e.g., `apps/api/AGENTS.md`).
 
-Wait for services
-sleep 3
+## 3. Testing
 
----
+Run the entire test suite to ensure your changes have not broken existing functionality.
 
-## Quick Commands
+```bash
+pnpm test
+```
 
-Development
-pnpm dev # Start API (2003) + Web (2004)
-pnpm dev:api # API only
-pnpm dev:web # Web only
+All new features must include corresponding tests with sufficient coverage.
 
-Testing
-pnpm test # Unit + integration (≥80% coverage)
-pnpm test:e2e # E2E tests
-pnpm test:cov # Coverage report
+## 4. Critical Rules & Workflow
 
-Build & Quality
-pnpm build # Build all packages
-pnpm lint # ESLint + Prettier
-pnpm lint:fix # Auto-fix issues
+-   **CRITICAL RULE: Multi-Tenancy:** Every database query that accesses tenant-specific data **MUST** be filtered by `organizationId`.
+    ```typescript
+    // CORRECT
+    await prisma.product.findMany({
+      where: { organizationId: user.organizationId },
+    });
+    ```
+-   **Workflow:**
+    1.  Select a task based on `docs/02_IMPLEMENTATION_PLAN.md`.
+    2.  Read the relevant sections in `docs/01_BUSINESS_LOGIC.md`.
+    3.  Implement the feature and associated tests.
+    4.  Run `pnpm test` to verify.
+    5.  Create a Pull Request.
 
-Database
-pnpm db:generate # Generate Prisma client
-pnpm db:push # Push schema changes
-pnpm db:studio # Open Prisma Studio GUI
-pnpm db:seed # Seed dev data
+## 5. Troubleshooting
 
----
-
-## Environment Configuration
-
-### Ports
-| Service | Port |
-|---------|------|
-| PostgreSQL | 2001 |
-| Redis | 2002 |
-| API | 2003 |
-| Web | 2004 |
-
-### Environment Variables
-DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev?schema=public"
-REDIS_URL="redis://localhost:2002"
-PORT=2003
-NODE_ENV=development
-JWT_SECRET="dev-secret-jules-vm"
-JWT_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
-NEXT_PUBLIC_API_URL=http://localhost:2003
-
----
-
-## Security Rules (CRITICAL)
-
-### Multi-tenant Isolation
-// ✅ REQUIRED: All queries must filter by organizationId
-await prisma.product.findMany({
-where: { organizationId: user.organizationId }
-});
-
-// ❌ FORBIDDEN: Missing filter causes data leak
-await prisma.product.findMany();
-
-### Authentication Guards
-// ✅ REQUIRED: All controllers protected
-@Controller('products')
-@UseGuards(JwtAuthGuard)
-export class ProductsController {}
-
----
-
-## Testing Requirements
-
-**Coverage:** ≥80% required  
-**Pattern:** Always test tenant isolation
-
-it('prevents cross-tenant data access', async () => {
-const orgA = await createOrg();
-const orgB = await createOrg();
-
-await service.create(orgA.id, productData);
-const results = await service.findAll(orgB.id);
-
-expect(results).toHaveLength(0); // orgB cannot see orgA data
-});
-
----
-
-## Git Workflow
-
-**Branches:** `feature/<module>-<feature>`, `fix/<module>-<bug>`, `docs/<topic>`
-
-**Commits:**
-type(scope): description
-
-Examples:
-feat(products): add variants support
-fix(auth): resolve token expiration
-test(orders): add payment flow E2E
-
----
-
-## Common Pitfalls
-
-### ❌ Data Leak
-// WRONG: No organizationId filter
-await prisma.user.findMany();
-
-// CORRECT: Always filter
-await prisma.user.findMany({ where: { organizationId } });
-
-### ❌ Unprotected Endpoints
-// WRONG: Missing guard
-@Controller('products')
-export class ProductsController {}
-
-// CORRECT: Add guard
-@Controller('products')
-@UseGuards(JwtAuthGuard)
-export class ProductsController {}
-
----
-
-## Troubleshooting
-
-### Services Not Running
-PostgreSQL won't start
-sudo systemctl restart postgresql
-sudo tail -f /var/log/postgresql/postgresql-15-main.log
-
-Redis connection refused
-sudo systemctl restart redis-server
-redis-cli -p 2002 ping
-
-### Database Errors
-Permission denied on migrations
-sudo -u postgres psql -d meocrm_dev -c "ALTER SCHEMA public OWNER TO meocrm_user;"
-
-Connection refused on port 2001
-sudo netstat -tuln | grep 2001
-sudo systemctl restart postgresql
-
-
-### Cross-tenant Data Visible
-// Add organizationId to all Prisma queries
-where: {
-organizationId: user.organizationId,
-deletedAt: null // Soft delete
-}
-
----
-
-## Project Structure
-
-apps/api/src/
-├── auth/ # JWT guards, refresh tokens
-├── products/ # Catalog + variants
-├── customers/ # CRM + segments
-├── orders/ # Order processing
-└── common/ # RequestContext, Prisma middleware
-
-apps/web/app/
-├── (auth)/ # Login pages
-└── (dashboard)/ # Products, Customers, POS
-
----
-
-## Resources
-
-- **Swagger:** http://localhost:2003/api
-- **Prisma Studio:** `pnpm db:studio`
-- **Repo:** https://github.com/shine391-org/meocrm
+If you encounter environment or database connection issues, refer to:
+*   **[06_TROUBLESHOOTING.md](./docs/06_TROUBLESHOOTING.md)**

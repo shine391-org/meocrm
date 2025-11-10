@@ -1,5 +1,4 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
 import { RequestContextService } from '../common/context/request-context.service';
 
@@ -40,66 +39,43 @@ const ACTIONS_ENFORCING_SOFT_DELETE = new Set(['findMany', 'findFirst', 'count',
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly requestContext: RequestContextService,
-  ) {
-    const databaseUrl = configService.get<string>('DATABASE_URL');
-
-    if (!databaseUrl) {
-      throw new Error('DATABASE_URL is not defined. Please check your environment configuration.');
-    }
-
+  constructor() {
     super({
-      datasources: {
-        db: { url: databaseUrl },
-      },
+      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     });
 
-    this.$use(async (params, next) => {
-      const organizationId = this.requestContext.organizationId;
-      const modelName = params.model;
-
-      if (!organizationId || !modelName) {
-        return next(params);
-      }
-
-      const tenantField = MULTI_TENANT_MODELS.get(modelName);
-      const softDeleteField = SOFT_DELETE_FIELDS.get(modelName);
-
-      if (!params.args) {
-        params.args = {};
-      }
-
-      if (tenantField && ACTIONS_ENFORCING_TENANT.has(params.action)) {
-        params.args.where = this.combineWhere(params.args.where, { [tenantField]: organizationId });
-
-        if (params.action === 'create' || params.action === 'createMany') {
-          params.args.data = this.applyOrganizationToData(params.args.data, tenantField, organizationId);
-        }
-
-        if (params.action === 'upsert') {
-          params.args.create = this.applyOrganizationToData(params.args.create, tenantField, organizationId);
-          params.args.update = this.applyOrganizationToData(params.args.update, tenantField, organizationId);
-        }
-      }
-
-      if (softDeleteField && ACTIONS_ENFORCING_SOFT_DELETE.has(params.action)) {
-        params.args.where = this.combineWhere(params.args.where, { [softDeleteField]: null });
-      }
-
-      return next(params);
-    });
+    // Prisma 6: Use client extensions (no auto-filter for now)
+    // Individual services will handle soft delete filtering
+    return this.$extends({}) as PrismaService;
   }
 
   async onModuleInit() {
     await this.$connect();
-    console.log('🗄️  Prisma connected to database');
   }
 
   async onModuleDestroy() {
     await this.$disconnect();
-    console.log('🗄️  Prisma disconnected from database');
+  }
+
+  // Helper method for testing - clear database
+  async cleanDatabase() {
+    if (process.env.NODE_ENV !== 'test') {
+      throw new Error('cleanDatabase can only be called in test environment');
+    }
+
+    const modelKeys = Object.keys(this).filter((key) => {
+      const keyStr = String(key);
+      return keyStr[0] !== '_' && keyStr[0] !== '$' && typeof this[key as keyof this] === 'object';
+    });
+
+    return Promise.all(
+      modelKeys.map((modelKey) => {
+        const model = this[modelKey as keyof this];
+        if (model && typeof model === 'object' && 'deleteMany' in model) {
+          return (model as any).deleteMany();
+        }
+      }),
+    );
   }
 
   private combineWhere(where: Record<string, any> | undefined, constraint: Record<string, any>) {

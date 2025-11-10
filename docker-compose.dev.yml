@@ -1,13 +1,13 @@
 services:
   postgres-dev:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: meocrm-postgres-dev
     restart: unless-stopped
     ports:
       - "2001:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_dev_2025
+      POSTGRES_USER: meocrm_user
+      POSTGRES_PASSWORD: meocrm_dev_password
       POSTGRES_DB: meocrm_dev
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
     volumes:
@@ -15,24 +15,24 @@ services:
     networks:
       - meocrm-dev-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U meocrm_user -d meocrm_dev"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis-dev:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: meocrm-redis-dev
     restart: unless-stopped
     ports:
-      - "2002:6379"  # ← FIX: EXPOSE PORT!
+      - "2002:6379"
     volumes:
       - redis_dev_data:/data
     networks:
       - meocrm-dev-network
-    command: redis-server --appendonly yes --requirepass redis_dev_2025
+    command: redis-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "redis_dev_2025", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

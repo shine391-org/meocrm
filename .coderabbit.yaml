@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: vi-VN
+
+reviews:
+  profile: chill
+  auto_review:
+    enabled: true
+    base_branches:
+      - staging
+      - main
+
+tone_instructions: "Hãy tập trung vào các vấn đề quan trọng nhất"

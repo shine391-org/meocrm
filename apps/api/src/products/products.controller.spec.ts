@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 describe('ProductsController', () => {
   let controller: ProductsController;
@@ -18,7 +19,10 @@ describe('ProductsController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProductsController],
       providers: [{ provide: ProductsService, useValue: mockProductsService }],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<ProductsController>(ProductsController);
     service = module.get<ProductsService>(ProductsService);
@@ -32,12 +36,13 @@ describe('ProductsController', () => {
     it('should return paginated products', async () => {
       const mockResult = { data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } };
       const mockReq = { user: { organizationId: 'org1' } };
+      const queryDto = {};
       mockProductsService.findAll.mockResolvedValue(mockResult);
 
-      const result = await controller.findAll('1', '20', undefined, mockReq);
+      const result = await controller.findAll(queryDto, mockReq);
 
       expect(result).toEqual(mockResult);
-      expect(service.findAll).toHaveBeenCalledWith(1, 20, 'org1', undefined);
+      expect(service.findAll).toHaveBeenCalledWith(1, 20, 'org1', {});
     });
   });
 

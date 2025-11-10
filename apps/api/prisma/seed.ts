@@ -22,13 +22,17 @@ async function main() {
   await prisma.organization.deleteMany();
 
   const org = await prisma.organization.create({
-    data: { name: 'Lano Leather', code: 'LANO001', email: 'contact@lanoleather.vn', phone: '0901234567', address: '123 Lê Lợi, Q1, HCM' },
+    data: {
+      name: 'Lano Leather',
+      slug: 'lano-leather',
+      code: 'LANO001',
+    },
   });
 
   await prisma.branch.createMany({
     data: [
-      { name: 'HN', code: 'HN', address: '456 Hoàng Diệu, Ba Đình, HN', phone: '024123', organizationId: org.id },
-      { name: 'HCM', code: 'HCM', address: '789 Nguyễn Huệ, Q1, HCM', phone: '028123', organizationId: org.id },
+      { name: 'HN', address: '456 Hoàng Diệu, Ba Đình, HN', phone: '024123', organizationId: org.id },
+      { name: 'HCM', address: '789 Nguyễn Huệ, Q1, HCM', phone: '028123', organizationId: org.id },
     ],
   });
 
@@ -60,8 +64,8 @@ async function main() {
         organizationId: org.id,
         variants: {
           create: [
-            { sku: `${sku}-D`, name: 'Đen', sellPrice: 350000, stock: 20, organizationId: org.id },
-            { sku: `${sku}-N`, name: 'Nâu', sellPrice: 370000, stock: 15, organizationId: org.id },
+            { sku: `${sku}-D`, name: 'Đen', sellPrice: 350000, stock: 20, organizationId: org.id, isActive: true },
+            { sku: `${sku}-N`, name: 'Nâu', sellPrice: 370000, stock: 15, organizationId: org.id, isActive: true },
           ],
         },
       },

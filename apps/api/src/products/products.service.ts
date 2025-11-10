@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
@@ -29,7 +30,7 @@ export class ProductsService {
   async generateVariantSKU(productSKU: string, organizationId: string): Promise<string> {
     const prefix = `${productSKU}-V`;
     const lastVariant = await this.prisma.productVariant.findFirst({
-      where: { organizationId, sku: { startsWith: prefix } },
+      where: { organizationId, sku: { startsWith: prefix }, deletedAt: null },
       orderBy: { sku: 'desc' },
       select: { sku: true },
     });
@@ -58,27 +59,92 @@ export class ProductsService {
     });
   }
 
-  async findAll(page: number, limit: number, organizationId: string, categoryId?: string) {
+  async findAll(
+    page: number,
+    limit: number,
+    organizationId: string,
+    filters?: QueryProductsDto,
+  ) {
     const skip = (page - 1) * limit;
-    const where: any = { organizationId, deletedAt: null };
-    if (categoryId) where.categoryId = categoryId;
+
+    // Build where clause
+    const where: any = {
+      organizationId,
+      deletedAt: null,  // ⚠️ CRITICAL: Soft delete filter
+    };
+
+    // Task 2: Filters
+    if (filters?.categoryId) {
+      where.categoryId = filters.categoryId;
+    }
+
+    if (filters?.minPrice !== undefined || filters?.maxPrice !== undefined) {
+      where.sellPrice = {};
+      if (filters.minPrice !== undefined) {
+        where.sellPrice.gte = filters.minPrice;
+      }
+      if (filters.maxPrice !== undefined) {
+        where.sellPrice.lte = filters.maxPrice;
+      }
+    }
+
+    if (filters?.inStock === true) {
+      where.stock = { gt: 0 };
+    }
+
+    // Task 3: Search
+    if (filters?.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { sku: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Task 4: Sorting
+    const orderBy: any = {};
+    const sortBy = filters?.sortBy || 'createdAt';
+    const sortOrder = filters?.sortOrder || 'desc';
+
+    orderBy[sortBy] = sortOrder;
+
+    // Execute queries
     const [data, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
-        include: { category: true, variants: true },
-        orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
+        orderBy,
+        include: {
+          category: true,
+        },
       }),
       this.prisma.product.count({ where }),
     ]);
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
   }
 
   async findOne(id: string, organizationId: string) {
     const product = await this.prisma.product.findFirst({
       where: { id, organizationId, deletedAt: null },
-      include: { category: true, variants: true },
+      include: {
+        category: true,
+        variants: {
+          where: { deletedAt: null },
+        },
+      },
     });
     if (!product) throw new NotFoundException(`Product ${id} not found`);
     return product;
@@ -121,10 +187,12 @@ export class ProductsService {
       data: {
         sku,
         productId,
+        organizationId,
         name: dto.name,
         sellPrice: dto.price,
         stock: dto.inStock ?? 0,
-        organizationId,
+        isActive: dto.isActive ?? true,
+        attributes: dto.attributes ?? undefined,
       },
     });
   }
@@ -132,25 +200,34 @@ export class ProductsService {
   async findVariants(productId: string, organizationId: string) {
     await this.findOne(productId, organizationId);
     return this.prisma.productVariant.findMany({
-      where: { productId, organizationId },
+      where: { productId, organizationId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async updateVariant(id: string, dto: UpdateVariantDto, organizationId: string) {
-    const variant = await this.prisma.productVariant.findFirst({ where: { id, organizationId } });
+    const variant = await this.prisma.productVariant.findFirst({
+      where: { id, organizationId, deletedAt: null },
+    });
     if (!variant) throw new NotFoundException(`Variant ${id} not found`);
     const updateData: any = {};
     if (dto.name) updateData.name = dto.name;
     if (dto.price) updateData.sellPrice = dto.price;
     if (dto.inStock !== undefined) updateData.stock = dto.inStock;
+    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
+    if (dto.attributes !== undefined) updateData.attributes = dto.attributes;
     return this.prisma.productVariant.update({ where: { id }, data: updateData });
   }
 
   async removeVariant(id: string, organizationId: string) {
-    const variant = await this.prisma.productVariant.findFirst({ where: { id, organizationId } });
+    const variant = await this.prisma.productVariant.findFirst({
+      where: { id, organizationId, deletedAt: null },
+    });
     if (!variant) throw new NotFoundException(`Variant ${id} not found`);
-    await this.prisma.productVariant.delete({ where: { id } });
+    await this.prisma.productVariant.update({
+      where: { id },
+      data: { deletedAt: new Date(), isActive: false },
+    });
     return { message: 'Variant deleted successfully' };
   }
 }
