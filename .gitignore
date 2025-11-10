@@ -9,3 +9,4 @@ coverage/
 !apps/**/.env.example
 pnpm-lock.yaml
 apps/api/prisma/*.backup*
+*.backup
