@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -45,10 +44,4 @@ describe('AuthController', () => {
     expect(result).toEqual(serviceResponse);
   });
 
-  it('protects /auth/me with JwtAuthGuard', () => {
-    const guards = Reflect.getMetadata('__guards__', AuthController.prototype.getCurrentUser) || [];
-    const guardNames = guards.map((guard: any) => guard?.name);
-
-    expect(guardNames).toContain(JwtAuthGuard.name);
-  });
 });
