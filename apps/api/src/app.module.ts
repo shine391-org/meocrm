@@ -10,6 +10,8 @@ import { AppService } from './app.service';
 import { OrdersModule } from './orders/orders.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { RequestContextModule } from './common/context/request-context.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { RequestContextModule } from './common/context/request-context.module';
     CustomersModule,
     OrdersModule,
     SuppliersModule,
+    SettingsModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
