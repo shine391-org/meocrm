@@ -10,9 +10,15 @@ import { AppService } from './app.service';
 import { OrdersModule } from './orders/orders.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { RequestContextModule } from './common/context/request-context.module';
+import { CronModule } from './modules/cron/cron.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
+    SettingsModule,
+    ReportsModule,
+    CronModule,
     RequestContextModule,
     ConfigModule.forRoot({
       isGlobal: true,
