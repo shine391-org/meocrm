@@ -256,6 +256,7 @@ model Organization {
   stockAdjustments  StockAdjustment[]
   purchaseOrders    PurchaseOrder[]
   quotes            Quote[]
+  webhooks          Webhook[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -537,6 +538,7 @@ model Order {
   createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  completedAt DateTime?
   deletedAt DateTime?
 
   @@index([organizationId])
@@ -1509,6 +1511,21 @@ model QuoteItem {
   @@index([quoteId])
   @@index([productId])
   @@map("quote_items")
+}
+
+model Webhook {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  url            String
+  secret         String
+  events         String[]
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@map("webhooks")
 }
 
 model RefreshToken {

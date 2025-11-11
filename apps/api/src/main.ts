@@ -1,4 +1,5 @@
 import * as express from 'express';
+import * as bodyParser from 'body-parser';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -7,8 +8,25 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+  });
+
   app.use('/webhooks', express.raw({ type: '*/*' }));
+
+  const rawBodyBuffer = (
+    req: express.Request & { rawBody?: string },
+    _res: express.Response,
+    buf: Buffer,
+    encoding: BufferEncoding,
+  ) => {
+    if (buf && buf.length) {
+      req.rawBody = buf.toString(encoding || 'utf8');
+    }
+  };
+
+  app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true }));
+  app.use(bodyParser.json({ verify: rawBodyBuffer }));
   app.useGlobalFilters(new HttpExceptionFilter());
 
   const configService = app.get(ConfigService);

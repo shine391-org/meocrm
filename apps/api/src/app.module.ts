@@ -12,6 +12,10 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { RequestContextModule } from './common/context/request-context.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { RedisModule } from './redis/redis.module';
+import { EventsModule } from './modules/events/events.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { SchedulerModule } from './modules/scheduler/scheduler.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -29,6 +33,10 @@ import { RedisModule } from './redis/redis.module';
     SuppliersModule,
     SettingsModule,
     RedisModule,
+    EventsModule,
+    WebhooksModule,
+    SchedulerModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

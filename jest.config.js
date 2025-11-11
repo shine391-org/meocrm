@@ -17,6 +17,7 @@ module.exports = {
   coverageDirectory: './coverage',
   testEnvironment: 'node',
   roots: ['<rootDir>/apps/'],
+  setupFilesAfterEnv: ['<rootDir>/apps/api/test/setup-e2e.ts'],
   moduleNameMapper: {
     '^apps/api/(.*)$': '<rootDir>/apps/api/$1',
   },
