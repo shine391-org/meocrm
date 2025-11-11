@@ -20,6 +20,15 @@
 
 ---
 
+## 🧭 Conventions & Guardrails
+
+- **PII markers:** icon 🔒 trong bảng dữ liệu (ví dụ: `Customer.phone`, `Customer.email`, `User.email`). Bất kỳ query nào truy cập PII phải đi qua RequestContext + audit log.
+- **Multi-tenant uniqueness:** mọi bảng có `code` phải khai báo `@@unique([code, organizationId])`. Không sử dụng `@unique` đơn lẻ cho `code`.
+- **Soft delete:** cột `deletedAt` (nullable). Cron `purge-soft-delete` chạy hằng ngày và hard-delete record >6 tháng. Admin có thể restore trước thời hạn.
+- **Error contract:** stored procedures/triggers trả `{code,message,details?,traceId}` thống nhất với API.
+- **Prisma middleware:** luôn tự inject `organizationId` + `deletedAt: null`. Raw SQL phải tự thêm filter tương ứng.
+---
+
 ## 🏢 Multi-Tenancy Core
 
 ### Organization
@@ -232,6 +241,45 @@ model Customer {
   @@map("customers")
 }
 ```
+
+### Lead
+
+```prisma
+model Lead {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+
+  code               String?
+  priorityAuto       LeadPriority @default(HIGH)
+  priorityManual     LeadPriority?
+  priorityUpdatedAt  DateTime     @default(now())
+  lastActivityAt     DateTime     @default(now())
+
+  assignedToId       String?
+  assignedTo         User?        @relation("LeadAssignedUser", fields: [assignedToId], references: [id])
+  assignmentStrategy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, assignedToId])
+  @@index([organizationId, priorityAuto])
+  @@map("leads")
+}
+
+enum LeadPriority {
+  HIGH
+  MEDIUM
+  LOW
+  INACTIVE
+}
+```
+
+- Tham số decay/assignment lấy từ `settings.leadPriority`.
+- Truy cập PII: `Lead` mặc định chứa phone/email ẩn (todo) nên tuân thủ quy định PII tương tự Customer.
 
 ---
 
@@ -1113,58 +1161,9 @@ model PriceBookItem {
 
 ---
 
-## 👥 Lead Management (Priority System)
-
-### Lead
-
-```prisma
-model Lead {
-  id                 String       @id @default(cuid())
-  organizationId     String
-  organization       Organization @relation(fields: [organizationId], references: [id])
-
-  code               String?
-  priorityAuto       LeadPriority @default(HIGH)
-  priorityManual     LeadPriority?
-  priorityUpdatedAt  DateTime     @default(now())
-  lastActivityAt     DateTime     @default(now())
-
-  assignedToId       String?
-  assignedTo         User?        @relation("LeadAssignedUser", fields: [assignedToId], references: [id])
-  assignmentStrategy String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([organizationId, code])
-  @@index([organizationId])
-  @@index([organizationId, assignedToId])
-  @@index([organizationId, priorityAuto])
-  @@map("leads")
-}
-```
-
-### LeadPriority enum
-
-```prisma
-enum LeadPriority {
-  HIGH
-  MEDIUM
-  LOW
-  INACTIVE
-}
-```
-
-**Ghi chú:**
-- `priorityAuto` do cron tính dựa trên inactivity thresholds.
-- `priorityManual` chỉ set nếu người dùng override (API `/leads/:id/priority:override`).
-- `priorityUpdatedAt` giúp kiểm soát decay/override chain; `lastActivityAt` dùng để reset về HIGH.
-
----
-
 ## 💰 Employee Commission
 
-### CommissionRule (Quy tắc hoa hồng)
+### CommissionRule (Config-driven)
 
 ```prisma
 model CommissionRule {
@@ -1175,7 +1174,7 @@ model CommissionRule {
   code    String
   name    String
   type    CommissionType
-  config  Json              // Store tiers, bonuses, split configs
+  config  Json              // tiers, bonus triggers, split profile
   isActive Boolean @default(true)
   
   commissions Commission[]
@@ -1188,13 +1187,13 @@ model CommissionRule {
 }
 
 enum CommissionType {
-  FLAT     // Số tiền cố định
-  TIERED   // Theo bậc doanh thu
-  BONUS    // Thưởng theo KPI
+  FLAT
+  TIERED
+  BONUS
 }
 ```
 
-### Commission (Hoa hồng thực tế)
+### Commission
 
 ```prisma
 model Commission {
@@ -1216,9 +1215,9 @@ model Commission {
   currency    String  @default("VND")
   
   status      CommissionStatus @default(PENDING)
-  periodMonth String            // YYYY-MM
-  source      CommissionSource  // POS | COD
-  split       Json              // [{ role, pct, userId }]
+  periodMonth String
+  source      CommissionSource
+  split       Json             // [{ role, pct, amount, userId }]
   
   isAdjustment        Boolean @default(false)
   adjustsCommissionId String?
@@ -1237,9 +1236,9 @@ model Commission {
 }
 
 enum CommissionStatus {
-  PENDING    // Chờ duyệt
-  APPROVED   // Đã duyệt
-  PAID       // Đã trả
+  PENDING
+  APPROVED
+  PAID
 }
 
 enum CommissionSource {
@@ -1730,14 +1729,27 @@ model QuoteItem {
 
 ---
 
+## ♻️ Soft Delete & Purge Job
+
+- Bất kỳ bảng nào có `deletedAt` phải hỗ trợ restore <= 6 tháng.
+- Cron `purge-soft-delete` chạy 02:00 ICT hằng ngày:
+  ```sql
+  DELETE FROM %TABLE%
+   WHERE deleted_at IS NOT NULL
+     AND deleted_at < NOW() - INTERVAL '6 months';
+  ```
+- Audit log ghi `{ entity, entityId, deletedBy, deletedAt, purgedAt }`.
+- Prisma middleware thêm `deletedAt: null` mặc định; muốn xem bản ghi đã xóa phải gọi `withDeleted()` + ghi lý do.
+
 ## 🎯 Key Design Decisions
 
-1. **Multi-tenancy:** `organizationId` on ALL tenant data
-2. **Soft Delete:** `deletedAt` for Products, Orders
-3. **Decimal for Money:** Precision (12, 2) for VNĐ
-4. **UUID Primary Keys:** Better for distributed systems
-5. **Indexes:** On foreign keys + frequently queried fields
-6. **Enums:** Type-safe status values
+1. **Multi-tenancy:** `organizationId` + Prisma middleware guard cho mọi query.
+2. **PII Flagging:** 🔒 phone/email/address → encrypt-at-rest roadmap, mask trên logs.
+3. **Config-driven:** Fields (Lead/Commission/Refund) không chứa logic cố định, phải đọc từ Settings.
+4. **Soft Delete + Purge:** 6 tháng retention, cron purge như trên.
+5. **Decimal Precision:** Money = DECIMAL(12,2) hoặc (18,2) cho commission.
+6. **UUID/CUID IDs:** chống đoán, hỗ trợ offline.
+7. **Indexes:** Bắt buộc trên FK + fields dùng filter (code, status, periodMonth).
 
 ---
 
