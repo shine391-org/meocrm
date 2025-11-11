@@ -289,12 +289,13 @@ docs/
 ## 26. Environment Configuration
 ```bash
 # Database
-DATABASE_URL="postgresql://postgres:meocrm_dev@localhost:2001/meocrm_dev"
+DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev"
 REDIS_URL="redis://localhost:2002"
 
 # API
-API_PORT=2003
+PORT=2003
 API_URL="http://localhost:2003"
+CORS_ORIGIN="http://localhost:2004"
 
 # Frontend
 WEB_PORT=2004
@@ -302,6 +303,7 @@ NEXT_PUBLIC_API_URL="http://localhost:2003"
 
 # Auth
 JWT_SECRET="your-jwt-secret-key"
+JWT_REFRESH_SECRET="your-jwt-refresh-secret"
 JWT_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 ```
@@ -417,19 +419,21 @@ JWT_REFRESH_EXPIRES_IN="7d"
 | Web | 2004 | 3101 | 3102 |
 | PostgreSQL | 2001 | 5432 | 5432 |
 | Redis | 2002 | 6379 | 6379 |
-| Swagger | 2005 | 3005 | 3006 |
+| Swagger | Served at `/api` on API port | Served at `/api` | Served at `/api` |
 | Adminer | 2006 | 3106 | 3107 |
 | MailHog | 2007 | 3107 | 3108 |
 
 ## 39. Appendix B: Sample `.env`
 ```bash
-DATABASE_URL="postgresql://postgres:meocrm_dev@localhost:2001/meocrm_dev"
+DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev"
 REDIS_URL="redis://localhost:2002"
-API_PORT=2003
+PORT=2003
 API_URL="http://localhost:2003"
+CORS_ORIGIN="http://localhost:2004"
 WEB_PORT=2004
 NEXT_PUBLIC_API_URL="http://localhost:2003"
 JWT_SECRET="super-secret"
+JWT_REFRESH_SECRET="dev-refresh-secret"
 JWT_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 ```

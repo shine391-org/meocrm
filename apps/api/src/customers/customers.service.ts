@@ -9,6 +9,15 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { Prisma } from '@prisma/client';
 
+const CUSTOMER_SORTABLE_FIELDS: Array<keyof Prisma.CustomerOrderByWithRelationInput> = [
+  'createdAt',
+  'name',
+  'code',
+  'totalSpent',
+  'totalOrders',
+  'debt',
+];
+
 @Injectable()
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -67,12 +76,16 @@ export class CustomersService {
 
     const skip = (page - 1) * limit;
 
+    const normalizedOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+    const sortField = CUSTOMER_SORTABLE_FIELDS.includes(sortBy as any) ? (sortBy as keyof Prisma.CustomerOrderByWithRelationInput) : 'createdAt';
+    const orderBy = { [sortField]: normalizedOrder } as Prisma.CustomerOrderByWithRelationInput;
+
     const [data, total] = await Promise.all([
       this.prisma.customer.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy,
       }),
       this.prisma.customer.count({ where }),
     ]);
