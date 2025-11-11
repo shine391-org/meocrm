@@ -3,6 +3,9 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthService } from './auth/auth.service';
+import { HttpAdapterHost } from '@nestjs/core';
+import { GlobalErrorFilter } from './common/filters/global-error.filter';
+import { RequestContextService } from './common/context/request-context.service';
 import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
@@ -62,6 +65,10 @@ export async function setupTestApp(): Promise<{
 
   const app = moduleFixture.createNestApplication();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  const httpAdapterHost = app.get(HttpAdapterHost);
+  const requestContextService = app.get(RequestContextService);
+  app.useGlobalFilters(new GlobalErrorFilter(httpAdapterHost, requestContextService));
 
   const prisma = app.get<PrismaService>(PrismaService);
   const authService = app.get<AuthService>(AuthService);

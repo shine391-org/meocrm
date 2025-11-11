@@ -1,6 +1,8 @@
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { GlobalErrorFilter } from './common/filters/global-error.filter';
+import { RequestContextService } from './common/context/request-context.service';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
@@ -21,6 +23,10 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  const httpAdapterHost = app.get(HttpAdapterHost);
+  const requestContextService = app.get(RequestContextService);
+  app.useGlobalFilters(new GlobalErrorFilter(httpAdapterHost, requestContextService));
 
   const corsOrigin = configService.get<string>('CORS_ORIGIN');
   app.enableCors({
