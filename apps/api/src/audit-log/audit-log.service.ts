@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AuditAction, User } from '@prisma/client';
+import { AuditAction, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 interface AuditLogPayload {
@@ -27,6 +27,11 @@ export class AuditLogService {
     ipAddress,
     userAgent,
   }: AuditLogPayload) {
+    const normalizedNewValues: Prisma.InputJsonValue = {
+      event: action,
+      ...(newValues ?? {}),
+    };
+
     return this.prisma.auditLog.create({
       data: {
         organizationId: user.organizationId,
@@ -34,11 +39,8 @@ export class AuditLogService {
         entity,
         entityId,
         action: this.mapAction(action),
-        oldValues: oldValues ?? null,
-        newValues: {
-          event: action,
-          ...(newValues ?? {}),
-        },
+        oldValues: (oldValues ?? null) as Prisma.InputJsonValue | null,
+        newValues: normalizedNewValues,
         ipAddress,
         userAgent,
       },

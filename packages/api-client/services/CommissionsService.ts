@@ -37,7 +37,7 @@ export class CommissionsService {
      * @returns any Batch paid
      * @throws ApiError
      */
-    public postCommissionsPayouts:run(
+    public postCommissionsPayoutsRun(
         requestBody: {
             /**
              * YYYY-MM period identifier

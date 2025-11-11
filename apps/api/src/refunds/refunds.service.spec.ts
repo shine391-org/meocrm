@@ -28,7 +28,7 @@ describe('RefundsService', () => {
     deletedAt: null,
   };
 
-  const mockOrder: Order & { items: (OrderItem & { productVariant: ProductVariant })[] } = {
+  const mockOrder: Order & { items: (OrderItem & { variant: ProductVariant | null })[] } = {
     id: 'order-1',
     code: 'ORD-001',
     status: OrderStatus.COMPLETED,
@@ -44,16 +44,19 @@ describe('RefundsService', () => {
       {
         id: 'item-1',
         orderId: 'order-1',
-        productVariantId: 'variant-1',
+        productId: 'prod-1',
+        variantId: 'variant-1',
         quantity: 2,
-        price: 50,
+        unitPrice: 50 as any,
+        subtotal: 100 as any,
+        organizationId: 'org-1',
         createdAt: new Date(),
         updatedAt: new Date(),
-        productVariant: {
+        variant: {
           id: 'variant-1',
           productId: 'prod-1',
           sku: 'SKU-001',
-          price: 50,
+          price: 50 as any,
           stock: 10,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -135,7 +138,7 @@ describe('RefundsService', () => {
 
       expect(prisma.order.update).toHaveBeenCalledWith({
         where: { id: 'order-1' },
-        data: { status: 'REFUNDED' },
+        data: { status: OrderStatus.CANCELLED },
       });
 
       expect(auditLog.log).toHaveBeenCalledWith(

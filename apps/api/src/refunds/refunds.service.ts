@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { User } from '@prisma/client';
+import { OrderStatus, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotificationsService } from '../modules/notifications/notifications.service';
@@ -54,15 +54,17 @@ export class RefundsService {
   }
 
   async approveRefund(orderId: string, user: User) {
-    const windowDays = await this.settings.get('refund.windowDays');
-    const restockOnRefund = await this.settings.get('refund.restockOnRefund');
+    const windowDays =
+      (await this.settings.get<number>('refund.windowDays')) ?? 7;
+    const restockOnRefund =
+      (await this.settings.get<boolean>('refund.restockOnRefund')) ?? true;
 
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
         items: {
           include: {
-            productVariant: true,
+            variant: true,
           },
         },
       },
@@ -95,8 +97,12 @@ export class RefundsService {
     const updatedOrder = await this.prisma.$transaction(async (tx) => {
       if (restockOnRefund) {
         for (const item of order.items) {
+          if (!item.variantId) {
+            continue;
+          }
+
           await tx.productVariant.update({
-            where: { id: item.productVariantId },
+            where: { id: item.variantId },
             data: { stock: { increment: item.quantity } },
           });
         }
@@ -106,7 +112,7 @@ export class RefundsService {
 
       const result = await tx.order.update({
         where: { id: orderId },
-        data: { status: 'REFUNDED' },
+        data: { status: OrderStatus.CANCELLED },
       });
 
       await this.auditLog.log({
@@ -140,7 +146,6 @@ export class RefundsService {
   ) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { user: true },
     });
 
     if (!order) {

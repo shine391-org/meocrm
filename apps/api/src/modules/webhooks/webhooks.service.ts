@@ -43,7 +43,7 @@ export class WebhooksService {
     this.logger.log('Handling shipping.delivered event', payload);
     const { orderId, organizationId } = payload.data;
     if (orderId && organizationId) {
-      await this.prisma.order.update({
+      await this.prisma.order.updateMany({
         where: { id: orderId, organizationId },
         data: {
           status: OrderStatus.COMPLETED,

@@ -15,7 +15,7 @@ export class LeadsService {
      * @returns any Priority override accepted
      * @throws ApiError
      */
-    public postLeadsPriority:override(
+    public postLeadsPriorityOverride(
         id: string,
         requestBody: {
             priority: LeadPriority;
