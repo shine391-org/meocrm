@@ -16,6 +16,8 @@ import { EventsModule } from './modules/events/events.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
+import { RefundsApiModule } from './refunds/refunds.module';
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     EventsModule,
     WebhooksModule,
     SchedulerModule,
+    AuditLogModule,
+    RefundsApiModule,
     NotificationsModule,
   ],
   controllers: [AppController],
