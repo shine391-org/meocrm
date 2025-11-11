@@ -5,35 +5,57 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+
+interface NormalizedError {
+  code: string;
+  message: string;
+  details?: unknown;
+  traceId: string;
+}
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
     const status = exception.getStatus();
     const exceptionResponse = exception.getResponse();
 
     const traceId = uuidv4();
 
-    let errorResponse = {
+    const normalized: NormalizedError = {
       code: `HTTP_${status}`,
-      message: 'Internal server error',
-      details: undefined,
-      traceId: traceId,
-      path: request.url,
-      timestamp: new Date().toISOString(),
+      message: exception.message || 'Internal server error',
+      traceId,
     };
 
     if (typeof exceptionResponse === 'string') {
-      errorResponse.message = exceptionResponse;
-    } else if (typeof exceptionResponse === 'object') {
-      errorResponse = { ...errorResponse, ...exceptionResponse };
+      normalized.message = exceptionResponse;
+    } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+      const responseObject = exceptionResponse as Record<string, unknown>;
+
+      if (typeof responseObject.code === 'string' && responseObject.code.length > 0) {
+        normalized.code = responseObject.code;
+      }
+
+      const responseMessage = responseObject.message;
+      if (Array.isArray(responseMessage)) {
+        normalized.message = responseMessage.join('; ');
+      } else if (typeof responseMessage === 'string' && responseMessage.length > 0) {
+        normalized.message = responseMessage;
+      }
+
+      if (responseObject.details !== undefined) {
+        normalized.details = responseObject.details;
+      }
     }
 
-    response.status(status).json(errorResponse);
+    if (!normalized.message) {
+      normalized.message = 'Internal server error';
+    }
+
+    response.status(status).json(normalized);
   }
 }
