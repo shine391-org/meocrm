@@ -3,9 +3,9 @@ import { RefundsController } from './refunds.controller';
 import { RefundsService } from './refunds.service';
 import { SettingsService } from '../modules/settings/settings.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { User } from '@prisma/client';
+import { ExecutionContext, INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { User, UserRole } from '@prisma/client';
 
 describe('RefundsController (Integration)', () => {
   let app: INestApplication;
@@ -14,15 +14,15 @@ describe('RefundsController (Integration)', () => {
   const mockUser: User = {
     id: 'user-1',
     email: 'staff@example.com',
-    role: 'staff',
+    name: 'Staff',
+    role: UserRole.STAFF,
     organizationId: 'org-1',
     password: 'hashedpassword',
     createdAt: new Date(),
     updatedAt: new Date(),
-    deletedAt: null,
   };
 
-  const mockManager: User = { ...mockUser, id: 'manager-1', role: 'manager' };
+  const mockManager: User = { ...mockUser, id: 'manager-1', role: UserRole.MANAGER };
 
   beforeAll(async () => {
     refundsService = {
@@ -39,7 +39,7 @@ describe('RefundsController (Integration)', () => {
           provide: SettingsService,
           useValue: {
             get: jest.fn().mockImplementation((key) => {
-              if (key === 'refund.approvals') return Promise.resolve(['manager']);
+              if (key === 'refund.approvals') return Promise.resolve(['MANAGER']);
               return Promise.resolve(null);
             }),
           },
@@ -48,7 +48,7 @@ describe('RefundsController (Integration)', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({
-        canActivate: (context) => {
+        canActivate: (context: ExecutionContext) => {
           const req = context.switchToHttp().getRequest();
           // Simulate user based on a header for testing
           if (req.headers['x-user-role'] === 'manager') {

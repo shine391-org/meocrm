@@ -1,13 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import {
   createOrganization,
   createCustomer,
   createProduct,
   getAdminAccessToken,
-  setupTestApp,
   cleanupDatabase,
 } from '../src/test-utils';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -26,7 +25,6 @@ describe('Orders Shipping (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    setupTestApp(app);
     await app.init();
 
     prisma = moduleFixture.get<PrismaService>(PrismaService);

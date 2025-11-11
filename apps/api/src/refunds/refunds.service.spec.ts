@@ -5,7 +5,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotificationsService } from '../modules/notifications/notifications.service';
 import { SettingsService } from '../modules/settings/settings.service';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
-import { User, Order, OrderStatus, ProductVariant, OrderItem } from '@prisma/client';
+import { User, Order, OrderStatus, ProductVariant, OrderItem, UserRole } from '@prisma/client';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
@@ -20,15 +20,15 @@ describe('RefundsService', () => {
   const mockUser: User = {
     id: 'user-1',
     email: 'staff@example.com',
-    role: 'staff',
+    name: 'Staff',
+    role: UserRole.STAFF,
     organizationId: 'org-1',
     password: 'hashedpassword',
     createdAt: new Date(),
     updatedAt: new Date(),
-    deletedAt: null,
   };
 
-  const mockOrder: Order & { items: (OrderItem & { variant: ProductVariant | null })[] } = {
+  const mockOrder = {
     id: 'order-1',
     code: 'ORD-001',
     status: OrderStatus.COMPLETED,
@@ -56,14 +56,20 @@ describe('RefundsService', () => {
           id: 'variant-1',
           productId: 'prod-1',
           sku: 'SKU-001',
-          price: 50 as any,
+          sellPrice: 50 as any,
+          name: 'Variant',
+          organizationId: 'org-1',
+          isActive: true,
+          images: [],
+          attributes: null,
+          deletedAt: null,
           stock: 10,
           createdAt: new Date(),
           updatedAt: new Date(),
         },
       },
     ],
-  };
+  } as unknown as Order & { items: (OrderItem & { variant: ProductVariant | null })[] };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -127,7 +133,7 @@ describe('RefundsService', () => {
     });
 
     it('should successfully process a refund, update stock, and emit event', async () => {
-      prisma.$transaction.mockImplementation((callback) => callback(prisma));
+      prisma.$transaction.mockImplementation(async (callback: any) => callback(prisma));
 
       await service.approveRefund('order-1', mockUser);
 

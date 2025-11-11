@@ -114,6 +114,7 @@ export async function cleanupDatabase(prisma: PrismaService) {
   await prisma.order.deleteMany({});
   await prisma.product.deleteMany({});
   await prisma.setting.deleteMany({});
+  await prisma.auditLog.deleteMany({});
   await prisma.customer.deleteMany({});
   await prisma.refreshToken.deleteMany({});
   await prisma.user.deleteMany({});

@@ -39,7 +39,7 @@ export class AuditLogService {
         entity,
         entityId,
         action: this.mapAction(action),
-        oldValues: (oldValues ?? null) as Prisma.InputJsonValue | null,
+        oldValues: (oldValues ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         newValues: normalizedNewValues,
         ipAddress,
         userAgent,

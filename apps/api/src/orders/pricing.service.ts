@@ -18,8 +18,10 @@ export class PricingService {
   constructor(private readonly settingsService: SettingsService) {}
 
   async calculateTotals(orderDraft: OrderDraft): Promise<PricingResult> {
-    const freeShipThreshold = await this.settingsService.get<number>('shipping.freeShipThreshold', 0);
-    const applyChannels = await this.settingsService.get<string[]>('shipping.applyChannels', []);
+    const freeShipThreshold =
+      (await this.settingsService.get<number>('shipping.freeShipThreshold', 0)) ?? 0;
+    const applyChannels =
+      (await this.settingsService.get<string[]>('shipping.applyChannels', [])) ?? [];
 
     // Placeholder for shipping calculation from a provider like GHN/GHTK
     let calculatedShippingFee = 30000;

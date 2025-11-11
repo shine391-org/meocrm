@@ -30,11 +30,11 @@ export class ReportsService {
     const { groupBy, fromDate, toDate, customerId } = query;
 
     const whereConditions = [
-      Prisma.sql`"organizationId" = ${organizationId}::uuid`,
+      Prisma.sql`"organizationId" = ${organizationId}`,
     ];
 
     if (customerId) {
-      whereConditions.push(Prisma.sql`"customerId" = ${customerId}::uuid`);
+      whereConditions.push(Prisma.sql`"customerId" = ${customerId}`);
     }
     if (fromDate) {
       whereConditions.push(Prisma.sql`"capturedAt" >= ${fromDate}`);
