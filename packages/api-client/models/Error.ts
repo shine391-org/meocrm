@@ -8,3 +8,4 @@ export type Error = {
     details?: Record<string, any>;
     traceId: string;
 };
+

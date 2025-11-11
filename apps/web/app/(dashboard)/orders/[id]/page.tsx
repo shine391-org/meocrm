@@ -2,13 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { MeocrmApiClient, Order } from '@meocrm/api-client';
+import { OpenAPI, OrdersService, Order } from '@meocrm/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-const apiClient = new MeocrmApiClient({
-  BASE: process.env.NEXT_PUBLIC_API_URL,
-});
+OpenAPI.BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export default function OrderDetailsPage() {
   const params = useParams();
@@ -19,14 +17,14 @@ export default function OrderDetailsPage() {
 
   useEffect(() => {
     if (orderId) {
-      apiClient.orders.getOrdersById({ id: orderId }).then(setOrder);
+      OrdersService.getOrdersById(orderId).then(setOrder);
     }
   }, [orderId]);
 
   const handleRequestRefund = async () => {
     setMessage('Requesting refund...');
     try {
-      await apiClient.orders.postOrdersByIdRefund({ id: orderId });
+      await OrdersService.postOrdersByIdRefund(orderId);
       setMessage('Refund request successful!');
     } catch (error) {
       setMessage('Refund request failed.');
@@ -36,7 +34,7 @@ export default function OrderDetailsPage() {
   const handleApproveRefund = async () => {
     setMessage('Approving refund...');
     try {
-      await apiClient.orders.postOrdersByIdRefundApprove({ id: orderId });
+      await OrdersService.postOrdersByIdRefundApprove(orderId);
       setMessage('Refund approved!');
     } catch (error) {
       setMessage('Refund approval failed.');
@@ -46,7 +44,7 @@ export default function OrderDetailsPage() {
   const handleRejectRefund = async () => {
     setMessage('Rejecting refund...');
     try {
-      await apiClient.orders.postOrdersByIdRefundReject({ id: orderId });
+      await OrdersService.postOrdersByIdRefundReject(orderId);
       setMessage('Refund rejected!');
     } catch (error) {
       setMessage('Refund rejection failed.');

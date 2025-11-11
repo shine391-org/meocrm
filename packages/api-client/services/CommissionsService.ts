@@ -3,16 +3,16 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CancelablePromise } from '../core/CancelablePromise';
-import type { BaseHttpRequest } from '../core/BaseHttpRequest';
+import { OpenAPI } from '../core/OpenAPI';
+import { request as __request } from '../core/request';
 export class CommissionsService {
-    constructor(public readonly httpRequest: BaseHttpRequest) {}
     /**
      * Create commission rule
      * @param requestBody
      * @returns any Created
      * @throws ApiError
      */
-    public postAdminCommissionRules(
+    public static postAdminCommissionRules(
         requestBody: {
             code: string;
             name: string;
@@ -21,7 +21,7 @@ export class CommissionsService {
             isActive?: boolean;
         },
     ): CancelablePromise<any> {
-        return this.httpRequest.request({
+        return __request(OpenAPI, {
             method: 'POST',
             url: '/admin/commission-rules',
             body: requestBody,
@@ -37,7 +37,7 @@ export class CommissionsService {
      * @returns any Batch paid
      * @throws ApiError
      */
-    public postCommissionsPayoutsRun(
+    public static postCommissionsPayoutsRun(
         requestBody: {
             /**
              * YYYY-MM period identifier
@@ -52,7 +52,7 @@ export class CommissionsService {
         status?: 'PAID';
         traceId?: string;
     }> {
-        return this.httpRequest.request({
+        return __request(OpenAPI, {
             method: 'POST',
             url: '/commissions/payouts:run',
             body: requestBody,

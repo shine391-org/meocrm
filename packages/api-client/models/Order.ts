@@ -7,3 +7,4 @@ export type Order = {
     status?: string;
     total?: number;
 };
+

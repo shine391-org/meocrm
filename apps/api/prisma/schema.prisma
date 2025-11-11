@@ -257,11 +257,29 @@ model Organization {
   purchaseOrders    PurchaseOrder[]
   quotes            Quote[]
   webhooks          Webhook[]
+  customerDebtSnapshots CustomerDebtSnapshot[]
+  settings              Setting[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("organizations")
+}
+
+model Setting {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  key       String
+  value     Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("settings")
 }
 
 model Branch {
@@ -468,6 +486,7 @@ model Customer {
   activities            Activity[]
   quotes                Quote[]
   commissions           Commission[]
+  debtSnapshots        CustomerDebtSnapshot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -497,6 +516,21 @@ model CustomerGroup {
 
   @@index([organizationId])
   @@map("customer_groups")
+}
+
+model CustomerDebtSnapshot {
+  id             String       @id @default(cuid())
+  organizationId String
+  customerId     String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  debtValue  Decimal  @db.Decimal(14, 2)
+  capturedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([organizationId, customerId])
+  @@map("customer_debt_snapshots")
 }
 
 // Orders & Sales

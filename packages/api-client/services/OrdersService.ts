@@ -4,16 +4,16 @@
 /* eslint-disable */
 import type { Order } from '../models/Order';
 import type { CancelablePromise } from '../core/CancelablePromise';
-import type { BaseHttpRequest } from '../core/BaseHttpRequest';
+import { OpenAPI } from '../core/OpenAPI';
+import { request as __request } from '../core/request';
 export class OrdersService {
-    constructor(public readonly httpRequest: BaseHttpRequest) {}
     /**
      * Get all orders
      * @returns Order A list of orders
      * @throws ApiError
      */
-    public getOrders(): CancelablePromise<Array<Order>> {
-        return this.httpRequest.request({
+    public static getOrders(): CancelablePromise<Array<Order>> {
+        return __request(OpenAPI, {
             method: 'GET',
             url: '/orders',
         });
@@ -24,10 +24,10 @@ export class OrdersService {
      * @returns Order A single order
      * @throws ApiError
      */
-    public getOrders1(
+    public static getOrdersById(
         id: string,
     ): CancelablePromise<Order> {
-        return this.httpRequest.request({
+        return __request(OpenAPI, {
             method: 'GET',
             url: '/orders/{id}',
             path: {
@@ -41,10 +41,10 @@ export class OrdersService {
      * @returns any Refund request accepted
      * @throws ApiError
      */
-    public postOrdersRefund(
+    public static postOrdersByIdRefund(
         id: string,
     ): CancelablePromise<any> {
-        return this.httpRequest.request({
+        return __request(OpenAPI, {
             method: 'POST',
             url: '/orders/{id}/refund',
             path: {
@@ -58,10 +58,10 @@ export class OrdersService {
      * @returns any Refund request approved
      * @throws ApiError
      */
-    public postOrdersRefundApprove(
+    public static postOrdersByIdRefundApprove(
         id: string,
     ): CancelablePromise<any> {
-        return this.httpRequest.request({
+        return __request(OpenAPI, {
             method: 'POST',
             url: '/orders/{id}/refund/approve',
             path: {
@@ -75,10 +75,10 @@ export class OrdersService {
      * @returns any Refund request rejected
      * @throws ApiError
      */
-    public postOrdersRefundReject(
+    public static postOrdersByIdRefundReject(
         id: string,
     ): CancelablePromise<any> {
-        return this.httpRequest.request({
+        return __request(OpenAPI, {
             method: 'POST',
             url: '/orders/{id}/refund/reject',
             path: {

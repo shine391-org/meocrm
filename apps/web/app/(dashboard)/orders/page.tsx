@@ -1,19 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MeocrmApiClient, Order } from '@meocrm/api-client';
+import { OpenAPI, OrdersService, Order } from '@meocrm/api-client';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
-const apiClient = new MeocrmApiClient({
-  BASE: process.env.NEXT_PUBLIC_API_URL,
-});
+OpenAPI.BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
-    apiClient.orders.getOrders().then(setOrders);
+    OrdersService.getOrders().then(setOrders);
   }, []);
 
   return (

@@ -5,6 +5,7 @@ info:
 paths:
   '/leads/{id}/priority:override':
     post:
+      operationId: postLeadsPriorityOverride
       summary: Override lead priority (manual)
       description: Applies a manual priority override for a lead inside the caller's organization.
       tags: [Leads]
@@ -51,6 +52,7 @@ paths:
 
   '/admin/commission-rules':
     post:
+      operationId: postAdminCommissionRules
       summary: Create commission rule
       tags: [Commissions]
       requestBody:
@@ -86,6 +88,7 @@ paths:
 
   '/commissions/payouts:run':
     post:
+      operationId: postCommissionsPayoutsRun
       summary: Run monthly payout for a period
       tags: [Commissions]
       requestBody:
@@ -129,6 +132,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /orders:
     get:
+      operationId: getOrders
       summary: Get all orders
       tags: [Orders]
       responses:
@@ -142,6 +146,7 @@ paths:
                   $ref: '#/components/schemas/Order'
   '/orders/{id}':
     get:
+      operationId: getOrdersById
       summary: Get a single order
       tags: [Orders]
       parameters:
@@ -159,6 +164,7 @@ paths:
                 $ref: '#/components/schemas/Order'
   '/orders/{id}/refund':
     post:
+      operationId: postOrdersByIdRefund
       summary: Request a refund for an order
       tags: [Orders]
       parameters:
@@ -172,6 +178,7 @@ paths:
           description: Refund request accepted
   '/orders/{id}/refund/approve':
     post:
+      operationId: postOrdersByIdRefundApprove
       summary: Approve a refund request
       tags: [Orders]
       parameters:
@@ -185,6 +192,7 @@ paths:
           description: Refund request approved
   '/orders/{id}/refund/reject':
     post:
+      operationId: postOrdersByIdRefundReject
       summary: Reject a refund request
       tags: [Orders]
       parameters:
@@ -196,49 +204,9 @@ paths:
       responses:
         '200':
           description: Refund request rejected
-components:
-  schemas:
-    Order:
-      type: object
-      properties:
-        id:
-          type: string
-        status:
-          type: string
-        total:
-          type: number
-    LeadPriority:
-      type: string
-      enum: [HIGH, MEDIUM, LOW, INACTIVE]
-    Error:
-      type: object
-      required: [code, message, traceId]
-      properties:
-        code:
-          type: string
-        message:
-          type: string
-        details:
-          type: object
-          additionalProperties: true
-        traceId:
-          type: string
-    DebtReportItem:
-      type: object
-      properties:
-        period:
-          type: string
-          format: date-time
-          description: "Start of the period (day or month)"
-        customerId:
-          type: string
-          format: uuid
-        closingDebt:
-          type: number
-          format: decimal
-
   /reports/debt:
     get:
+      operationId: getDebtReport
       summary: Get customer debt report
       description: |
         Retrieves a report of customer debt, grouped by day or month.
@@ -288,10 +256,48 @@ components:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized.
-
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        total:
+          type: number
+    LeadPriority:
+      type: string
+      enum: [HIGH, MEDIUM, LOW, INACTIVE]
+    Error:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        traceId:
+          type: string
+    DebtReportItem:
+      type: object
+      properties:
+        period:
+          type: string
+          format: date-time
+          description: "Start of the period (day or month)"
+        customerId:
+          type: string
+          format: uuid
+        closingDebt:
+          type: number
+          format: decimal

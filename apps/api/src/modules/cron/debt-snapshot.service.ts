@@ -44,7 +44,7 @@ export class DebtSnapshotService {
         } catch (error) {
           this.logger.error(
             `Failed to process debt snapshot for organization: ${org.id}`,
-            error.stack
+            error instanceof Error ? error.stack : undefined,
           );
         }
       });
@@ -74,7 +74,9 @@ export class DebtSnapshotService {
     const capturedAt = new Date();
     const customerDebts = orders
       .map((order) => {
-        const debt = (order._sum.total || 0) - (order._sum.paidAmount || 0);
+        const total = Number(order._sum.total ?? 0);
+        const paid = Number(order._sum.paidAmount ?? 0);
+        const debt = total - paid;
         return {
           organizationId,
           customerId: order.customerId!,
