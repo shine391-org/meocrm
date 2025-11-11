@@ -1,0 +1,50 @@
+name: CI/CD (main)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'pnpm'
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Install deps
+        run: pnpm -w install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @meocrm/api exec prisma generate
+
+      - name: Build
+        run: pnpm -w build
+
+      - name: Test (strict)
+        run: pnpm -w test -- --runInBand --coverage
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.app_url || '' }}
+    steps:
+      - name: Deployment placeholder
+        id: deploy
+        run: |
+          echo "Do real deployment here (Docker/K8s/VPS)."
+          # Example outputs:
+          echo "app_url=https://app.meocrm.example" >> $GITHUB_OUTPUT
