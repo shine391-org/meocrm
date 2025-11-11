@@ -117,15 +117,20 @@ enum LoyaltyTransactionType {
 }
 
 enum CommissionType {
-  PERCENTAGE // % doanh thu
-  FIXED // Số tiền cố định
+  FLAT // Hoa hồng cố định
+  TIERED // Theo bậc doanh thu
+  BONUS // Bonus theo KPI
 }
 
 enum CommissionStatus {
   PENDING // Chờ duyệt
   APPROVED // Đã duyệt
   PAID // Đã trả
-  CANCELLED // Đã hủy
+}
+
+enum CommissionSource {
+  POS
+  COD
 }
 
 enum WarrantyStatus {
@@ -170,6 +175,13 @@ enum TaskStatus {
   IN_PROGRESS // Đang làm
   COMPLETED // Đã xong
   CANCELLED // Đã hủy
+}
+
+enum LeadPriority {
+  HIGH
+  MEDIUM
+  LOW
+  INACTIVE
 }
 
 enum ActivityType {
@@ -221,6 +233,7 @@ model Organization {
   products          Product[]
   productVariants   ProductVariant[]
   customers         Customer[]
+  leads             Lead[]
   orders            Order[]
   orderItems        OrderItem[]
   suppliers         Supplier[]
@@ -235,6 +248,7 @@ model Organization {
   loyaltyPrograms   LoyaltyProgram[]
   priceBooks        PriceBook[]
   commissionRules   CommissionRule[]
+  commissions       Commission[]
   warrantyPlans     WarrantyPlan[]
   appointments      Appointment[]
   tasks             Task[]
@@ -242,6 +256,7 @@ model Organization {
   stockAdjustments  StockAdjustment[]
   purchaseOrders    PurchaseOrder[]
   quotes            Quote[]
+  webhooks          Webhook[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -289,19 +304,44 @@ model User {
 
   auditLogs     AuditLog[]
   cashRegisters CashRegister[]
-  commissions   Commission[]
   appointments  Appointment[]
   tasks         Task[]
   activities    Activity[]
   attendances   Attendance[]
   timesheets    Timesheet[]
   refreshTokens RefreshToken[]
+  leadsAssigned Lead[]        @relation("LeadAssignedUser")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organizationId])
   @@map("users")
+}
+
+model Lead {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+
+  code               String?
+  priorityAuto       LeadPriority @default(HIGH)
+  priorityManual     LeadPriority?
+  priorityUpdatedAt  DateTime     @default(now())
+  lastActivityAt     DateTime     @default(now())
+
+  assignedToId       String?
+  assignedTo         User?        @relation("LeadAssignedUser", fields: [assignedToId], references: [id])
+  assignmentStrategy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, assignedToId])
+  @@index([organizationId, priorityAuto])
+  @@map("leads")
 }
 
 // Products Module
@@ -427,6 +467,7 @@ model Customer {
   tasks                 Task[]
   activities            Activity[]
   quotes                Quote[]
+  commissions           Commission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -497,6 +538,7 @@ model Order {
   createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  completedAt DateTime?
   deletedAt DateTime?
 
   @@index([organizationId])
@@ -1086,21 +1128,16 @@ model PriceBookItem {
   @@map("price_book_items")
 }
 
-// Employee Commission
+// Commission & Revenue
 model CommissionRule {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
 
-  name        String
-  description String?
-
-  type        CommissionType
-  rate        Decimal        @db.Decimal(5, 2)
-  fixedAmount Decimal?       @db.Decimal(12, 2)
-
-  minOrderValue        Decimal? @db.Decimal(12, 2)
-  applicableCategories String[]
+  code  String
+  name  String
+  type  CommissionType
+  config Json
 
   isActive Boolean @default(true)
 
@@ -1109,33 +1146,49 @@ model CommissionRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([organizationId, code])
   @@index([organizationId])
   @@map("commission_rules")
 }
 
 model Commission {
-  id     String         @id @default(cuid())
-  ruleId String
-  rule   CommissionRule @relation(fields: [ruleId], references: [id])
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
+  ruleId String?
+  rule   CommissionRule? @relation(fields: [ruleId], references: [id])
 
   orderId String
-  order   Order  @relation(fields: [orderId], references: [id])
+  order   Order @relation(fields: [orderId], references: [id])
 
-  orderValue Decimal @db.Decimal(12, 2)
-  rate       Decimal @db.Decimal(5, 2)
-  amount     Decimal @db.Decimal(12, 2)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
 
-  status CommissionStatus @default(PENDING)
-  paidAt DateTime?
+  valueGross  Decimal @db.Decimal(18, 2)
+  valueNet    Decimal @db.Decimal(18, 2)
+  ratePercent Decimal @db.Decimal(5, 2)
+  amount      Decimal @db.Decimal(18, 2)
+  currency    String  @default("VND")
 
-  createdAt DateTime @default(now())
+  status      CommissionStatus @default(PENDING)
+  periodMonth String
+  source      CommissionSource
+  split       Json
 
-  @@index([ruleId])
-  @@index([userId])
-  @@index([orderId])
+  isAdjustment        Boolean @default(false)
+  adjustsCommissionId String?
+  adjustmentParent    Commission? @relation("CommissionAdjustmentChain", fields: [adjustsCommissionId], references: [id])
+  adjustments         Commission[] @relation("CommissionAdjustmentChain")
+
+  traceId    String?
+  createdAt  DateTime @default(now())
+  approvedAt DateTime?
+  paidAt     DateTime?
+
+  @@index([organizationId, periodMonth])
+  @@index([organizationId, orderId])
+  @@index([organizationId, status])
   @@map("commissions")
 }
 
@@ -1458,6 +1511,21 @@ model QuoteItem {
   @@index([quoteId])
   @@index([productId])
   @@map("quote_items")
+}
+
+model Webhook {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  url            String
+  secret         String
+  events         String[]
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@map("webhooks")
 }
 
 model RefreshToken {

@@ -1,0 +1,148 @@
+openapi: 3.1.0
+info:
+  title: MeoCRM API
+  version: 1.0.0
+paths:
+  '/leads/{id}/priority:override':
+    post:
+      summary: Override lead priority (manual)
+      description: Applies a manual priority override for a lead inside the caller's organization.
+      tags: [Leads]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [priority]
+              properties:
+                priority:
+                  $ref: '#/components/schemas/LeadPriority'
+      responses:
+        '200':
+          description: Priority override accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  priorityEffective:
+                    $ref: '#/components/schemas/LeadPriority'
+                  traceId:
+                    type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found inside tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  '/admin/commission-rules':
+    post:
+      summary: Create commission rule
+      tags: [Commissions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, type, config]
+              properties:
+                code:
+                  type: string
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [FLAT, TIERED, BONUS]
+                config:
+                  type: object
+                  additionalProperties: true
+                isActive:
+                  type: boolean
+                  default: true
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: Invalid payload or duplicated code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  '/commissions/payouts:run':
+    post:
+      summary: Run monthly payout for a period
+      tags: [Commissions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [period]
+              properties:
+                period:
+                  type: string
+                  description: YYYY-MM period identifier
+                payOn:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Batch paid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: string
+                  totalAmount:
+                    type: string
+                  count:
+                    type: integer
+                  status:
+                    type: string
+                    enum: [PAID]
+                  traceId:
+                    type: string
+        '400':
+          description: Invalid period or payout already run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    LeadPriority:
+      type: string
+      enum: [HIGH, MEDIUM, LOW, INACTIVE]
+    Error:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        traceId:
+          type: string

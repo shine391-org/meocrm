@@ -169,11 +169,13 @@ docs/
 | `README.md` | Quick start + project overview |
 | `AGENTS.md` | Agent ops manual & guardrails |
 | `docs/architecture/README.md` | In-depth architecture & flows |
+| `docs/01_BUSINESS_LOGIC.md` | Canonical business rules (Lead Priority, Commission, etc.) |
 | `docs/LESSONS_LEARNED.md` | Team knowledge base (45+ lessons) |
 | `docs/IMPLEMENTATION_STATUS.md` | Progress tracker & roadmap |
 | `docs/technical/coding-standards.md` | Coding standards |
 | `docs/ENVIRONMENT.md` | Environment variables & setup |
 | `docs/TROUBLESHOOTING.md` | Common fixes |
+| `apps/api/openapi.yaml` | OpenAPI for lead priority + commission endpoints |
 
 ## 13. Tech Stack Overview
 ### Backend
