@@ -28,4 +28,5 @@ module.exports = {
       },
     },
   },
+  setupFilesAfterEnv: ['<rootDir>/apps/api/test/setup-e2e.ts'],
 };

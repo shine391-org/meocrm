@@ -916,6 +916,19 @@ model DailySalesReport {
   @@map("daily_sales_reports")
 }
 
+model CustomerDebtSnapshot {
+  id             String @id @default(cuid())
+  organizationId String
+  customerId     String
+  debtValue      Decimal @db.Decimal(18, 2)
+  capturedAt     DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, capturedAt])
+  @@unique([organizationId, customerId, capturedAt])
+  @@map("customer_debt_snapshots")
+}
+
 // Security & Audit
 model AuditLog {
   id             String       @id @default(cuid())

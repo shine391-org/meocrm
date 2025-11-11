@@ -1,3 +1,4 @@
+
 import {
   IsString,
   IsNotEmpty,
@@ -61,22 +62,20 @@ export class CreateOrderDto {
   @IsString()
   notes?: string;
 
-  @ApiProperty({
-    required: false,
-    default: false,
-    description: 'Whether order is fully paid',
-  })
+  @ApiProperty({ required: false, default: false })
   @IsOptional()
   @IsBoolean()
   isPaid?: boolean;
 
-  @ApiProperty({
-    required: false,
-    example: 0,
-    description: 'Amount already paid by customer (for partial payments)',
-  })
+  @ApiProperty({ required: false, example: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   paidAmount?: number;
+
+  // Temporary flag for free ship logic
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  isOnlineOrder?: boolean;
 }
