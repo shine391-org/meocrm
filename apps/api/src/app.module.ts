@@ -18,29 +18,33 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { RefundsApiModule } from './refunds/refunds.module';
+import { CronModule } from './modules/cron/cron.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
-    RequestContextModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
     }),
+    RequestContextModule,
     PrismaModule,
+    RedisModule,
+    SettingsModule,
+    EventsModule,
+    WebhooksModule,
+    SchedulerModule,
+    CronModule,
+    NotificationsModule,
+    AuditLogModule,
+    RefundsApiModule,
+    ReportsModule,
     AuthModule,
     CategoriesModule,
     ProductsModule,
     CustomersModule,
     OrdersModule,
     SuppliersModule,
-    SettingsModule,
-    RedisModule,
-    EventsModule,
-    WebhooksModule,
-    SchedulerModule,
-    AuditLogModule,
-    RefundsApiModule,
-    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

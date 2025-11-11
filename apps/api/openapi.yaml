@@ -223,3 +223,75 @@ components:
           additionalProperties: true
         traceId:
           type: string
+    DebtReportItem:
+      type: object
+      properties:
+        period:
+          type: string
+          format: date-time
+          description: "Start of the period (day or month)"
+        customerId:
+          type: string
+          format: uuid
+        closingDebt:
+          type: number
+          format: decimal
+
+  /reports/debt:
+    get:
+      summary: Get customer debt report
+      description: |
+        Retrieves a report of customer debt, grouped by day or month.
+        Returns the closing debt for each period.
+      tags: [Reports]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: groupBy
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [day, month]
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: A list of debt report items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DebtReportItem'
+        '400':
+          description: Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

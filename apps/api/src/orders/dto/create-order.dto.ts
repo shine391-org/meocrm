@@ -46,6 +46,15 @@ export class CreateOrderDto {
   @IsEnum(PaymentMethod)
   paymentMethod!: PaymentMethod;
 
+  @ApiProperty({
+    required: false,
+    example: 'ONLINE',
+    description: 'Sales channel (e.g., ONLINE, POS)',
+  })
+  @IsOptional()
+  @IsString()
+  channel?: string;
+
   @ApiProperty({ required: false, example: 30000 })
   @IsOptional()
   @IsNumber()

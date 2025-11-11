@@ -3,6 +3,8 @@ import { OrdersService } from './orders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { Prisma, PrismaClient, OrderStatus } from '@prisma/client';
+import { PricingService } from './pricing.service';
+import { SettingsService } from '../modules/settings/settings.service';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 
@@ -17,6 +19,19 @@ describe('OrdersService', () => {
         {
           provide: PrismaService,
           useValue: mockDeep<PrismaClient>(),
+        },
+        {
+          provide: PricingService,
+          useValue: {
+            calculateTotals: jest.fn().mockResolvedValue({
+              shippingFee: 10, // Default mock shipping fee
+              freeShipApplied: false,
+            }),
+          },
+        },
+        {
+          provide: SettingsService,
+          useValue: mockDeep<SettingsService>(),
         },
       ],
     }).compile();
@@ -139,7 +154,8 @@ describe('OrdersService', () => {
     });
 
     it('should NOT increase customer debt when isPaid=true', async () => {
-      const paidDto = { ...mockCreateDto, isPaid: true, paidAmount: 220 };
+      // subtotal 200 + tax 20 + shipping 10 = 230
+      const paidDto = { ...mockCreateDto, isPaid: true, paidAmount: 230 };
 
       (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
         const txClient = {
@@ -186,11 +202,12 @@ describe('OrdersService', () => {
           customer: {
             findFirst: jest.fn().mockResolvedValue({ id: 'customer-1' }),
             update: jest.fn().mockImplementation((args) => {
+              // total 230 - paid 50 = 180
               // Verify debt increment is correct
-              expect(args.data.debt).toEqual({ increment: 170 });
+              expect(args.data.debt).toEqual({ increment: 180 });
               return Promise.resolve({
                 ...mockCustomer,
-                debt: 170,
+                debt: 180,
               });
             }),
           },
