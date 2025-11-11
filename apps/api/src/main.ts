@@ -27,15 +27,6 @@ async function bootstrap() {
 
   app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true }));
   app.use(bodyParser.json({ verify: rawBodyBuffer }));
-  app.useGlobalFilters(new HttpExceptionFilter());
-
-  const configService = app.get(ConfigService);
-  const port = Number(
-    configService.get<string>('PORT') ??
-      configService.get<string>('API_PORT') ??
-      2003,
-  );
-
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -45,6 +36,14 @@ async function bootstrap() {
         enableImplicitConversion: true,
       },
     }),
+  );
+  app.useGlobalFilters(new HttpExceptionFilter());
+
+  const configService = app.get(ConfigService);
+  const port = Number(
+    configService.get<string>('PORT') ??
+      configService.get<string>('API_PORT') ??
+      2003,
   );
 
   const corsOrigin = configService.get<string>('CORS_ORIGIN');
