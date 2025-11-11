@@ -1113,6 +1113,55 @@ model PriceBookItem {
 
 ---
 
+## 👥 Lead Management (Priority System)
+
+### Lead
+
+```prisma
+model Lead {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+
+  code               String?
+  priorityAuto       LeadPriority @default(HIGH)
+  priorityManual     LeadPriority?
+  priorityUpdatedAt  DateTime     @default(now())
+  lastActivityAt     DateTime     @default(now())
+
+  assignedToId       String?
+  assignedTo         User?        @relation("LeadAssignedUser", fields: [assignedToId], references: [id])
+  assignmentStrategy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, assignedToId])
+  @@index([organizationId, priorityAuto])
+  @@map("leads")
+}
+```
+
+### LeadPriority enum
+
+```prisma
+enum LeadPriority {
+  HIGH
+  MEDIUM
+  LOW
+  INACTIVE
+}
+```
+
+**Ghi chú:**
+- `priorityAuto` do cron tính dựa trên inactivity thresholds.
+- `priorityManual` chỉ set nếu người dùng override (API `/leads/:id/priority:override`).
+- `priorityUpdatedAt` giúp kiểm soát decay/override chain; `lastActivityAt` dùng để reset về HIGH.
+
+---
+
 ## 💰 Employee Commission
 
 ### CommissionRule (Quy tắc hoa hồng)
@@ -1123,32 +1172,25 @@ model CommissionRule {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
-  name           String  // "Hoa hồng bán hàng cơ bản"
-  description    String?
+  code    String
+  name    String
+  type    CommissionType
+  config  Json              // Store tiers, bonuses, split configs
+  isActive Boolean @default(true)
   
-  // Rules
-  type           CommissionType
-  rate           Decimal @db.Decimal(5, 2) // % hoa hồng (VD: 5.00 = 5%)
-  fixedAmount    Decimal? @db.Decimal(12, 2) // Số tiền cố định (nếu type = FIXED)
-  
-  // Conditions
-  minOrderValue  Decimal? @db.Decimal(12, 2) // Đơn tối thiểu
-  applicableCategories String[] // Category IDs
-  
-  isActive       Boolean @default(true)
-  
-  // Relations
-  commissions    Commission[]
+  commissions Commission[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@unique([organizationId, code])
   @@index([organizationId])
   @@map("commission_rules")
 }
 
 enum CommissionType {
-  PERCENTAGE  // % doanh thu
-  FIXED       // Số tiền cố định
+  FLAT     // Số tiền cố định
+  TIERED   // Theo bậc doanh thu
+  BONUS    // Thưởng theo KPI
 }
 ```
 
@@ -1156,29 +1198,41 @@ enum CommissionType {
 
 ```prisma
 model Commission {
-  id          String  @id @default(cuid())
-  ruleId      String
-  rule        CommissionRule @relation(fields: [ruleId], references: [id])
+  id             String  @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
   
-  userId      String  // Nhân viên bán hàng
-  user        User    @relation(fields: [userId], references: [id])
+  ruleId   String?
+  rule     CommissionRule? @relation(fields: [ruleId], references: [id])
+  orderId  String
+  order    Order @relation(fields: [orderId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
   
-  orderId     String
-  order       Order   @relation(fields: [orderId], references: [id])
-  
-  // Calculation
-  orderValue  Decimal @db.Decimal(12, 2) // Giá trị đơn hàng
-  rate        Decimal @db.Decimal(5, 2)  // % áp dụng
-  amount      Decimal @db.Decimal(12, 2) // Hoa hồng thực nhận
+  valueGross  Decimal @db.Decimal(18, 2)
+  valueNet    Decimal @db.Decimal(18, 2)
+  ratePercent Decimal @db.Decimal(5, 2)
+  amount      Decimal @db.Decimal(18, 2)
+  currency    String  @default("VND")
   
   status      CommissionStatus @default(PENDING)
-  paidAt      DateTime?
+  periodMonth String            // YYYY-MM
+  source      CommissionSource  // POS | COD
+  split       Json              // [{ role, pct, userId }]
   
-  createdAt   DateTime @default(now())
+  isAdjustment        Boolean @default(false)
+  adjustsCommissionId String?
+  adjustmentParent    Commission? @relation("CommissionAdjustmentChain", fields: [adjustsCommissionId], references: [id])
+  adjustments         Commission[] @relation("CommissionAdjustmentChain")
   
-  @@index([ruleId])
-  @@index([userId])
-  @@index([orderId])
+  traceId    String?
+  createdAt  DateTime @default(now())
+  approvedAt DateTime?
+  paidAt     DateTime?
+  
+  @@index([organizationId, periodMonth])
+  @@index([organizationId, orderId])
+  @@index([organizationId, status])
   @@map("commissions")
 }
 
@@ -1186,7 +1240,11 @@ enum CommissionStatus {
   PENDING    // Chờ duyệt
   APPROVED   // Đã duyệt
   PAID       // Đã trả
-  CANCELLED  // Đã hủy
+}
+
+enum CommissionSource {
+  POS
+  COD
 }
 ```
 

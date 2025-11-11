@@ -28,6 +28,14 @@ This project has complex business logic. Before starting any task, consult these
 
 For module-specific instructions, see the `AGENTS.md` file within that module's directory (e.g., `apps/api/AGENTS.md`).
 
+### How to read the docs
+
+1. Bắt đầu ở `docs/00_PROJECT_OVERVIEW.md` để hiểu context + glossary.
+2. Đọc `docs/01_BUSINESS_LOGIC.md` mục liên quan **trước khi** đụng tới code (Lead Priority, Commission... có ví dụ I/O rõ ràng).
+3. Kiểm tra `docs/architecture/README.md` để xem flow/sequence mới.
+4. Tra cứu `docs/03_DATABASE_SCHEMA.md` nhằm đồng bộ type/enum trước khi chỉnh Prisma.
+5. Sau khi cập nhật docs, phản chiếu thay đổi vào code/tests rồi đánh dấu tại PR checklist.
+
 ## 3. Testing
 
 Run the entire test suite to ensure your changes have not broken existing functionality.
@@ -47,6 +55,11 @@ All new features must include corresponding tests with sufficient coverage.
       where: { organizationId: user.organizationId },
     });
     ```
+-   **Guardrails đa-tenant chi tiết:**
+    - RequestContext middleware **phải** được khởi tạo ngay đầu request/cron để gắn `organizationId`, `userId`, `traceId`.
+    - Không bypass Prisma middleware; nếu viết raw SQL hãy inject `organizationId` thủ công + kèm unit test đảm bảo isolation.
+    - Các event/cron đa-tenant phải lặp từng organization (`for await (org of organizations) { withOrganizationContext(...); }`).
+    - API error response luôn theo `{ code, message, details?, traceId }` để hỗ trợ audit multi-tenant.
 -   **Workflow:**
     1.  Select a task based on `docs/02_IMPLEMENTATION_PLAN.md`.
     2.  Read the relevant sections in `docs/01_BUSINESS_LOGIC.md`.
@@ -58,3 +71,11 @@ All new features must include corresponding tests with sufficient coverage.
 
 If you encounter environment or database connection issues, refer to:
 *   **[06_TROUBLESHOOTING.md](./docs/06_TROUBLESHOOTING.md)**
+
+## 6. Pull Request Checklist
+
+- [ ] Link tới task + trích mục docs đã cập nhật/tuân thủ.
+- [ ] Migration/DB thay đổi được mô tả + kèm hướng dẫn rollback.
+- [ ] Tests: `pnpm -w test`, `pnpm -w build` (hoặc lý do skip) + output chính.
+- [ ] Đảm bảo mọi API trả `{code,message,details?,traceId}` và query đã filter `organizationId`.
+- [ ] Update Documentation Map / AGENTS nếu thêm khối kiến thức mới.

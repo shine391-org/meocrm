@@ -1213,3 +1213,123 @@ async autoHardDelete() {
 - [ ]  TODO: SMS (integration với Twilio, SMSVN?)
 - [ ]  TODO: In-app notifications (WebSocket?)
 - [ ]  TODO: Push notifications (mobile app future)
+
+---
+
+## 🔟 Lead Management — Simple Priority System (FINAL)
+
+**Mục tiêu:** Sales team luôn biết lead nào nóng nhất, không bỏ sót lead lâu ngày, vẫn tôn trọng multi-tenant guardrails (RequestContext + Prisma middleware inject `organizationId` tự động).
+
+- Enum: `HIGH | MEDIUM | LOW | INACTIVE`
+- Seed: Lead mới (manual import, webhook, API) luôn khởi tạo với `priorityAuto = HIGH`
+- Decay theo inactivity:
+  - **T1 = 7 ngày:** `HIGH → MEDIUM`
+  - **T2 = 30 ngày:** `MEDIUM → LOW`
+  - **T3 = 60 ngày:** `LOW → INACTIVE`
+- Reset logic: bất kỳ activity quan trọng (call, meeting, order PENDING/COMPLETED) cập nhật `lastActivityAt` → cron nâng `priorityAuto` theo bảng:
+  - Activity trong 7 ngày: `HIGH`
+  - Hoạt động trong 30 ngày: `MEDIUM`
+  - Chỉ có tương tác >30 ngày: `LOW`
+- Manual override: nếu cấu hình bật `allow_manual_override`, giá trị hiệu lực = `priorityManual ?? priorityAuto`
+- Auto assignment: dựa vào `assignmentStrategy` + config, mỗi lần priority thay đổi sang HIGH có thể auto assign cho `senior_sales` (nếu rule match)
+- API surfaces: `GET /leads/:id`, `POST /leads/:id/priority:override`, `POST /leads/:id/assign:auto`
+- Guardrails: mọi query phải dùng `organizationId` từ `RequestContext` (cron jobs gọi service có `withOrganizationContext`)
+
+### Definition of Done (DoD)
+
+- [x] Cron `leadPriorityDecay` chạy 1 lần/ngày, đọc config `PRIORITY_CONFIG`.
+- [x] Decay/resets không vượt ngoài organization đang xử lý (multi-tenant safe).
+- [x] Manual override ghi `priorityManual`, `priorityUpdatedAt`; audit log traceId.
+- [x] Activity events (call/meeting/order) publish `LeadPriorityResetEvent`.
+- [x] API responses tuân thủ `{ code, message, details?, traceId }` khi lỗi.
+
+### Ví dụ I/O
+
+```http
+GET /leads/ld_123
+→ 200 OK
+{
+  "priorityAuto": "MEDIUM",
+  "priorityManual": "HIGH",
+  "priorityEffective": "HIGH",
+  "priorityUpdatedAt": "2025-02-01T08:10:00.000Z",
+  "lastActivityAt": "2025-01-28T10:00:00.000Z"
+}
+```
+
+```http
+POST /leads/ld_123/priority:override
+Content-Type: application/json
+{ "priority": "HIGH" }
+
+→ 200 OK
+{
+  "priorityEffective": "HIGH",
+  "priorityAuto": "MEDIUM",
+  "traceId": "lead-pri-017"
+}
+```
+
+---
+
+## 1️⃣1 Commission & Revenue Tracking
+
+**Mục tiêu:** Chuẩn hóa tính hoa hồng + doanh thu, hỗ trợ split 70/20/10, điều chỉnh âm khi refund, và payout theo kỳ.
+
+- Trạng thái tuần tự: `PENDING → APPROVED → PAID`
+- Refund/cancel sau khi đã tạo commission → tạo bản ghi `isAdjustment = true`, amount âm, link `adjustsCommissionId`
+- Rules:
+  - Type: `FLAT | TIERED | BONUS`
+  - `config` JSON lưu bảng tỷ lệ (ví dụ tiers, bonus triggers, split percentage)
+  - Default split: `[{ role: "owner", pct: 0.7 }, { role: "closer", pct: 0.2 }, { role: "support", pct: 0.1 }]` (round VND, phần dư dồn owner)
+- Trigger:
+  - `order.completed` → tạo commission PENDING (POS = immediate, COD = chờ webhook DELIVERED)
+  - `order.refunded` / `order.cancelled post-paid` → tạo adjustment âm
+- Payout:
+  - Batch theo `periodMonth` + config `payoutDayOfMonth`
+  - Cron `/commissions/payouts:run` → gom tất cả commission APPROVED của kỳ → mark `PAID`, lưu `traceId`
+- Edge cases:
+  - POS completes ngay vẫn ghi nhận commission
+  - COD chờ webhook `DELIVERED`; khi fail → không tạo commission
+  - Manual override cho adjustments vẫn phải giữ nguyên traceId chain
+- Error handling: Mọi API trả lỗi theo `{ code, message, details?, traceId }`
+
+### Definition of Done (DoD)
+
+- [x] CommissionRule CRUD bảo vệ `@@unique([code, organizationId])`
+- [x] Commission entries luôn có `organizationId`, `orderId`, `periodMonth (YYYY-MM)`
+- [x] Split JSON đã chuẩn hóa + rounding logic testable
+- [x] Refund adjustment tạo amount âm và link `adjustsCommissionId`
+- [x] Payout cron tạo audit log + emit event `CommissionPayoutCompleted`
+
+### Ví dụ I/O
+
+```http
+POST /commissions/payouts:run
+Content-Type: application/json
+{ "period": "2025-12", "payOn": "2026-01-05" }
+
+→ 200 OK
+{
+  "period": "2025-12",
+  "totalAmount": "15500000.00",
+  "count": 42,
+  "status": "PAID",
+  "traceId": "payout-202512"
+}
+```
+
+```http
+POST /commissions/refunds
+Content-Type: application/json
+{ "commissionId": "cms_001", "refundPercent": 30 }
+
+→ 201 Created
+{
+  "adjustmentId": "cms_adj_09",
+  "amount": "-450000.00",
+  "isAdjustment": true,
+  "adjustsCommissionId": "cms_001",
+  "traceId": "refund-cms-001"
+}
+```
