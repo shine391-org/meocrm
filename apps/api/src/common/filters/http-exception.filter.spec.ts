@@ -1,4 +1,4 @@
-import { ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import { ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -66,5 +66,38 @@ describe('HttpExceptionFilter', () => {
         details: expect.stringContaining('&quot;windowDays&quot;:7'),
       }),
     );
+  });
+
+  it('returns stable fallback when details contain circular references', () => {
+    (uuidv4 as jest.Mock).mockReturnValue('trace-circular');
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const filter = new HttpExceptionFilter();
+    const responseMock = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+    const host = createHost(responseMock);
+
+    const circular: Record<string, unknown> = { foo: 'bar' };
+    circular.self = circular;
+
+    const exception = new HttpException(
+      {
+        message: 'Bad payload',
+        details: circular,
+      },
+      HttpStatus.BAD_REQUEST,
+    );
+
+    filter.catch(exception, host);
+
+    expect(responseMock.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: '[unserializable details]',
+        traceId: 'trace-circular',
+      }),
+    );
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

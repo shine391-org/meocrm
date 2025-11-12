@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { AuditAction, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -43,7 +43,7 @@ export class AuditLogService {
     userAgent,
   }: AuditLogPayload) {
     if (!user.organizationId) {
-      throw new Error('Audit logs require organization context');
+      throw new UnauthorizedException('Audit logs require organization context');
     }
 
     this.ensureKnownAuditEvent(action);
