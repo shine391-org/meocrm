@@ -6,8 +6,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number | string): string {
-  const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+export function formatCurrency(amount: number | string | null | undefined, fallback = 'N/A'): string {
+  if (amount === null || amount === undefined) {
+    return fallback;
+  }
+
+  const numericAmount = typeof amount === 'string' ? Number(amount) : amount;
+  if (typeof numericAmount !== 'number' || Number.isNaN(numericAmount)) {
+    return fallback;
+  }
+
   return new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',

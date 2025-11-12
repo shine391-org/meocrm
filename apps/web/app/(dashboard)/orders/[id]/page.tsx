@@ -6,6 +6,7 @@ import { OrdersService, Order } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getBrowserToken } from '@/lib/auth/token';
+import { formatCurrency } from '@/lib/utils';
 
 type CurrentUserResponse = {
   organizationId?: string | null;
@@ -222,19 +223,19 @@ export default function OrderDetailsPage() {
       </CardHeader>
       <CardContent>
         <p>Status: {order.status}</p>
-        <p>Total: {order.total}</p>
+        <p>Tổng tiền: {formatCurrency(order.total)}</p>
         {statusMessage && <p className="mt-2 text-sm text-muted-foreground">{statusMessage}</p>}
         {errorMessage && <p className="mt-2 text-sm text-destructive">{errorMessage}</p>}
         {/* TODO: Display other order details */}
         <div className="mt-4 space-x-2">
           <Button onClick={handleRequestRefund} disabled={isProcessing}>
-            Request Refund
+            Yêu cầu hoàn tiền
           </Button>
           <Button onClick={handleApproveRefund} variant="secondary" disabled={isProcessing}>
-            Approve Refund
+            Duyệt hoàn tiền
           </Button>
           <Button onClick={handleRejectRefund} variant="destructive" disabled={isProcessing}>
-            Reject Refund
+            Từ chối hoàn tiền
           </Button>
         </div>
       </CardContent>

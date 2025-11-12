@@ -2,7 +2,7 @@
 
 MeoCRM là modular monolith NestJS + Next.js chạy đa-tenant. Request flow chuẩn:
 
-```
+```plaintext
 Client → API Gateway (NestJS) → Guards (JWT) → RequestContext → Service → Prisma → PostgreSQL
                                         ↘ Event Bus / Cron / Notification Workers
 ```
