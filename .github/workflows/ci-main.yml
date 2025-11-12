@@ -47,4 +47,4 @@ jobs:
         run: |
           echo "Do real deployment here (Docker/K8s/VPS)."
           # Example outputs:
-          echo "app_url=https://app.meocrm.example" >> $GITHUB_OUTPUT
+          printf 'app_url=%s\n' "https://app.meocrm.example" >> "$GITHUB_OUTPUT"

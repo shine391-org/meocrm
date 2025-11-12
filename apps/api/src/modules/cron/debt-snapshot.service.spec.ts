@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { DebtSnapshotService } from './debt-snapshot.service';
 
 describe('DebtSnapshotService', () => {
-  it('converts Prisma Decimal sums to numeric debt values', async () => {
+  it('keeps Decimal precision for debt values', async () => {
     const prisma = {
       order: {
         groupBy: jest.fn().mockResolvedValue([
@@ -25,15 +25,14 @@ describe('DebtSnapshotService', () => {
     expect(result[0]).toMatchObject({
       organizationId: 'org_1',
       customerId: 'cust_1',
-      debtValue: 80.25,
     });
-    expect(typeof result[0].debtValue).toBe('number');
+    expect(result[0].debtValue.toString()).toBe('80.25');
   });
 
   it('logs sanitized errors when snapshotting fails for an organization', async () => {
     const prisma = {
       organization: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'org_err' }]),
+        findMany: jest.fn().mockResolvedValueOnce([{ id: 'org_err' }]).mockResolvedValue([]),
       },
       $transaction: jest.fn().mockImplementation(async () => {
         throw new Error('boom');
@@ -66,7 +65,7 @@ describe('DebtSnapshotService', () => {
   it('logs string-based rejection reasons without crashing', async () => {
     const prisma = {
       organization: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'org_str' }]),
+        findMany: jest.fn().mockResolvedValueOnce([{ id: 'org_str' }]).mockResolvedValue([]),
       },
       $transaction: jest.fn().mockImplementation(async () => {
         throw 'timeout'; // eslint-disable-line no-throw-literal
@@ -113,7 +112,7 @@ describe('DebtSnapshotService', () => {
     };
     const prisma = {
       organization: {
-        findMany: jest.fn().mockResolvedValue([{ id: orgId }]),
+        findMany: jest.fn().mockResolvedValueOnce([{ id: orgId }]).mockResolvedValue([]),
       },
       $transaction: jest.fn().mockImplementation(async (callback: any) => callback(txMock)),
     };
@@ -128,16 +127,18 @@ describe('DebtSnapshotService', () => {
 
     await service.handleCron();
 
-    expect(txMock.customerDebtSnapshot.createMany).toHaveBeenCalledWith({
-      data: [
-        expect.objectContaining({
-          organizationId: orgId,
-          customerId: 'cust_positive',
-          debtValue: 200,
-        }),
-      ],
-      skipDuplicates: true,
-    });
+    expect(txMock.customerDebtSnapshot.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({
+            organizationId: orgId,
+            customerId: 'cust_positive',
+          }),
+        ],
+      }),
+    );
+    const payload = txMock.customerDebtSnapshot.createMany.mock.calls[0][0];
+    expect(payload.data[0].debtValue.toString()).toBe('200');
   });
 
   it('skips snapshot creation when no positive debt exists for the organization', async () => {
@@ -157,7 +158,7 @@ describe('DebtSnapshotService', () => {
     };
     const prisma = {
       organization: {
-        findMany: jest.fn().mockResolvedValue([{ id: orgId }]),
+        findMany: jest.fn().mockResolvedValueOnce([{ id: orgId }]).mockResolvedValue([]),
       },
       $transaction: jest.fn().mockImplementation(async (callback: any) => callback(txMock)),
     };
@@ -180,7 +181,6 @@ describe('DebtSnapshotService', () => {
   it('continues processing other organizations when one transaction fails', async () => {
     const organizations = [{ id: 'org_ok' }, { id: 'org_fail' }];
     let currentOrg = '';
-
     const successTx = {
       order: {
         groupBy: jest.fn().mockResolvedValue([
@@ -197,7 +197,11 @@ describe('DebtSnapshotService', () => {
 
     const prisma = {
       organization: {
-        findMany: jest.fn().mockResolvedValue(organizations),
+        findMany: jest
+          .fn()
+          .mockResolvedValueOnce([organizations[0]])
+          .mockResolvedValueOnce([organizations[1]])
+          .mockResolvedValue([]),
       },
       $transaction: jest.fn().mockImplementation(async (callback: any) => {
         if (currentOrg === 'org_fail') {
