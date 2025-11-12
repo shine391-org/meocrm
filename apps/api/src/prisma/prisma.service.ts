@@ -63,22 +63,27 @@ const softDeleteExtension = Prisma.defineExtension({
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private static instance: PrismaService | null = null;
 
-  constructor() {
-    if (PrismaService.instance) {
-      return PrismaService.instance;
-    }
-
+  private constructor() {
     super({
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     });
+  }
 
-    const extendedClient = this.$extends(softDeleteExtension) as PrismaService;
+  static getInstance(): PrismaService {
+    if (!PrismaService.instance) {
+      const baseClient = new PrismaService();
+      PrismaService.instance = PrismaService.extendWithSoftDelete(baseClient);
+    }
+
+    return PrismaService.instance;
+  }
+
+  private static extendWithSoftDelete(baseClient: PrismaService): PrismaService {
+    const extendedClient = baseClient.$extends(softDeleteExtension) as PrismaService;
     extendedClient.onModuleInit = PrismaService.prototype.onModuleInit;
     extendedClient.onModuleDestroy = PrismaService.prototype.onModuleDestroy;
     extendedClient.cleanDatabase = PrismaService.prototype.cleanDatabase;
-
-    PrismaService.instance = extendedClient;
-    return PrismaService.instance;
+    return extendedClient;
   }
 
   async onModuleInit() {

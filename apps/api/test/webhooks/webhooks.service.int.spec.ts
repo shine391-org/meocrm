@@ -32,7 +32,7 @@ describe('WebhooksService + HMAC guard integration', () => {
     await cleanupDatabase(prisma);
   });
 
-  const seedOrder = async (code: string) => {
+  const seedOrder = async (code: string, overrides: Partial<{ status: OrderStatus }> = {}) => {
     const organization = await prisma.organization.create({
       data: {
         name: `Org ${code}`,
@@ -51,7 +51,7 @@ describe('WebhooksService + HMAC guard integration', () => {
         discount: 0,
         total: 100000,
         paymentMethod: 'CASH',
-        status: OrderStatus.SHIPPED,
+        status: overrides.status ?? OrderStatus.PROCESSING,
       },
     });
 
@@ -213,6 +213,22 @@ describe('WebhooksService + HMAC guard integration', () => {
 
     const stillCompleted = await prisma.order.findUnique({ where: { id: order.id } });
     expect(stillCompleted?.status).toBe(OrderStatus.COMPLETED);
+  });
+
+  it('warns when order is not in PROCESSING state', async () => {
+    const { organization, order } = await seedOrder('WEBHOOK-WARN', { status: OrderStatus.COMPLETED });
+    const warnSpy = jest.spyOn((webhooksService as any).logger, 'warn');
+
+    await webhooksService.handleShippingDelivered({
+      event: 'shipping.delivered',
+      data: { orderId: order.id, organizationId: organization.id },
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`order ${order.id}`),
+    );
+
+    warnSpy.mockRestore();
   });
 
   it('validates HMAC signatures using the raw body buffer', async () => {

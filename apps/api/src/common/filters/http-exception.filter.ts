@@ -4,6 +4,7 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
@@ -39,6 +40,8 @@ const HTML_ESCAPE_LOOKUP: Record<string, string> = {
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -70,7 +73,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
 
       if (responseObject.details !== undefined) {
-        const sanitizedDetails = this.sanitizeDetails(responseObject.details);
+        const sanitizedDetails = this.sanitizeDetails(responseObject.details, traceId);
         if (sanitizedDetails) {
           normalized.details = sanitizedDetails;
         }
@@ -84,17 +87,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json(normalized);
   }
 
-  private shouldIncludeDetails(): boolean {
-    const env = (process.env.NODE_ENV ?? 'development').toLowerCase();
-    return env === 'development' || env === 'test';
-  }
-
-  private sanitizeDetails(details: unknown): string | undefined {
+  private sanitizeDetails(details: unknown, traceId: string): string | undefined {
     if (!this.shouldIncludeDetails() || details === undefined) {
       return undefined;
     }
 
-    const normalized = this.normalizeDetailsPayload(details);
+    const normalized = this.normalizeDetailsPayload(details, traceId);
     if (!normalized) {
       return 'details omitted';
     }
@@ -107,7 +105,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     return trimmed.trim() ? trimmed : 'details omitted';
   }
 
-  private normalizeDetailsPayload(details: unknown): string | null {
+  private normalizeDetailsPayload(details: unknown, traceId: string): string | null {
     if (details === null || details === undefined) {
       return null;
     }
@@ -125,14 +123,24 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     if (typeof details === 'object') {
       try {
+        this.assertNoCircularReferences(details);
         const scrubbed = this.redactSensitiveKeys(details, 0);
-        return JSON.stringify(scrubbed);
-      } catch {
-        return null;
+        return this.safeStringify(scrubbed);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to serialize error details for trace ${traceId}`,
+          error instanceof Error ? error.message : String(error),
+        );
+        return '[unserializable details]';
       }
     }
 
     return null;
+  }
+
+  private shouldIncludeDetails(): boolean {
+    const env = (process.env.NODE_ENV ?? 'development').toLowerCase();
+    return env === 'development' || env === 'test';
   }
 
   private redactSensitiveKeys(payload: unknown, depth: number): unknown {
@@ -163,5 +171,39 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   private escapeHtml(value: string): string {
     return value.replace(/[&<>"']/g, (char) => HTML_ESCAPE_LOOKUP[char] ?? char);
+  }
+
+  private safeStringify(payload: unknown): string {
+    const seen = new WeakSet();
+    return JSON.stringify(payload, (_key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) {
+          throw new Error('Circular reference detected');
+        }
+        seen.add(value);
+      }
+      return value;
+    });
+  }
+
+  private assertNoCircularReferences(value: unknown, seen = new WeakSet<object>()) {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    const candidate = value as Record<string, unknown> | unknown[];
+    if (seen.has(candidate as object)) {
+      throw new Error('Circular reference detected');
+    }
+
+    seen.add(candidate as object);
+
+    const children = Array.isArray(candidate)
+      ? candidate
+      : Object.values(candidate as Record<string, unknown>);
+
+    for (const child of children) {
+      this.assertNoCircularReferences(child, seen);
+    }
   }
 }

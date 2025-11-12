@@ -23,15 +23,26 @@ export class DebtSnapshotService {
   async handleCron() {
     this.logger.log('Starting nightly debt snapshot calculation...');
 
-    const organizations = await this.prisma.organization.findMany({
-      select: { id: true },
-    });
+    let lastOrganizationId: string | undefined;
 
-    for (let i = 0; i < organizations.length; i += ORG_BATCH_SIZE) {
-      const batch = organizations.slice(i, i + ORG_BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map((org) => this.processOrganization(org.id)),
-      );
+    while (true) {
+      const query: Prisma.OrganizationFindManyArgs = {
+        select: { id: true },
+        orderBy: { id: 'asc' },
+        take: ORG_BATCH_SIZE,
+      };
+
+      if (lastOrganizationId) {
+        query.skip = 1;
+        query.cursor = { id: lastOrganizationId };
+      }
+
+      const batch = await this.prisma.organization.findMany(query);
+      if (!batch.length) {
+        break;
+      }
+
+      const results = await Promise.allSettled(batch.map((org) => this.processOrganization(org.id)));
 
       results.forEach((result, index) => {
         if (result.status === 'rejected') {
@@ -48,6 +59,8 @@ export class DebtSnapshotService {
           );
         }
       });
+
+      lastOrganizationId = batch[batch.length - 1]?.id;
     }
 
     this.logger.log('Finished nightly debt snapshot calculation.');
@@ -95,9 +108,9 @@ export class DebtSnapshotService {
     const capturedAt = new Date();
     const customerDebts = orders
       .map((order) => {
-        const total = Number(order._sum.total ?? 0);
-        const paid = Number(order._sum.paidAmount ?? 0);
-        const debt = total - paid;
+        const total = new Prisma.Decimal(order._sum.total ?? 0);
+        const paid = new Prisma.Decimal(order._sum.paidAmount ?? 0);
+        const debt = total.minus(paid);
         return {
           organizationId,
           customerId: order.customerId!,
@@ -105,7 +118,7 @@ export class DebtSnapshotService {
           capturedAt,
         };
       })
-      .filter((debtInfo) => debtInfo.debtValue > 0);
+      .filter((debtInfo) => debtInfo.debtValue.greaterThan(0));
 
     return customerDebts;
   }

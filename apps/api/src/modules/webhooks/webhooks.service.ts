@@ -74,13 +74,20 @@ export class WebhooksService implements OnModuleInit {
     this.logger.log('Handling shipping.delivered event', payload);
     const { orderId, organizationId } = payload.data;
     if (orderId && organizationId) {
-      await this.prisma.order.updateMany({
-        where: { id: orderId, organizationId },
+      const result = await this.prisma.order.updateMany({
+        where: { id: orderId, organizationId, status: OrderStatus.PROCESSING },
         data: {
           status: OrderStatus.COMPLETED,
           completedAt: new Date(),
         },
       });
+      if (result.count === 0) {
+        this.logger.warn(
+          `shipping.delivered skipped: order ${orderId} in org ${organizationId} is not in PROCESSING state`,
+        );
+      }
+    } else {
+      this.logger.warn('shipping.delivered payload missing orderId or organizationId');
     }
   }
 
