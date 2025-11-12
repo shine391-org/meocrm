@@ -17,6 +17,7 @@ export class ParseDatePipe implements PipeTransform<string, Date> {
     if (isNaN(date.getTime())) {
       throw new BadRequestException('Validation failed: Invalid date value.');
     }
+
     return date;
   }
 }

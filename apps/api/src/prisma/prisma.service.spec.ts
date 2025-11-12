@@ -17,10 +17,10 @@ describe('PrismaService singleton', () => {
     await resetPrismaSingleton();
   });
 
-  it('returns the same extended client on consecutive calls', () => {
+  it('returns the same extended instance on every call', () => {
     const first = PrismaService.getInstance();
     const second = PrismaService.getInstance();
-    expect(first).toBe(second);
+    expect(second).toBe(first);
     expect(typeof (first as any).cleanDatabase).toBe('function');
   });
 

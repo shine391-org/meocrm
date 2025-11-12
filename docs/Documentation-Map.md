@@ -15,4 +15,5 @@
 | Testing | [docs/testing/Strategy-&-Coverage.md](./testing/Strategy-&-Coverage.md) | Target coverage ≥80%, golden E2E, Jest skeleton instructions. |
 | Environment | [docs/ENVIRONMENT.md](./ENVIRONMENT.md) | Local setup, ports, Prisma workflows, rollback/seed cautions. |
 | Troubleshooting | [docs/06_TROUBLESHOOTING.md](./06_TROUBLESHOOTING.md) | Các lỗi môi trường phổ biến. |
+| Code Review | [docs/code-review/coderabbit-final-followups.md](./code-review/coderabbit-final-followups.md) | Checklist + MEOW context for CodeRabbit 'Final Follow-ups' branch. |
 | Agent Supplements | [docs/agents/jules-guide.md](./agents/jules-guide.md) | Ghi chú riêng cho Jules/triage. |

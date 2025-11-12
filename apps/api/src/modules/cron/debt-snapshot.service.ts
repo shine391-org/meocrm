@@ -26,18 +26,18 @@ export class DebtSnapshotService {
     let lastOrganizationId: string | undefined;
 
     while (true) {
-      const query: Prisma.OrganizationFindManyArgs = {
+      const findManyArgs: Prisma.OrganizationFindManyArgs = {
         select: { id: true },
         orderBy: { id: 'asc' },
         take: ORG_BATCH_SIZE,
       };
 
       if (lastOrganizationId) {
-        query.skip = 1;
-        query.cursor = { id: lastOrganizationId };
+        findManyArgs.skip = 1;
+        findManyArgs.cursor = { id: lastOrganizationId };
       }
 
-      const batch = await this.prisma.organization.findMany(query);
+      const batch = await this.prisma.organization.findMany(findManyArgs);
       if (!batch.length) {
         break;
       }

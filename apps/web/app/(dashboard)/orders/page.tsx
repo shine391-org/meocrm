@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { OrdersService, Order } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { formatCurrency } from '@/lib/utils';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -55,7 +56,7 @@ export default function OrdersPage() {
             <div key={order.id} className="border p-4 my-2 rounded-md">
               <p>Order #{order.code ?? order.id}</p>
               <p>Status: {order.status}</p>
-              <p>Total: {order.total}</p>
+              <p>Tổng tiền: {formatCurrency(order.total)}</p>
               <Link href={`/orders/${order.id}`}>
                 <Button>View Details</Button>
               </Link>

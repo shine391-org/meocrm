@@ -215,8 +215,8 @@ describe('WebhooksService + HMAC guard integration', () => {
     expect(stillCompleted?.status).toBe(OrderStatus.COMPLETED);
   });
 
-  it('warns when order is not in PROCESSING state', async () => {
-    const { organization, order } = await seedOrder('WEBHOOK-WARN', { status: OrderStatus.COMPLETED });
+  it('warns and skips updates when the order is no longer PROCESSING', async () => {
+    const { organization, order } = await seedOrder('WEBHOOK-WARN');
     const warnSpy = jest.spyOn((webhooksService as any).logger, 'warn');
 
     await webhooksService.handleShippingDelivered({
@@ -224,8 +224,15 @@ describe('WebhooksService + HMAC guard integration', () => {
       data: { orderId: order.id, organizationId: organization.id },
     });
 
+    warnSpy.mockClear();
+
+    await webhooksService.handleShippingDelivered({
+      event: 'shipping.delivered',
+      data: { orderId: order.id, organizationId: organization.id },
+    });
+
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`order ${order.id}`),
+      expect.stringContaining(`shipping.delivered skipped: order ${order.id}`),
     );
 
     warnSpy.mockRestore();

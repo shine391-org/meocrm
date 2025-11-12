@@ -6,7 +6,7 @@ export const PRIORITY_CONFIG = {
     auto_to_low: 30,
     auto_to_inactive: 60,
   },
-  new_lead_priority: 'high',
+  new_lead_priority: 'HIGH',
   allow_manual_override: true,
   auto_assignment: {
     enabled: false,
