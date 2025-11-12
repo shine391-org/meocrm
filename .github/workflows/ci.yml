@@ -41,7 +41,12 @@ jobs:
 
       # 4) Install deps
       - name: Install dependencies
-        run: pnpm -w install --frozen-lockfile
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm -w install --frozen-lockfile
+          else
+            pnpm -w install --no-frozen-lockfile
+          fi
 
       # 5) Prisma generate
       - name: Generate Prisma Client
