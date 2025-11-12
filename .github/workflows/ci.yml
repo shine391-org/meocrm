@@ -41,7 +41,7 @@ jobs:
 
       # 4) Cài dependencies
       - name: Install dependencies
-        run: pnpm -w install --no-frozen-lockfile
+        run: pnpm -w install --no-frozen-lockfile --prod=false
 
       # 5) Generate Prisma Client trước build/test
       - name: Generate Prisma Client
