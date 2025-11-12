@@ -14,25 +14,36 @@ jobs:
       DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
       WEBHOOK_SECRET_KEY: ${{ secrets.STAGING_WEBHOOK_SECRET_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
         with:
-          node-version: '22.x'
+          version: 10.20.0
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
           cache: 'pnpm'
 
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 10
+      - name: Enable corepack
+        run: corepack enable
 
       - name: Install deps
         run: pnpm -w install --frozen-lockfile
 
       - name: Generate Prisma Client
         run: pnpm --filter @meocrm/api exec prisma generate
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
 
       - name: Build
         run: pnpm -w build
 
       - name: Test (fail if missing tests)
         run: pnpm -w test -- --runInBand --coverage
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}

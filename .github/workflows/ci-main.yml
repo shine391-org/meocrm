@@ -12,16 +12,23 @@ jobs:
     env:
       NODE_ENV: production
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
         with:
-          node-version: '22.x'
+          version: 10.20.0
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
           cache: 'pnpm'
 
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 10
+      - name: Enable corepack
+        run: corepack enable
 
       - name: Install deps
         run: pnpm -w install --frozen-lockfile
