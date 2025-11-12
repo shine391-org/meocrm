@@ -35,6 +35,11 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
+      - name: Ensure pnpm path
+        run: |
+          corepack disable pnpm
+          echo "$PNPM_HOME" >> "$GITHUB_PATH"
+
       - name: Print toolchain versions
         run: |
           node -v
