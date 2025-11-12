@@ -38,7 +38,12 @@ jobs:
           echo "$PNPM_HOME" >> "$GITHUB_PATH"
 
       - name: Install deps
-        run: pnpm -w install --frozen-lockfile
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm -w install --frozen-lockfile
+          else
+            pnpm -w install --no-frozen-lockfile
+          fi
 
       - name: Generate Prisma Client
         run: pnpm --filter @meocrm/api exec prisma generate
