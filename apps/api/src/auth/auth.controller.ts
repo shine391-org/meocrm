@@ -39,7 +39,6 @@ export class AuthController {
 
   @Post('logout')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Logout and invalidate refresh token' })
   @ApiResponse({ status: 200, description: 'Logged out' })
   async logout(@CurrentUser() user: any, @Body('refreshToken') refreshToken: string) {
@@ -48,7 +47,6 @@ export class AuthController {
 
   @Get('me')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get current user info' })
   @ApiResponse({ status: 200, description: 'User info retrieved' })
   async getCurrentUser(@CurrentUser() user: any) {
