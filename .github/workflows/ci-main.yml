@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_ENV: production
+      PNPM_IGNORE_NODE_ENV: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,6 +27,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22.11.0'
+          cache: 'pnpm'
 
       - name: Enable corepack
         run: corepack enable
@@ -36,7 +38,7 @@ jobs:
           echo "$PNPM_HOME" >> "$GITHUB_PATH"
 
       - name: Install deps
-        run: pnpm -w install --no-frozen-lockfile --prod=false
+        run: pnpm -w install --frozen-lockfile
 
       - name: Generate Prisma Client
         run: pnpm --filter @meocrm/api exec prisma generate
