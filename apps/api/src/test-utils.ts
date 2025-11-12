@@ -111,9 +111,18 @@ export async function createOrganization(prisma: PrismaService) {
 export async function cleanupDatabase(prisma: PrismaService) {
   // Order matters due to foreign key constraints
   await prisma.customerDebtSnapshot.deleteMany({});
+  await prisma.commission.deleteMany({});
+  await prisma.orderReturnItem.deleteMany({});
+  await prisma.orderReturn.deleteMany({});
+  await prisma.shippingOrder.deleteMany({});
   await prisma.orderItem.deleteMany({});
   await prisma.order.deleteMany({});
+  await prisma.inventory.deleteMany({});
+  await prisma.productVariant.deleteMany({});
   await prisma.product.deleteMany({});
+  await prisma.category.deleteMany({});
+  await prisma.branch.deleteMany({});
+  await prisma.supplier.deleteMany({});
   await prisma.webhook.deleteMany({});
   await prisma.setting.deleteMany({});
   await prisma.auditLog.deleteMany({});

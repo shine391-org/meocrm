@@ -1551,7 +1551,7 @@ model QuoteItem {
 model Webhook {
   id             String       @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   url            String
   secretEncrypted Json
   events         String[]

@@ -63,6 +63,34 @@ describe('DebtSnapshotService', () => {
     expect(prisma.customerDebtSnapshot.createMany).not.toHaveBeenCalled();
   });
 
+  it('logs string-based rejection reasons without crashing', async () => {
+    const prisma = {
+      organization: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'org_str' }]),
+      },
+      $transaction: jest.fn().mockImplementation(async () => {
+        throw 'timeout'; // eslint-disable-line no-throw-literal
+      }),
+      customerDebtSnapshot: {
+        createMany: jest.fn(),
+      },
+    };
+    const requestContextService = {
+      withOrganizationContext: jest
+        .fn()
+        .mockImplementation(async (_orgId: string, handler: () => Promise<unknown>) => handler()),
+    };
+    const service = new DebtSnapshotService(prisma as any, requestContextService as any);
+    (service as any).logger = { log: jest.fn(), error: jest.fn() };
+
+    await service.handleCron();
+
+    expect((service as any).logger.error).toHaveBeenCalledWith(
+      'Debt snapshot failed for organization org_str',
+      'timeout',
+    );
+  });
+
   it('creates snapshots per organization with skipDuplicates and ignores zero-debt customers', async () => {
     const orgId = 'org_batch';
     const orderGroupResult = [
@@ -110,6 +138,43 @@ describe('DebtSnapshotService', () => {
       ],
       skipDuplicates: true,
     });
+  });
+
+  it('skips snapshot creation when no positive debt exists for the organization', async () => {
+    const orgId = 'org_empty';
+    const txMock = {
+      order: {
+        groupBy: jest.fn().mockResolvedValue([
+          {
+            customerId: 'cust_free',
+            _sum: { total: new Prisma.Decimal(100), paidAmount: new Prisma.Decimal(100) },
+          },
+        ]),
+      },
+      customerDebtSnapshot: {
+        createMany: jest.fn(),
+      },
+    };
+    const prisma = {
+      organization: {
+        findMany: jest.fn().mockResolvedValue([{ id: orgId }]),
+      },
+      $transaction: jest.fn().mockImplementation(async (callback: any) => callback(txMock)),
+    };
+    const requestContextService = {
+      withOrganizationContext: jest
+        .fn()
+        .mockImplementation(async (_org: string, handler: () => Promise<unknown>) => handler()),
+    };
+    const service = new DebtSnapshotService(prisma as any, requestContextService as any);
+    (service as any).logger = { log: jest.fn(), error: jest.fn() };
+
+    await service.handleCron();
+
+    expect((service as any).logger.log).toHaveBeenCalledWith(
+      'No customer debt to snapshot for organization: org_empty',
+    );
+    expect(txMock.customerDebtSnapshot.createMany).not.toHaveBeenCalled();
   });
 
   it('continues processing other organizations when one transaction fails', async () => {

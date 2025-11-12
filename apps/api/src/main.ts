@@ -31,10 +31,13 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
+      forbidNonWhitelisted: true,
       transform: true,
-      forbidUnknownValues: false,
       transformOptions: {
         enableImplicitConversion: true,
+      },
+      validationError: {
+        value: false,
       },
     }),
   );

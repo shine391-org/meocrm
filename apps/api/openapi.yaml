@@ -137,6 +137,46 @@ paths:
       operationId: getOrders
       summary: Get all orders
       tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, COMPLETED, CANCELLED]
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
       responses:
         '200':
           description: A list of orders
@@ -151,6 +191,8 @@ paths:
       operationId: getOrdersById
       summary: Get a single order
       tags: [Orders]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -169,12 +211,20 @@ paths:
       operationId: postOrdersByIdRefund
       summary: Request a refund for an order
       tags: [Orders]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
       responses:
         '202':
           description: Refund request accepted
@@ -183,6 +233,8 @@ paths:
       operationId: postOrdersByIdRefundApprove
       summary: Approve a refund request
       tags: [Orders]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -197,12 +249,20 @@ paths:
       operationId: postOrdersByIdRefundReject
       summary: Reject a refund request
       tags: [Orders]
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundReject'
       responses:
         '200':
           description: Refund request rejected
@@ -502,3 +562,17 @@ components:
           type: string
         deliveryId:
           type: string
+    RefundRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Reason provided by staff for requesting the refund.
+    RefundReject:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Explanation describing why the refund was rejected.

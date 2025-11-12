@@ -57,4 +57,29 @@ describe('AuditLogService', () => {
     expect(logs[0].action).toBe('UPDATE');
     expect(logs[0].newValues).toMatchObject({ event: 'custom.event', foo: 'bar' });
   });
+
+  it('preserves known audit actions without remapping', async () => {
+    const organization = await prisma.organization.create({
+      data: { name: 'Audit Org 2', slug: `audit-${Date.now()}`, code: `AUD-${Date.now()}` },
+    });
+    const user = await prisma.user.create({
+      data: {
+        email: `auditor-known-${Date.now()}@test.dev`,
+        name: 'Auditor Known',
+        password: 'hashed',
+        organizationId: organization.id,
+      },
+    });
+
+    await auditLogService.log({
+      user: { id: user.id, organizationId: organization.id },
+      entity: 'order',
+      entityId: 'order-456',
+      action: 'CREATE',
+    });
+
+    const logs = await prisma.auditLog.findMany({ where: { entityId: 'order-456' } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0].action).toBe('CREATE');
+  });
 });

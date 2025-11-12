@@ -130,6 +130,7 @@ Engine sẽ tìm config từ scope hẹp nhất (Object) và fallback dần lên
     "version": 1
   },
   "shipping": {
+    "baseFee": 30000,
     "freeShipThreshold": 500000,
     "applyChannels": ["ONLINE"]
   },

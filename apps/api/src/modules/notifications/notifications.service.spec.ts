@@ -1,79 +1,99 @@
-import { Test } from '@nestjs/testing';
-import { NotificationsService } from './notifications.service';
-import { ConfigService } from '@nestjs/config';
-import { SettingsService } from '../settings/settings.service';
 import axios from 'axios';
+import { NotificationsService } from './notifications.service';
 
 jest.mock('axios');
 
 describe('NotificationsService', () => {
+  const axiosMock = axios as jest.Mocked<typeof axios>;
+  let configMock: { get: jest.Mock };
+  let settingsMock: { get: jest.Mock };
   let service: NotificationsService;
-  const config = {
-    get: jest.fn(),
-  };
-  const settings = {
-    get: jest.fn(),
-  };
 
-  beforeEach(async () => {
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        NotificationsService,
-        { provide: ConfigService, useValue: config },
-        { provide: SettingsService, useValue: settings },
-      ],
-    }).compile();
-
-    service = moduleRef.get(NotificationsService);
-    config.get.mockReset();
-    settings.get.mockReset();
-    (axios.post as jest.Mock).mockReset();
+  beforeEach(() => {
+    configMock = { get: jest.fn() };
+    settingsMock = { get: jest.fn() };
+    service = new NotificationsService(configMock as any, settingsMock as any);
+    (service as any).logger = {
+      log: jest.fn(),
+      error: jest.fn(),
+    };
+    axiosMock.post.mockReset();
   });
 
-  it('skips Telegram digest when credentials are missing', async () => {
-    config.get.mockReturnValueOnce(undefined);
-
-    const loggerError = jest.spyOn((service as any).logger, 'error').mockImplementation(() => undefined);
+  it('logs an error when Telegram credentials are missing', async () => {
+    configMock.get.mockReturnValue(undefined);
 
     await service.sendTelegramDigest('hello');
 
-    expect(loggerError).toHaveBeenCalledWith('Telegram bot token or chat ID is not configured');
-    expect(axios.post).not.toHaveBeenCalled();
-  });
-
-  it('sends Telegram digest when config exists', async () => {
-    config.get.mockReturnValueOnce('bot-token').mockReturnValueOnce('@channel');
-    (axios.post as jest.Mock).mockResolvedValue({ data: { ok: true } });
-    const loggerLog = jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined);
-
-    await service.sendTelegramDigest('hello world');
-
-    expect(axios.post).toHaveBeenCalledWith(
-      'https://api.telegram.org/botbot-token/sendMessage',
-      expect.objectContaining({ chat_id: '@channel', text: 'hello world' }),
+    expect((service as any).logger.error).toHaveBeenCalledWith(
+      'Telegram bot token or chat ID is not configured',
     );
-    expect(loggerLog).toHaveBeenCalledWith('Successfully sent Telegram digest');
+    expect(axiosMock.post).not.toHaveBeenCalled();
   });
 
-  it('skips staff notifications when disabled', async () => {
-    settings.get.mockResolvedValueOnce(false);
-    settings.get.mockResolvedValueOnce('telegram');
-    const loggerLog = jest.spyOn((service as any).logger, 'log').mockImplementation(() => undefined);
+  it('posts to Telegram API when credentials are configured', async () => {
+    configMock.get.mockImplementation((key: string) => {
+      if (key === 'TELEGRAM_BOT_TOKEN') return 'token';
+      if (key === 'TELEGRAM_CHAT_ID') return '123';
+      if (key === 'TELEGRAM_TIMEOUT_MS') return '4500';
+      return undefined;
+    });
+    axiosMock.post.mockResolvedValue({ data: { ok: true } });
 
-    await service.sendToStaff('message');
+    await service.sendTelegramDigest('update!');
 
-    expect(loggerLog).toHaveBeenCalledWith('Skipping staff notification (disabled or provider mismatch).');
-    expect(axios.post).not.toHaveBeenCalled();
+    expect(axiosMock.post).toHaveBeenCalledWith(
+      'https://api.telegram.org/bottoken/sendMessage',
+      expect.objectContaining({
+        chat_id: '123',
+        text: 'update!',
+      }),
+      { timeout: 4500 },
+    );
+    expect((service as any).logger.log).toHaveBeenCalledWith('Successfully sent Telegram digest');
   });
 
-  it('relays staff notifications to Telegram when enabled', async () => {
-    settings.get.mockResolvedValueOnce(true);
-    settings.get.mockResolvedValueOnce('telegram');
-    config.get.mockReturnValueOnce('token').mockReturnValueOnce('chat');
-    (axios.post as jest.Mock).mockResolvedValue({ data: {} });
+  it('rethrows when Telegram API call fails', async () => {
+    configMock.get.mockImplementation((key: string) => {
+      if (key === 'TELEGRAM_BOT_TOKEN') return 'token';
+      if (key === 'TELEGRAM_CHAT_ID') return '123';
+      if (key === 'TELEGRAM_TIMEOUT_MS') return '1000';
+      return undefined;
+    });
+    axiosMock.post.mockRejectedValue(new Error('network down'));
 
-    await service.sendToStaff('alert');
+    await expect(service.sendTelegramDigest('oops')).rejects.toThrow('network down');
+    expect((service as any).logger.error).toHaveBeenCalled();
+  });
 
-    expect(axios.post).toHaveBeenCalled();
+  it('skips staff notifications when feature flag is disabled', async () => {
+    settingsMock.get.mockResolvedValueOnce(false);
+
+    await service.sendToStaff('payload');
+
+    expect((service as any).logger.log).toHaveBeenCalledWith(
+      'Skipping staff notification (disabled or provider mismatch).',
+    );
+    expect(axiosMock.post).not.toHaveBeenCalled();
+  });
+
+  it('skips staff notifications when provider is not Telegram', async () => {
+    settingsMock.get.mockResolvedValueOnce(true).mockResolvedValueOnce('email');
+
+    await service.sendToStaff('payload');
+
+    expect((service as any).logger.log).toHaveBeenCalledWith(
+      'Skipping staff notification (disabled or provider mismatch).',
+    );
+    expect(axiosMock.post).not.toHaveBeenCalled();
+  });
+
+  it('delegates to Telegram digest when staff notifications are enabled', async () => {
+    settingsMock.get.mockResolvedValueOnce(true).mockResolvedValueOnce('telegram');
+    const digestSpy = jest.spyOn(service, 'sendTelegramDigest').mockResolvedValue(undefined);
+
+    await service.sendToStaff('important');
+
+    expect(digestSpy).toHaveBeenCalledWith('important');
   });
 });

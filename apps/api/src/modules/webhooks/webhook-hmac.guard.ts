@@ -13,7 +13,8 @@ export class WebhookHMACGuard implements CanActivate {
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
     const request = context.switchToHttp().getRequest();
-    const signature = request.headers['x-meocrm-signature'];
+    const signatureHeader = request.headers['x-meocrm-signature'];
+    const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
 
     if (!signature) {
       this.logger.warn('Missing X-MeoCRM-Signature header');
@@ -26,9 +27,20 @@ export class WebhookHMACGuard implements CanActivate {
       return false;
     }
 
+    if (!/^[0-9a-f]+$/i.test(signature)) {
+      this.logger.warn('Signature is not a valid hex digest');
+      return false;
+    }
+
+    const rawBody =
+      typeof request.rawBody === 'string'
+        ? request.rawBody
+        : Buffer.isBuffer(request.rawBody)
+          ? request.rawBody.toString('utf8')
+          : '';
     const hmac = crypto.createHmac('sha256', secret);
-    const digest = Buffer.from(hmac.update(request.rawBody).digest('hex'), 'utf8');
-    const checksum = Buffer.from(signature, 'utf8');
+    const digest = Buffer.from(hmac.update(rawBody).digest('hex'), 'hex');
+    const checksum = Buffer.from(signature, 'hex');
 
     if (digest.length !== checksum.length || !crypto.timingSafeEqual(digest, checksum)) {
       this.logger.warn('Invalid signature');

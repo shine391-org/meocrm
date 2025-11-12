@@ -34,6 +34,12 @@ describe('Reports /reports/debt (integration)', () => {
     await cleanupDatabase(prisma);
   });
 
+  it('throws when organization context is missing', async () => {
+    await expect(reportsService.getDebtReport({ groupBy: 'day' })).rejects.toThrow(
+      'Organization context is not set.',
+    );
+  });
+
   it('returns closing debt grouped by day for the tenant', async () => {
     const organization = await createOrganization(prisma);
     const organizationId = organization.id;
@@ -124,5 +130,81 @@ describe('Reports /reports/debt (integration)', () => {
     expect(entries[0].customerId).toBe(customerA.id);
     expect(Number(entries[0].closingDebt)).toBeCloseTo(200000);
     expect(entries[0].period).toBeDefined();
+  });
+
+  it('applies customer and date filters when generating debt reports', async () => {
+    const organization = await createOrganization(prisma);
+    const organizationId = organization.id;
+    const targetCustomer = await createCustomer(prisma, organizationId);
+    const otherCustomer = await createCustomer(prisma, organizationId);
+    const reportingUser = await prisma.user.create({
+      data: {
+        email: `reports-filter-${Date.now()}@test.dev`,
+        name: 'Reporter',
+        password: 'hashed',
+        organizationId,
+        role: UserRole.MANAGER,
+      },
+    });
+
+    await prisma.customerDebtSnapshot.createMany({
+      data: [
+        {
+          organizationId,
+          customerId: targetCustomer.id,
+          debtValue: 500000,
+          capturedAt: new Date('2025-01-20T00:00:00Z'),
+        },
+        {
+          organizationId,
+          customerId: otherCustomer.id,
+          debtValue: 100000,
+          capturedAt: new Date('2025-03-01T00:00:00Z'),
+        },
+      ],
+    });
+
+    const result = await requestContext.run(async () => {
+      requestContext.setContext({
+        organizationId,
+        userId: reportingUser.id,
+        roles: [reportingUser.role],
+      });
+      return reportsService.getDebtReport({
+        groupBy: 'month',
+        customerId: targetCustomer.id,
+        fromDate: new Date('2025-01-01T00:00:00Z'),
+        toDate: new Date('2025-02-01T00:00:00Z'),
+      });
+    });
+
+    const entries = result as Array<any>;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].customerId).toBe(targetCustomer.id);
+    expect(Number(entries[0].closingDebt)).toBeCloseTo(500000);
+  });
+
+  it('rejects invalid grouping parameters', async () => {
+    const organization = await createOrganization(prisma);
+    const reportingUser = await prisma.user.create({
+      data: {
+        email: `reports-invalid-${Date.now()}@test.dev`,
+        name: 'Reporter',
+        password: 'hashed',
+        organizationId: organization.id,
+        role: UserRole.ADMIN,
+      },
+    });
+
+    await expect(
+      requestContext.run(async () => {
+        requestContext.setContext({
+          organizationId: organization.id,
+          userId: reportingUser.id,
+          roles: [reportingUser.role],
+        });
+        return reportsService.getDebtReport({ groupBy: 'year' as any });
+      }),
+    ).rejects.toThrow('Invalid groupBy value. Must be "day" or "month".');
   });
 });

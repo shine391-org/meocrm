@@ -16,7 +16,7 @@ export class UpdateWebhookDto extends PartialType(CreateWebhookDto) {
   @IsOptional()
   events?: string[];
 
-  @ApiPropertyOptional({ description: 'New plaintext secret' })
+  @ApiPropertyOptional({ description: 'New plaintext secret', writeOnly: true })
   @IsString()
   @IsOptional()
   secret?: string;

@@ -23,15 +23,23 @@ export class NotificationsService {
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
+    const timeoutMs =
+      Number(this.configService.get<string>('TELEGRAM_TIMEOUT_MS')) || 5000;
+
     try {
-      await axios.post(url, {
-        chat_id: chatId,
-        text: message,
-        parse_mode: 'Markdown',
-      });
+      await axios.post(
+        url,
+        {
+          chat_id: chatId,
+          text: message,
+          parse_mode: 'Markdown',
+        },
+        { timeout: timeoutMs },
+      );
       this.logger.log('Successfully sent Telegram digest');
     } catch (error) {
       this.logger.error('Failed to send Telegram digest', error instanceof Error ? error.stack : error);
+      throw (error instanceof Error ? error : new Error('Failed to send Telegram digest'));
     }
   }
 

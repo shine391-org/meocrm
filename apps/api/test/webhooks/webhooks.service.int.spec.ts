@@ -79,6 +79,16 @@ describe('WebhooksService + HMAC guard integration', () => {
     expect(encrypted).not.toHaveProperty('legacySecret');
   });
 
+  it('lists webhooks without exposing plaintext secrets', async () => {
+    const { organization } = await seedOrder('WEBHOOK-LIST');
+    await webhooksService.createWebhook(createWebhookInput(), organization.id);
+
+    const webhooks = await webhooksService.listWebhooks(organization.id);
+    expect(webhooks).toHaveLength(1);
+    expect(webhooks[0].hasSecret).toBe(true);
+    expect((webhooks[0] as any).secret).toBeUndefined();
+  });
+
   it('updates webhook metadata and rotates secret when provided', async () => {
     const { organization } = await seedOrder('WEBHOOK-UPDATE');
     const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
@@ -170,6 +180,20 @@ describe('WebhooksService + HMAC guard integration', () => {
     axiosSpy.mockRestore();
   });
 
+  it('reports outbound webhook delivery failures with sanitized messages', async () => {
+    const { organization } = await seedOrder('WEBHOOK-DELIVERY-FAIL');
+    const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
+    const axiosSpy = jest
+      .spyOn((webhooksService as any).axiosInstance, 'post')
+      .mockRejectedValue(new Error('network down'));
+
+    const result = await webhooksService.testWebhook(webhook.id, organization.id);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Failed to send test webhook');
+
+    axiosSpy.mockRestore();
+  });
+
   it('completes orders only when organization matches payload', async () => {
     const { organization, order } = await seedOrder('WEBHOOK-OK');
 
@@ -205,6 +229,19 @@ describe('WebhooksService + HMAC guard integration', () => {
     } as ExecutionContext;
 
     expect(await guard.canActivate(context)).toBe(true);
+  });
+
+  it('rejects webhook deliveries missing the signature header', async () => {
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          headers: {},
+          rawBody: 'body',
+        }),
+      }),
+    } as ExecutionContext;
+
+    expect(await guard.canActivate(context)).toBe(false);
   });
 
   it('rejects mismatched HMAC signatures', async () => {

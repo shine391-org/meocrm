@@ -23,6 +23,7 @@ export class CreateWebhookDto {
   @ApiProperty({
     description: 'Plaintext secret used to sign webhook payloads.',
     example: 'whsec_1234567890abcdef',
+    writeOnly: true,
   })
   @IsString()
   @IsNotEmpty()

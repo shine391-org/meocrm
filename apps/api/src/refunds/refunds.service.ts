@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { CommissionStatus, OrderStatus, User } from '@prisma/client';
+import { Commission, CommissionStatus, OrderStatus, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotificationsService } from '../modules/notifications/notifications.service';
@@ -91,13 +91,24 @@ export class RefundsService {
       });
     }
 
-    const updatedOrder = await this.prisma.$transaction(async (tx) => {
+    const hasRefundAdjustments = order.commissions.some(
+      (commission) => commission.isAdjustment && commission.traceId?.startsWith(`refund-${order.id}`),
+    );
+    if (hasRefundAdjustments) {
+      return order;
+    }
+
+    const { updatedOrder, adjustmentsCreated } = await this.prisma.$transaction(async (tx) => {
       if (restockOnRefund) {
         for (const item of order.items) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { increment: item.quantity } },
-          });
+          const productId = item.productId ?? item.variant?.productId ?? null;
+
+          if (productId) {
+            await tx.product.update({
+              where: { id: productId },
+              data: { stock: { increment: item.quantity } },
+            });
+          }
 
           if (item.variantId) {
             await tx.productVariant.update({
@@ -108,47 +119,25 @@ export class RefundsService {
         }
       }
 
-      if (order.commissions.length) {
-        await Promise.all(
-          order.commissions.map((commission) =>
-            tx.commission.create({
-              data: {
-                organizationId: commission.organizationId,
-                ruleId: commission.ruleId,
-                orderId: commission.orderId,
-                customerId: commission.customerId,
-                valueGross: commission.valueGross.mul(-1),
-                valueNet: commission.valueNet.mul(-1),
-                ratePercent: commission.ratePercent,
-                amount: commission.amount.mul(-1),
-                currency: commission.currency,
-                status: CommissionStatus.PENDING,
-                periodMonth: commission.periodMonth,
-                source: commission.source,
-                split: commission.split,
-                isAdjustment: true,
-                adjustsCommissionId: commission.id,
-                traceId: `refund-${commission.orderId}`,
-              },
-            }),
-          ),
-        );
-      }
+      const adjustmentsCreated = await this.createCommissionAdjustments(tx, order.commissions);
 
       const result = await tx.order.update({
         where: { id: orderId },
         data: { status: OrderStatus.CANCELLED },
       });
 
-      await this.auditLog.log({
-        user,
-        entity: 'order',
-        entityId: orderId,
-        action: 'refund.approved',
-        newValues: { restocked: Boolean(restockOnRefund) },
-      });
+      return { updatedOrder: result, adjustmentsCreated };
+    });
 
-      return result;
+    await this.auditLog.log({
+      user,
+      entity: 'order',
+      entityId: orderId,
+      action: 'refund.approved',
+      newValues: {
+        restocked: Boolean(restockOnRefund),
+        adjustmentsCreated,
+      },
     });
 
     await this.notifications.sendToStaff(
@@ -193,5 +182,55 @@ export class RefundsService {
     );
 
     return { message: 'Refund request rejected successfully.' };
+  }
+
+  private async createCommissionAdjustments(
+    tx: Prisma.TransactionClient,
+    commissions: Commission[],
+  ): Promise<number> {
+    if (!commissions.length) {
+      return 0;
+    }
+
+    const adjustedCommissionIds = new Set(
+      commissions
+        .filter((commission) => commission.adjustsCommissionId)
+        .map((commission) => commission.adjustsCommissionId!)
+        .filter(Boolean),
+    );
+    const commissionsToAdjust = commissions.filter(
+      (commission) => !commission.isAdjustment && !adjustedCommissionIds.has(commission.id),
+    );
+
+    if (!commissionsToAdjust.length) {
+      return 0;
+    }
+
+    await Promise.all(
+      commissionsToAdjust.map((commission) =>
+        tx.commission.create({
+          data: {
+            organizationId: commission.organizationId,
+            ruleId: commission.ruleId,
+            orderId: commission.orderId,
+            customerId: commission.customerId,
+            valueGross: commission.valueGross.mul(-1),
+            valueNet: commission.valueNet.mul(-1),
+            ratePercent: commission.ratePercent,
+            amount: commission.amount.mul(-1),
+            currency: commission.currency,
+            status: CommissionStatus.PENDING,
+            periodMonth: commission.periodMonth,
+            source: commission.source,
+            split: commission.split,
+            isAdjustment: true,
+            adjustsCommissionId: commission.id,
+            traceId: `refund-${commission.orderId}`,
+          },
+        }),
+      ),
+    );
+
+    return commissionsToAdjust.length;
   }
 }

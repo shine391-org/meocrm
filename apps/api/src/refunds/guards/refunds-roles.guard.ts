@@ -22,10 +22,8 @@ export class RefundsRolesGuard implements CanActivate {
       });
     }
 
-    const allowedRoles = await this.settingsService.get('refund.approvals', {
-      // tenantId: user.organizationId,
-      role: user.role,
-    });
+    const allowedRoles =
+      (await this.settingsService.get<string[]>('refund.approvals', ['OWNER'])) ?? ['OWNER'];
 
     if (!Array.isArray(allowedRoles) || !allowedRoles.includes(user.role)) {
       throw new ForbiddenException({

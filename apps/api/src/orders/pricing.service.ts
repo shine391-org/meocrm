@@ -23,8 +23,13 @@ export class PricingService {
     const applyChannels =
       (await this.settingsService.get<string[]>('shipping.applyChannels', [])) ?? [];
 
+    const fallbackShippingFee = 30000;
+    const configuredShippingFee =
+      (await this.settingsService.get<number>('shipping.baseFee', fallbackShippingFee)) ??
+      fallbackShippingFee;
+
     // Placeholder for shipping calculation from a provider like GHN/GHTK
-    let calculatedShippingFee = 30000;
+    let calculatedShippingFee = configuredShippingFee;
 
     let freeShipApplied = false;
 
