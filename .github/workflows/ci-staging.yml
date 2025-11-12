@@ -9,6 +9,10 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: staging
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      WEBHOOK_SECRET_KEY: ${{ secrets.STAGING_WEBHOOK_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
 

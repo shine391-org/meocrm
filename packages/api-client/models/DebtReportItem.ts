@@ -7,7 +7,7 @@ export type DebtReportItem = {
      * Start of the period (day or month)
      */
     period?: string;
-    customerId?: string;
-    closingDebt?: number;
+    capturedAt: string;
+    customerId: string;
+    closingDebt: number;
 };
-

@@ -13,6 +13,11 @@ ALTER TABLE "refresh_tokens" DROP CONSTRAINT "refresh_tokens_userId_fkey";
 -- AlterTable
 ALTER TABLE "orders" ADD COLUMN     "completedAt" TIMESTAMP(3);
 
+-- Backfill completedAt using updatedAt for completed/delivered orders
+UPDATE "orders"
+SET "completedAt" = COALESCE("completedAt", "updatedAt")
+WHERE "status" IN ('COMPLETED','DELIVERED');
+
 -- CreateTable
 CREATE TABLE "settings" (
     "id" TEXT NOT NULL,
@@ -42,11 +47,11 @@ CREATE TABLE "webhooks" (
     "id" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
     "url" TEXT NOT NULL,
-    "secret" TEXT NOT NULL,
     "events" TEXT[],
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "secretEncrypted" JSONB,
 
     CONSTRAINT "webhooks_pkey" PRIMARY KEY ("id")
 );
@@ -60,8 +65,50 @@ CREATE UNIQUE INDEX "settings_organizationId_key_key" ON "settings"("organizatio
 -- CreateIndex
 CREATE INDEX "customer_debt_snapshots_organizationId_customerId_idx" ON "customer_debt_snapshots"("organizationId", "customerId");
 
+-- Keep earliest id, drop duplicates prior to enforcing unique constraint
+WITH dups AS (
+    SELECT
+        "id",
+        ROW_NUMBER() OVER (PARTITION BY "organizationId", "customerId", "capturedAt" ORDER BY "id") AS rn
+    FROM "customer_debt_snapshots"
+)
+DELETE FROM "customer_debt_snapshots"
+WHERE "id" IN (SELECT "id" FROM dups WHERE rn > 1);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "customer_debt_snapshots_organizationId_customerId_capturedAt_key" ON "customer_debt_snapshots"("organizationId", "customerId", "capturedAt");
+
 -- CreateIndex
 CREATE INDEX "webhooks_organizationId_idx" ON "webhooks"("organizationId");
+
+-- Encrypt existing webhook secrets into JSONB payloads
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'webhooks' AND column_name = 'secret'
+    ) THEN
+        EXECUTE 'UPDATE "webhooks"
+                 SET "secretEncrypted" = jsonb_build_object(''legacySecret'', "secret")
+                 WHERE "secret" IS NOT NULL';
+    END IF;
+END
+$$;
+
+-- Enforce non-null JSON storage and drop plaintext column
+ALTER TABLE "webhooks" ALTER COLUMN "secretEncrypted" SET NOT NULL;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'webhooks' AND column_name = 'secret'
+    ) THEN
+        EXECUTE 'ALTER TABLE "webhooks" DROP COLUMN "secret"';
+    END IF;
+END
+$$;
 
 -- AddForeignKey
 ALTER TABLE "settings" ADD CONSTRAINT "settings_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;

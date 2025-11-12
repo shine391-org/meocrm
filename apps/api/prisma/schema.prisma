@@ -530,6 +530,7 @@ model CustomerDebtSnapshot {
   createdAt  DateTime @default(now())
 
   @@index([organizationId, customerId])
+  @@unique([organizationId, customerId, capturedAt])
   @@map("customer_debt_snapshots")
 }
 
@@ -1552,7 +1553,7 @@ model Webhook {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   url            String
-  secret         String
+  secretEncrypted Json
   events         String[]
   isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())

@@ -27,6 +27,10 @@ export class AuditLogService {
     ipAddress,
     userAgent,
   }: AuditLogPayload) {
+    if (!user.organizationId) {
+      throw new Error('Audit logs require organization context');
+    }
+
     const normalizedNewValues: Prisma.InputJsonValue = {
       event: action,
       ...(newValues ?? {}),

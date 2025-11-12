@@ -1,9 +1,5 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
-import { OrderStatus, User } from '@prisma/client';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { CommissionStatus, OrderStatus, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotificationsService } from '../modules/notifications/notifications.service';
@@ -67,6 +63,7 @@ export class RefundsService {
             variant: true,
           },
         },
+        commissions: true,
       },
     });
 
@@ -97,18 +94,46 @@ export class RefundsService {
     const updatedOrder = await this.prisma.$transaction(async (tx) => {
       if (restockOnRefund) {
         for (const item of order.items) {
-          if (!item.variantId) {
-            continue;
-          }
-
-          await tx.productVariant.update({
-            where: { id: item.variantId },
+          await tx.product.update({
+            where: { id: item.productId },
             data: { stock: { increment: item.quantity } },
           });
+
+          if (item.variantId) {
+            await tx.productVariant.update({
+              where: { id: item.variantId },
+              data: { stock: { increment: item.quantity } },
+            });
+          }
         }
       }
 
-      // TODO: Create negative commission adjustment
+      if (order.commissions.length) {
+        await Promise.all(
+          order.commissions.map((commission) =>
+            tx.commission.create({
+              data: {
+                organizationId: commission.organizationId,
+                ruleId: commission.ruleId,
+                orderId: commission.orderId,
+                customerId: commission.customerId,
+                valueGross: commission.valueGross.mul(-1),
+                valueNet: commission.valueNet.mul(-1),
+                ratePercent: commission.ratePercent,
+                amount: commission.amount.mul(-1),
+                currency: commission.currency,
+                status: CommissionStatus.PENDING,
+                periodMonth: commission.periodMonth,
+                source: commission.source,
+                split: commission.split,
+                isAdjustment: true,
+                adjustsCommissionId: commission.id,
+                traceId: `refund-${commission.orderId}`,
+              },
+            }),
+          ),
+        );
+      }
 
       const result = await tx.order.update({
         where: { id: orderId },

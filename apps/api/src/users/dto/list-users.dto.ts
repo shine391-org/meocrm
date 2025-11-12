@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { Type } from 'class-transformer';

@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 import { RequestContextService } from 'src/common/context/request-context.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+
+type PrismaClientLike = PrismaService | Prisma.TransactionClient;
+const ORG_BATCH_SIZE = 10;
 
 @Injectable()
 export class DebtSnapshotService {
@@ -24,27 +27,24 @@ export class DebtSnapshotService {
       select: { id: true },
     });
 
-    for (const org of organizations) {
-      await this.requestContextService.withOrganizationContext(org.id, async () => {
-        this.logger.log(`Processing organization: ${org.id}`);
-        try {
-          const customerDebts = await this.calculateDebtForOrganization(org.id);
+    for (let i = 0; i < organizations.length; i += ORG_BATCH_SIZE) {
+      const batch = organizations.slice(i, i + ORG_BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((org) => this.processOrganization(org.id)),
+      );
 
-          if (customerDebts.length > 0) {
-            await this.prisma.customerDebtSnapshot.createMany({
-              data: customerDebts,
-              skipDuplicates: true,
-            });
-            this.logger.log(
-              `Successfully created ${customerDebts.length} debt snapshots for organization: ${org.id}`
-            );
-          } else {
-            this.logger.log(`No customer debt to snapshot for organization: ${org.id}`);
-          }
-        } catch (error) {
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const orgId = batch[index]?.id;
+          const errorDetail =
+            result.reason instanceof Error
+              ? result.reason.stack
+              : typeof result.reason === 'string'
+                ? result.reason
+                : undefined;
           this.logger.error(
-            `Failed to process debt snapshot for organization: ${org.id}`,
-            error instanceof Error ? error.stack : undefined,
+            `Debt snapshot failed for organization ${orgId}`,
+            errorDetail,
           );
         }
       });
@@ -53,8 +53,29 @@ export class DebtSnapshotService {
     this.logger.log('Finished nightly debt snapshot calculation.');
   }
 
-  private async calculateDebtForOrganization(organizationId: string) {
-    const orders = await this.prisma.order.groupBy({
+  private async processOrganization(organizationId: string) {
+    await this.requestContextService.withOrganizationContext(organizationId, async () => {
+      await this.prisma.$transaction(async (tx) => {
+        const customerDebts = await this.calculateDebtForOrganization(tx, organizationId);
+
+        if (!customerDebts.length) {
+          this.logger.log(`No customer debt to snapshot for organization: ${organizationId}`);
+          return;
+        }
+
+        await tx.customerDebtSnapshot.createMany({
+          data: customerDebts,
+          skipDuplicates: true,
+        });
+        this.logger.log(
+          `Created ${customerDebts.length} snapshots for organization ${organizationId}`,
+        );
+      });
+    });
+  }
+
+  private async calculateDebtForOrganization(prismaClient: PrismaClientLike, organizationId: string) {
+    const orders = await prismaClient.order.groupBy({
       by: ['customerId'],
       where: {
         organizationId: organizationId,

@@ -73,8 +73,56 @@ describe('Reports /reports/debt (integration)', () => {
     expect(entries.length).toBeGreaterThan(0);
     const snapshot = entries[0];
     expect(snapshot.customerId).toBe(customer.id);
+    expect(snapshot.capturedAt).toBeDefined();
     const closingDebt = Number(snapshot.closingDebt);
     expect(closingDebt).toBeGreaterThan(0);
     expect(closingDebt).toBeCloseTo(200000);
+  });
+
+  it('isolates debt snapshots per tenant and respects month grouping', async () => {
+    const orgA = await createOrganization(prisma);
+    const orgB = await createOrganization(prisma);
+    const customerA = await createCustomer(prisma, orgA.id);
+    const customerB = await createCustomer(prisma, orgB.id);
+    const productA = await createProduct(prisma, orgA.id, { sellPrice: 50000 });
+    const productB = await createProduct(prisma, orgB.id, { sellPrice: 75000 });
+
+    await createOrder(prisma, orgA.id, customerA.id, productA.id, {
+      total: 200000,
+      paidAmount: 0,
+      isPaid: false,
+    });
+    await createOrder(prisma, orgB.id, customerB.id, productB.id, {
+      total: 100000,
+      paidAmount: 50000,
+      isPaid: false,
+    });
+
+    await debtSnapshotService.handleCron();
+
+    const reportingUser = await prisma.user.create({
+      data: {
+        email: `reports-tenant-${Date.now()}@test.dev`,
+        name: 'Reporter',
+        password: 'hashed',
+        organizationId: orgA.id,
+        role: UserRole.ADMIN,
+      },
+    });
+
+    const result = await requestContext.run(async () => {
+      requestContext.setContext({
+        organizationId: orgA.id,
+        userId: reportingUser.id,
+        roles: [reportingUser.role],
+      });
+      return reportsService.getDebtReport({ groupBy: 'month' });
+    });
+
+    const entries = result as Array<any>;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].customerId).toBe(customerA.id);
+    expect(Number(entries[0].closingDebt)).toBeCloseTo(200000);
+    expect(entries[0].period).toBeDefined();
   });
 });

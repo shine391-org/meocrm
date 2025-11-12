@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { config } from 'dotenv';
 import { join } from 'path';
 

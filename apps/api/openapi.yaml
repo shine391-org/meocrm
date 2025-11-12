@@ -2,6 +2,8 @@ openapi: 3.1.0
 info:
   title: MeoCRM API
   version: 1.0.0
+security:
+  - bearerAuth: []
 paths:
   '/leads/{id}/priority:override':
     post:
@@ -256,6 +258,88 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized.
+  /webhooks:
+    get:
+      operationId: getWebhooks
+      summary: List configured webhooks
+      tags: [Webhooks]
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Webhook'
+    post:
+      operationId: postWebhooks
+      summary: Create a webhook subscription
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+  '/webhooks/{id}':
+    patch:
+      operationId: patchWebhooksById
+      summary: Update a webhook subscription
+      tags: [Webhooks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookUpdateRequest'
+      responses:
+        '200':
+          description: Updated webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+  '/webhooks/{id}/test':
+    post:
+      operationId: postWebhooksByIdTest
+      summary: Send a test payload to a webhook
+      tags: [Webhooks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test delivery result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookTestResponse'
+  /webhooks/handler:
+    post:
+      operationId: postWebhooksHandler
+      summary: Receive webhook callbacks from partners
+      tags: [Webhooks]
+      security: []
+      responses:
+        '204':
+          description: Payload accepted
 components:
   securitySchemes:
     bearerAuth:
@@ -265,13 +349,63 @@ components:
   schemas:
     Order:
       type: object
+      required: [id, code, status, subtotal, total, paymentMethod, createdAt]
       properties:
         id:
           type: string
+          format: uuid
+        code:
+          type: string
+          description: Unique order code per organization.
+        organizationId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+          nullable: true
         status:
           type: string
+          enum: [PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, COMPLETED, CANCELLED]
+        subtotal:
+          type: number
+          format: decimal
+        tax:
+          type: number
+          format: decimal
+        shipping:
+          type: number
+          format: decimal
+        discount:
+          type: number
+          format: decimal
         total:
           type: number
+          format: decimal
+        paymentMethod:
+          type: string
+          enum: [CASH, CARD, E_WALLET, BANK_TRANSFER, COD]
+        isPaid:
+          type: boolean
+        paidAmount:
+          type: number
+          format: decimal
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
     LeadPriority:
       type: string
       enum: [HIGH, MEDIUM, LOW, INACTIVE]
@@ -290,14 +424,81 @@ components:
           type: string
     DebtReportItem:
       type: object
+      required: [customerId, capturedAt, closingDebt]
       properties:
         period:
           type: string
           format: date-time
           description: "Start of the period (day or month)"
+        capturedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the snapshot was captured.
         customerId:
           type: string
           format: uuid
         closingDebt:
           type: number
           format: decimal
+    Webhook:
+      type: object
+      required: [id, url, events, isActive, hasSecret, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        hasSecret:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    WebhookCreateRequest:
+      type: object
+      required: [url, events, secret]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+        isActive:
+          type: boolean
+    WebhookUpdateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+        isActive:
+          type: boolean
+    WebhookTestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        deliveryId:
+          type: string

@@ -15,6 +15,8 @@ describe('Refund approval integration', () => {
   let requestContext: RequestContextService;
 
   beforeAll(async () => {
+    process.env.WEBHOOK_SECRET_KEY =
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     notificationsMock = {
       sendToStaff: jest.fn().mockResolvedValue(undefined),
     };

@@ -55,6 +55,7 @@ export class ReportsService {
     const queryRaw = Prisma.sql`
       SELECT
         DATE_TRUNC(${dateTrunc}, "capturedAt") as period,
+        MAX("capturedAt") as "capturedAt",
         "customerId",
         (array_agg("debtValue" ORDER BY "capturedAt" DESC))[1] as "closingDebt"
       FROM

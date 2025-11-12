@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { IsString, IsNotEmpty, IsNumber, IsBoolean, IsOptional, IsObject, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 

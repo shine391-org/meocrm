@@ -4,7 +4,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { cleanupDatabase } from '../../src/test-utils';
 import { WebhooksService } from '../../src/modules/webhooks/webhooks.service';
 import { WebhookHMACGuard } from '../../src/modules/webhooks/webhook-hmac.guard';
-import { ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, NotFoundException } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 
@@ -17,6 +17,8 @@ describe('WebhooksService + HMAC guard integration', () => {
 
   beforeAll(async () => {
     process.env.WEBHOOK_SECRET = SECRET;
+    process.env.WEBHOOK_SECRET_KEY =
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -55,6 +57,118 @@ describe('WebhooksService + HMAC guard integration', () => {
 
     return { organization, order };
   };
+
+  const createWebhookInput = () => ({
+    url: 'https://hooks.example.com/order',
+    events: ['order.completed'],
+    secret: 'whsec_test',
+    isActive: true,
+  });
+
+  it('creates webhook records with encrypted secret and hides plaintext', async () => {
+    const { organization } = await seedOrder('WEBHOOK-CRUD');
+
+    const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
+
+    expect(webhook.hasSecret).toBe(true);
+    expect(webhook.url).toBe('https://hooks.example.com/order');
+
+    const stored = await prisma.webhook.findUnique({ where: { id: webhook.id } });
+    const encrypted = stored?.secretEncrypted as Record<string, unknown> | null;
+    expect(encrypted).toHaveProperty('version', 'aes-256-gcm');
+    expect(encrypted).not.toHaveProperty('legacySecret');
+  });
+
+  it('updates webhook metadata and rotates secret when provided', async () => {
+    const { organization } = await seedOrder('WEBHOOK-UPDATE');
+    const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
+
+    const updated = await webhooksService.updateWebhook(
+      webhook.id,
+      {
+        events: ['order.completed', 'inventory.low'],
+        isActive: false,
+        secret: 'whsec_rotated',
+      },
+      organization.id,
+    );
+
+    expect(updated.events).toContain('inventory.low');
+    expect(updated.isActive).toBe(false);
+    expect(updated.hasSecret).toBe(true);
+
+    const stored = await prisma.webhook.findUnique({ where: { id: webhook.id } });
+    const encrypted = stored?.secretEncrypted as Record<string, unknown> | null;
+    expect(encrypted).toHaveProperty('version', 'aes-256-gcm');
+  });
+
+  it('returns failure when webhook secret payload is missing fields', async () => {
+    const { organization } = await seedOrder('WEBHOOK-INVALID-PAYLOAD');
+    const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
+
+    await prisma.webhook.update({
+      where: { id: webhook.id },
+      data: {
+        secretEncrypted: { invalid: true } as any,
+      },
+    });
+
+    const result = await webhooksService.testWebhook(webhook.id, organization.id);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Webhook secret is not configured');
+  });
+
+  it('handles decrypt failures gracefully and reports failure', async () => {
+    const { organization } = await seedOrder('WEBHOOK-DECRYPT-FAIL');
+    const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
+
+    await prisma.webhook.update({
+      where: { id: webhook.id },
+      data: {
+        secretEncrypted: {
+          version: 'aes-256-gcm',
+          iv: '',
+          authTag: '',
+          ciphertext: '',
+        } as any,
+      },
+    });
+
+    const result = await webhooksService.testWebhook(webhook.id, organization.id);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Webhook secret is not configured');
+  });
+
+  it('rejects organization mismatches when testing webhook deliveries', async () => {
+    const { organization: orgA } = await seedOrder('WEBHOOK-ORG-A');
+    const { organization: orgB } = await seedOrder('WEBHOOK-ORG-B');
+    const webhook = await webhooksService.createWebhook(createWebhookInput(), orgA.id);
+
+    await expect(webhooksService.testWebhook(webhook.id, orgB.id)).rejects.toThrow(NotFoundException);
+  });
+
+  it('re-encrypts legacy secrets before sending test payloads', async () => {
+    const { organization } = await seedOrder('WEBHOOK-LEGACY');
+    const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
+    await prisma.webhook.update({
+      where: { id: webhook.id },
+      data: {
+        secretEncrypted: { legacySecret: 'legacy-secret' } as any,
+      },
+    });
+
+    const axiosSpy = jest
+      .spyOn((webhooksService as any).axiosInstance, 'post')
+      .mockResolvedValue({ data: { ok: true } });
+
+    const result = await webhooksService.testWebhook(webhook.id, organization.id);
+    expect(result.success).toBe(true);
+
+    const stored = await prisma.webhook.findUnique({ where: { id: webhook.id } });
+    expect((stored?.secretEncrypted as Record<string, unknown>).version).toBe('aes-256-gcm');
+
+    axiosSpy.mockRestore();
+  });
 
   it('completes orders only when organization matches payload', async () => {
     const { organization, order } = await seedOrder('WEBHOOK-OK');

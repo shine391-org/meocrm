@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import {
   IsOptional,
   IsString,

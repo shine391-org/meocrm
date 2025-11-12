@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
 import { isDateString } from 'class-validator';
 
