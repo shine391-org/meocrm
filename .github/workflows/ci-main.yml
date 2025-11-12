@@ -30,6 +30,11 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
+      - name: Ensure pnpm path
+        run: |
+          corepack disable pnpm
+          echo "$PNPM_HOME" >> "$GITHUB_PATH"
+
       - name: Install deps
         run: pnpm -w install --frozen-lockfile
 
