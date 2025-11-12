@@ -47,7 +47,7 @@ jobs:
           fi
 
       - name: Generate Prisma Client
-        run: pnpm --filter @meocrm/api exec prisma generate
+        run: pnpm --filter @meocrm/api run prisma:generate
 
       - name: Build
         run: pnpm -w build

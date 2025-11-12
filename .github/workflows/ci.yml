@@ -56,7 +56,7 @@ jobs:
 
       # 5) Prisma generate
       - name: Generate Prisma Client
-        run: pnpm --filter @meocrm/api exec prisma generate
+        run: pnpm --filter @meocrm/api run prisma:generate
 
       # 6) Build
       - name: Build
