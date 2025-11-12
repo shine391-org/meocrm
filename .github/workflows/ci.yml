@@ -9,22 +9,53 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 1) Cài pnpm TRƯỚC (theo VM Jules)
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
         with:
-          version: 8
-      - uses: actions/setup-node@v4
+          version: 10.20.0
+          run_install: false
+
+      # 2) Setup Node + cache pnpm (Node 22.11.0)
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22.11.0'
           cache: 'pnpm'
 
+      # 3) Ổn định toolchain
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Print toolchain versions
+        run: |
+          node -v
+          pnpm -v
+
+      # 4) Cài dependencies
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm -w install --frozen-lockfile
 
+      # 5) Generate Prisma Client trước build/test
+      - name: Generate Prisma Client
+        run: pnpm --filter @meocrm/api exec prisma generate
+
+      # 6) Build
+      - name: Build
+        run: pnpm -w build
+
+      # 7) Run tests with coverage (in-band để tránh OOM)
       - name: Run tests with coverage
-        run: pnpm -w test -- --coverage
+        run: pnpm -w test -- --runInBand --coverage
 
+      # 8) Coverage threshold gate
       - name: Check coverage
         uses: anmol098/jest-coverage-check-action@v1
         with:
