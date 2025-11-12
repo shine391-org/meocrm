@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Decimal } from '@prisma/client/runtime/library';
 

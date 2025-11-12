@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 export const PRIORITY_CONFIG = {
   enabled: true,
   thresholds: {

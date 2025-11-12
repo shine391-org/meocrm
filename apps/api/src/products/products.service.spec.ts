@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProductsService } from './products.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 
@@ -185,6 +185,69 @@ describe('ProductsService', () => {
 
       const result = await service.remove('1', 'org1');
       expect(result).toEqual({ message: 'Product deleted successfully' });
+    });
+  });
+
+  describe('inventory helpers', () => {
+    it('generates SKU defaults when no previous product exists', async () => {
+      mockPrismaService.product.findFirst.mockResolvedValueOnce(null);
+      const sku = await service.generateSKU('org-1');
+      expect(sku).toBe('PRD001');
+    });
+
+    it('handles invalid numeric suffixes when generating SKU', async () => {
+      mockPrismaService.product.findFirst.mockResolvedValueOnce({ sku: 'PRDABC' });
+      const sku = await service.generateSKU('org-1');
+      expect(sku).toBe('PRD001');
+    });
+
+    it('generates variant SKUs with sequential suffixes', async () => {
+      mockPrismaService.productVariant.findFirst.mockResolvedValueOnce({ sku: 'PRD001-V01' });
+      const variantSku = await service.generateVariantSKU('PRD001', 'org-1');
+      expect(variantSku).toBe('PRD001-V02');
+    });
+  });
+
+  describe('variants', () => {
+    it('creates variant with generated SKU and defaults', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValueOnce({ id: 'prod-1', sku: 'PRD001' } as any);
+      jest.spyOn(service, 'generateVariantSKU').mockResolvedValueOnce('PRD001-V01');
+      mockPrismaService.productVariant.create.mockResolvedValue({ id: 'variant-1' });
+
+      const result = await service.createVariant('prod-1', { name: 'Size L', price: 100000 }, 'org-1');
+      expect(service.generateVariantSKU).toHaveBeenCalledWith('PRD001', 'org-1');
+      expect(result).toEqual({ id: 'variant-1' });
+    });
+
+    it('throws NotFoundException when updating missing variant', async () => {
+      mockPrismaService.productVariant.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        service.updateVariant('variant-404', { name: 'new' }, 'org-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('soft deletes variant when removeVariant is called', async () => {
+      const variant = { id: 'variant-1' };
+      mockPrismaService.productVariant.findFirst.mockResolvedValueOnce(variant as any);
+      mockPrismaService.productVariant.update.mockResolvedValue({ deletedAt: new Date() });
+
+      const result = await service.removeVariant('variant-1', 'org-1');
+      expect(mockPrismaService.productVariant.update).toHaveBeenCalledWith({
+        where: { id: 'variant-1' },
+        data: { deletedAt: expect.any(Date), isActive: false },
+      });
+      expect(result).toEqual({ message: 'Variant deleted successfully' });
+    });
+  });
+
+  describe('remove guards', () => {
+    it('throws ConflictException when product has variants', async () => {
+      mockPrismaService.product.findFirst.mockResolvedValueOnce({
+        id: 'prod-1',
+        variants: [{ id: 'var-1' }],
+      });
+
+      await expect(service.remove('prod-1', 'org-1')).rejects.toThrow(ConflictException);
     });
   });
 });

@@ -256,11 +256,30 @@ model Organization {
   stockAdjustments  StockAdjustment[]
   purchaseOrders    PurchaseOrder[]
   quotes            Quote[]
+  webhooks          Webhook[]
+  customerDebtSnapshots CustomerDebtSnapshot[]
+  settings              Setting[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("organizations")
+}
+
+model Setting {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  key       String
+  value     Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("settings")
 }
 
 model Branch {
@@ -467,6 +486,7 @@ model Customer {
   activities            Activity[]
   quotes                Quote[]
   commissions           Commission[]
+  debtSnapshots        CustomerDebtSnapshot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -496,6 +516,22 @@ model CustomerGroup {
 
   @@index([organizationId])
   @@map("customer_groups")
+}
+
+model CustomerDebtSnapshot {
+  id             String       @id @default(cuid())
+  organizationId String
+  customerId     String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  debtValue  Decimal  @db.Decimal(14, 2)
+  capturedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([organizationId, customerId])
+  @@unique([organizationId, customerId, capturedAt])
+  @@map("customer_debt_snapshots")
 }
 
 // Orders & Sales
@@ -537,6 +573,7 @@ model Order {
   createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  completedAt DateTime?
   deletedAt DateTime?
 
   @@index([organizationId])
@@ -1509,6 +1546,21 @@ model QuoteItem {
   @@index([quoteId])
   @@index([productId])
   @@map("quote_items")
+}
+
+model Webhook {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  url            String
+  secretEncrypted Json
+  events         String[]
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@map("webhooks")
 }
 
 model RefreshToken {
