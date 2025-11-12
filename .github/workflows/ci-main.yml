@@ -28,6 +28,7 @@ jobs:
         with:
           node-version: '22.11.0'
           cache: 'pnpm'
+          cache-dependency-path: pnpm-workspace.yaml
 
       - name: Enable corepack
         run: corepack enable
