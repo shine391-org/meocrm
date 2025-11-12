@@ -1,0 +1,578 @@
+openapi: 3.1.0
+info:
+  title: MeoCRM API
+  version: 1.0.0
+security:
+  - bearerAuth: []
+paths:
+  '/leads/{id}/priority:override':
+    post:
+      operationId: postLeadsPriorityOverride
+      summary: Override lead priority (manual)
+      description: Applies a manual priority override for a lead inside the caller's organization.
+      tags: [Leads]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [priority]
+              properties:
+                priority:
+                  $ref: '#/components/schemas/LeadPriority'
+      responses:
+        '200':
+          description: Priority override accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  priorityEffective:
+                    $ref: '#/components/schemas/LeadPriority'
+                  traceId:
+                    type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Lead not found inside tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  '/admin/commission-rules':
+    post:
+      operationId: postAdminCommissionRules
+      summary: Create commission rule
+      tags: [Commissions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name, type, config]
+              properties:
+                code:
+                  type: string
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [FLAT, TIERED, BONUS]
+                config:
+                  type: object
+                  additionalProperties: true
+                isActive:
+                  type: boolean
+                  default: true
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: Invalid payload or duplicated code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  '/commissions/payouts:run':
+    post:
+      operationId: postCommissionsPayoutsRun
+      summary: Run monthly payout for a period
+      tags: [Commissions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [period]
+              properties:
+                period:
+                  type: string
+                  description: YYYY-MM period identifier
+                payOn:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Batch paid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period:
+                    type: string
+                  totalAmount:
+                    type: string
+                  count:
+                    type: integer
+                  status:
+                    type: string
+                    enum: [PAID]
+                  traceId:
+                    type: string
+        '400':
+          description: Invalid period or payout already run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /orders:
+    get:
+      operationId: getOrders
+      summary: Get all orders
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, COMPLETED, CANCELLED]
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: A list of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+  '/orders/{id}':
+    get:
+      operationId: getOrdersById
+      summary: Get a single order
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A single order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+  '/orders/{id}/refund':
+    post:
+      operationId: postOrdersByIdRefund
+      summary: Request a refund for an order
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+      responses:
+        '202':
+          description: Refund request accepted
+  '/orders/{id}/refund/approve':
+    post:
+      operationId: postOrdersByIdRefundApprove
+      summary: Approve a refund request
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Refund request approved
+  '/orders/{id}/refund/reject':
+    post:
+      operationId: postOrdersByIdRefundReject
+      summary: Reject a refund request
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundReject'
+      responses:
+        '200':
+          description: Refund request rejected
+  /reports/debt:
+    get:
+      operationId: getDebtReport
+      summary: Get customer debt report
+      description: |
+        Retrieves a report of customer debt, grouped by day or month.
+        Returns the closing debt for each period.
+      tags: [Reports]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: groupBy
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [day, month]
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: A list of debt report items.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DebtReportItem'
+        '400':
+          description: Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+  /webhooks:
+    get:
+      operationId: getWebhooks
+      summary: List configured webhooks
+      tags: [Webhooks]
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Webhook'
+    post:
+      operationId: postWebhooks
+      summary: Create a webhook subscription
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+  '/webhooks/{id}':
+    patch:
+      operationId: patchWebhooksById
+      summary: Update a webhook subscription
+      tags: [Webhooks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookUpdateRequest'
+      responses:
+        '200':
+          description: Updated webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+  '/webhooks/{id}/test':
+    post:
+      operationId: postWebhooksByIdTest
+      summary: Send a test payload to a webhook
+      tags: [Webhooks]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test delivery result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookTestResponse'
+  /webhooks/handler:
+    post:
+      operationId: postWebhooksHandler
+      summary: Receive webhook callbacks from partners
+      tags: [Webhooks]
+      security: []
+      responses:
+        '204':
+          description: Payload accepted
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Order:
+      type: object
+      required: [id, code, status, subtotal, total, paymentMethod, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          description: Unique order code per organization.
+        organizationId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, COMPLETED, CANCELLED]
+        subtotal:
+          type: number
+          format: decimal
+        tax:
+          type: number
+          format: decimal
+        shipping:
+          type: number
+          format: decimal
+        discount:
+          type: number
+          format: decimal
+        total:
+          type: number
+          format: decimal
+        paymentMethod:
+          type: string
+          enum: [CASH, CARD, E_WALLET, BANK_TRANSFER, COD]
+        isPaid:
+          type: boolean
+        paidAmount:
+          type: number
+          format: decimal
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+    LeadPriority:
+      type: string
+      enum: [HIGH, MEDIUM, LOW, INACTIVE]
+    Error:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        traceId:
+          type: string
+    DebtReportItem:
+      type: object
+      required: [customerId, capturedAt, closingDebt]
+      properties:
+        period:
+          type: string
+          format: date-time
+          description: "Start of the period (day or month)"
+        capturedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the snapshot was captured.
+        customerId:
+          type: string
+          format: uuid
+        closingDebt:
+          type: number
+          format: decimal
+    Webhook:
+      type: object
+      required: [id, url, events, isActive, hasSecret, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+        hasSecret:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    WebhookCreateRequest:
+      type: object
+      required: [url, events, secret]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+        isActive:
+          type: boolean
+    WebhookUpdateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+        isActive:
+          type: boolean
+    WebhookTestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        deliveryId:
+          type: string
+    RefundRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Reason provided by staff for requesting the refund.
+    RefundReject:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Explanation describing why the refund was rejected.

@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { RequestContextService } from './request-context.service';

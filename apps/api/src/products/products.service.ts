@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
@@ -155,7 +156,7 @@ export class ProductsService {
     const updateData: any = {};
     if (dto.name) updateData.name = dto.name;
     if (dto.description !== undefined) updateData.description = dto.description;
-    if (dto.basePrice) updateData.sellPrice = dto.basePrice;
+    if (dto.basePrice !== undefined) updateData.sellPrice = dto.basePrice;
     if (dto.costPrice !== undefined) updateData.costPrice = dto.costPrice;
     if (dto.minStock !== undefined) updateData.minStock = dto.minStock;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
@@ -192,7 +193,7 @@ export class ProductsService {
         sellPrice: dto.price,
         stock: dto.inStock ?? 0,
         isActive: dto.isActive ?? true,
-        attributes: dto.attributes ?? undefined,
+        attributes: (dto.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
   }
@@ -212,10 +213,12 @@ export class ProductsService {
     if (!variant) throw new NotFoundException(`Variant ${id} not found`);
     const updateData: any = {};
     if (dto.name) updateData.name = dto.name;
-    if (dto.price) updateData.sellPrice = dto.price;
+    if (dto.price !== undefined) updateData.sellPrice = dto.price;
     if (dto.inStock !== undefined) updateData.stock = dto.inStock;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
-    if (dto.attributes !== undefined) updateData.attributes = dto.attributes;
+    if (dto.attributes !== undefined) {
+      updateData.attributes = dto.attributes as Prisma.InputJsonValue;
+    }
     return this.prisma.productVariant.update({ where: { id }, data: updateData });
   }
 

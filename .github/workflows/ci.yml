@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 1) pnpm BEFORE Node (VM Jules)
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.20.0
+          run_install: false
+
+      # 2) Node 22.11.0 + cache pnpm
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-workspace.yaml
+
+      # 3) Corepack
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Ensure pnpm path
+        run: |
+          corepack disable pnpm
+          echo "$PNPM_HOME" >> "$GITHUB_PATH"
+
+      - name: Print toolchain versions
+        run: |
+          node -v
+          pnpm -v
+
+      # 4) Install deps
+      - name: Install dependencies
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --recursive --frozen-lockfile
+          else
+            pnpm install --recursive --no-frozen-lockfile
+          fi
+
+      # 5) Prisma generate
+      - name: Generate Prisma Client
+        run: pnpm --filter @meocrm/api run prisma:generate
+
+      # 6) Build
+      - name: Build
+        run: pnpm -w build
+
+      # 7) Tests + coverage (Jest gate qua coverageThreshold)
+      - name: Run tests with coverage
+        run: pnpm -w test -- --runInBand --coverage

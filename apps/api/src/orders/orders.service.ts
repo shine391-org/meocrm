@@ -9,6 +9,7 @@ import { QueryOrdersDto } from './dto/query-orders.dto';
 import { Prisma, Order, OrderStatus } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { PricingService } from './pricing.service';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 type OrderFinancialInput = {
@@ -21,7 +22,10 @@ type OrderFinancialInput = {
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pricingService: PricingService,
+  ) {}
 
   async generateOrderCode(
     organizationId: string,
@@ -62,9 +66,15 @@ export class OrdersService {
         prisma,
       );
 
-      // 3. Calculate final total
-      const total =
-        subtotal + tax + (dto.shipping || 0) - (dto.discount || 0);
+      // 3. Calculate shipping and apply promotions (e.g., free ship)
+      const pricingResult = await this.pricingService.calculateTotals({
+        channel: dto.channel,
+        subtotal: subtotal,
+      });
+      const finalShippingFee = pricingResult.shippingFee;
+
+      // 4. Calculate final total
+      const total = subtotal + tax + finalShippingFee - (dto.discount || 0);
 
       if (dto.paidAmount && dto.paidAmount > total) {
         throw new BadRequestException(
@@ -88,7 +98,7 @@ export class OrdersService {
           customerId: dto.customerId,
           subtotal,
           tax,
-          shipping: dto.shipping || 0,
+          shipping: finalShippingFee,
           discount: dto.discount || 0,
           total,
           isPaid: dto.isPaid || false,

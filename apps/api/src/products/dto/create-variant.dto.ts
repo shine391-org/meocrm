@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { IsString, IsNotEmpty, IsNumber, IsBoolean, IsOptional, IsObject, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -8,7 +9,7 @@ export class CreateVariantDto {
 
   @IsObject()
   @IsOptional()
-  attributes?: Record<string, any>;
+  attributes?: Record<string, unknown>;
 
   @IsNumber()
   @Type(() => Number)

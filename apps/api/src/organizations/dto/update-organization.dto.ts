@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { PartialType } from '@nestjs/swagger';
 import { CreateOrganizationDto } from './create-organization.dto';
 

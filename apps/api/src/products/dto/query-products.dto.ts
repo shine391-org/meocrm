@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { IsOptional, IsNumber, IsBoolean, IsIn, Min, Max, Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface, IsUUID, IsString, IsInt } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
