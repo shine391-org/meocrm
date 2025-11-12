@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { AuditAction, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -7,6 +7,7 @@ interface AuditLogPayload {
   entity: string;
   entityId: string;
   action: string;
+  auditAction?: AuditAction;
   oldValues?: Record<string, unknown> | null;
   newValues?: Record<string, unknown> | null;
   ipAddress?: string;
@@ -22,6 +23,7 @@ export class AuditLogService {
     entity,
     entityId,
     action,
+    auditAction = AuditAction.UPDATE,
     oldValues,
     newValues,
     ipAddress,
@@ -35,6 +37,7 @@ export class AuditLogService {
       event: action,
       ...(newValues ?? {}),
     };
+    const canonicalAuditAction = this.ensureValidAuditAction(auditAction);
 
     return this.prisma.auditLog.create({
       data: {
@@ -42,7 +45,7 @@ export class AuditLogService {
         userId: user.id,
         entity,
         entityId,
-        action: this.mapAction(action),
+        action: canonicalAuditAction,
         oldValues: (oldValues ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         newValues: normalizedNewValues,
         ipAddress,
@@ -51,11 +54,11 @@ export class AuditLogService {
     });
   }
 
-  private mapAction(action: string): AuditAction {
+  private ensureValidAuditAction(action: AuditAction): AuditAction {
     const allowedActions = Object.values(AuditAction) as string[];
-    if (allowedActions.includes(action)) {
-      return action as AuditAction;
+    if (!allowedActions.includes(action)) {
+      throw new BadRequestException(`Invalid audit action: ${action}`);
     }
-    return AuditAction.UPDATE;
+    return action;
   }
 }

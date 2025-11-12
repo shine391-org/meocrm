@@ -12,6 +12,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bodyParser: false,
   });
+  const configService = app.get(ConfigService);
 
   app.use('/webhooks', express.raw({ type: '*/*' }));
 
@@ -26,8 +27,9 @@ async function bootstrap() {
     }
   };
 
-  app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true }));
-  app.use(bodyParser.json({ verify: rawBodyBuffer }));
+  const rawLimit = configService.get<string>('WEBHOOK_MAX_BODY', '1mb');
+  app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
+  app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -43,7 +45,6 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  const configService = app.get(ConfigService);
   const port = Number(
     configService.get<string>('PORT') ??
       configService.get<string>('API_PORT') ??

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Commission, CommissionStatus, OrderStatus, Prisma, User } from '@prisma/client';
+import { AuditAction, Commission, CommissionStatus, OrderStatus, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotificationsService } from '../modules/notifications/notifications.service';
@@ -39,6 +39,7 @@ export class RefundsService {
       entity: 'order',
       entityId: orderId,
       action: 'refund.requested',
+      auditAction: AuditAction.UPDATE,
       newValues: { reason: dto.reason },
     });
 
@@ -134,6 +135,7 @@ export class RefundsService {
       entity: 'order',
       entityId: orderId,
       action: 'refund.approved',
+      auditAction: AuditAction.UPDATE,
       newValues: {
         restocked: Boolean(restockOnRefund),
         adjustmentsCreated,
@@ -174,6 +176,7 @@ export class RefundsService {
       entity: 'order',
       entityId: orderId,
       action: 'refund.rejected',
+      auditAction: AuditAction.UPDATE,
       newValues: { reason: dto.reason },
     });
 

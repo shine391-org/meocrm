@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { SettingsService } from '../modules/settings/settings.service';
 
 interface OrderDraft {
@@ -18,6 +18,10 @@ export class PricingService {
   constructor(private readonly settingsService: SettingsService) {}
 
   async calculateTotals(orderDraft: OrderDraft): Promise<PricingResult> {
+    if (typeof orderDraft.subtotal !== 'number' || !Number.isFinite(orderDraft.subtotal) || orderDraft.subtotal < 0) {
+      throw new BadRequestException('Order subtotal must be a non-negative number');
+    }
+
     const freeShipThreshold =
       (await this.settingsService.get<number>('shipping.freeShipThreshold', 0)) ?? 0;
     const applyChannels =

@@ -44,18 +44,21 @@ export class WebhooksService implements OnModuleInit {
     this.axiosInstance.interceptors.response.use(
       (response: any) => response,
       async (error: any) => {
-        const config = error.config;
-        config.retryCount = config.retryCount || 0;
+        const config = error.config || {};
+        const status = error?.response?.status;
+        const shouldRetry =
+          (!status || status >= 500) &&
+          (config.retryCount ?? 0) < 5;
 
-        if (config.retryCount < 5) {
-          config.retryCount += 1;
-          const backoff = Math.pow(2, config.retryCount) * 1000;
-          this.logger.warn(`Retrying webhook to ${config.url} in ${backoff}ms...`);
-          await new Promise((resolve) => setTimeout(resolve, backoff));
-          return this.axiosInstance(config);
+        if (!shouldRetry) {
+          return Promise.reject(error);
         }
 
-        return Promise.reject(error);
+        config.retryCount = (config.retryCount || 0) + 1;
+        const backoff = Math.pow(2, config.retryCount) * 1000;
+        this.logger.warn(`Retrying webhook to ${config.url} in ${backoff}ms (attempt ${config.retryCount})...`);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+        return this.axiosInstance(config);
       },
     );
 

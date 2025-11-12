@@ -14,6 +14,7 @@ import {
   UserRole,
   Prisma,
   CommissionSource,
+  AuditAction,
 } from '@prisma/client';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -118,6 +119,7 @@ describe('RefundsService', () => {
         expect.objectContaining({
           user: mockUser,
           action: 'refund.requested',
+          auditAction: AuditAction.UPDATE,
           entityId: 'order-1',
           newValues: { reason: 'test' },
         }),
@@ -142,6 +144,7 @@ describe('RefundsService', () => {
         expect.objectContaining({
           user: mockUser,
           action: 'refund.rejected',
+          auditAction: AuditAction.UPDATE,
           entityId: 'order-1',
           newValues: { reason: 'test reject' },
         }),
