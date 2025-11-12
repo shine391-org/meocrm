@@ -71,6 +71,7 @@ describe('Refund approval integration', () => {
 
   beforeEach(async () => {
     await cleanupDatabase(prisma);
+    jest.clearAllMocks();
     notificationsMock.sendToStaff.mockClear();
     eventEmitterMock.emit.mockClear();
   });

@@ -27,7 +27,7 @@ describe('crypto util helpers', () => {
 
   it('validates AES key inputs', () => {
     expect(() => loadAesKeyFromHex()).toThrow('WEBHOOK_SECRET_KEY is not configured');
-    expect(() => loadAesKeyFromHex('abcd')).toThrow('WEBHOOK_SECRET_KEY must be a 32-byte hex string');
+    expect(() => loadAesKeyFromHex('abcd')).toThrow('WEBHOOK_SECRET_KEY must represent 32 bytes (64 hex chars)');
 
     const key = loadAesKeyFromHex(hexKey);
     expect(key).toBeInstanceOf(Buffer);

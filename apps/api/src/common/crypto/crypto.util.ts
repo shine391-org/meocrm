@@ -43,9 +43,12 @@ export const loadAesKeyFromHex = (hexKey?: string): Buffer => {
     throw new Error('WEBHOOK_SECRET_KEY is not configured');
   }
   const normalized = hexKey.trim();
+  if (!/^[0-9a-f]+$/i.test(normalized)) {
+    throw new Error('WEBHOOK_SECRET_KEY must be a hex string');
+  }
   const keyBuffer = Buffer.from(normalized, 'hex');
   if (keyBuffer.length !== KEY_LENGTH_BYTES) {
-    throw new Error('WEBHOOK_SECRET_KEY must be a 32-byte hex string');
+    throw new Error('WEBHOOK_SECRET_KEY must represent 32 bytes (64 hex chars)');
   }
   return keyBuffer;
 };
@@ -68,15 +71,19 @@ export const encryptSecret = (plaintext: string, key: Buffer): EncryptedSecretPa
 };
 
 export const decryptSecret = (payload: EncryptedSecretPayload, key: Buffer): string => {
-  const iv = Buffer.from(payload.iv, 'base64');
-  const authTag = Buffer.from(payload.authTag, 'base64');
-  const decipher = createDecipheriv(AES_GCM_ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
+  try {
+    const iv = Buffer.from(payload.iv, 'base64');
+    const authTag = Buffer.from(payload.authTag, 'base64');
+    const decipher = createDecipheriv(AES_GCM_ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
 
-  const plaintext = Buffer.concat([
-    decipher.update(Buffer.from(payload.ciphertext, 'base64')),
-    decipher.final(),
-  ]);
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(payload.ciphertext, 'base64')),
+      decipher.final(),
+    ]);
 
-  return plaintext.toString('utf8');
+    return plaintext.toString('utf8');
+  } catch (error) {
+    throw new Error('Failed to decrypt webhook secret');
+  }
 };

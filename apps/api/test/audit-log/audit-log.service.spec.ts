@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { AuditLogService } from '../../src/audit-log/audit-log.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { cleanupDatabase } from '../../src/test-utils';
+import { AuditAction } from '@prisma/client';
 
 describe('AuditLogService', () => {
   let prisma: PrismaService;
@@ -31,7 +32,7 @@ describe('AuditLogService', () => {
     ).rejects.toThrow('Audit logs require organization context');
   });
 
-  it('persists audit entries and maps unknown actions to UPDATE', async () => {
+  it('rejects unknown audit actions', async () => {
     const organization = await prisma.organization.create({
       data: { name: 'Audit Org', slug: `audit-${Date.now()}`, code: `AUD-${Date.now()}` },
     });
@@ -44,18 +45,15 @@ describe('AuditLogService', () => {
       },
     });
 
-    await auditLogService.log({
-      user: { id: user.id, organizationId: organization.id },
-      entity: 'order',
-      entityId: 'order-123',
-      action: 'custom.event',
-      newValues: { foo: 'bar' },
-    });
-
-    const logs = await prisma.auditLog.findMany();
-    expect(logs).toHaveLength(1);
-    expect(logs[0].action).toBe('UPDATE');
-    expect(logs[0].newValues).toMatchObject({ event: 'custom.event', foo: 'bar' });
+    await expect(
+      auditLogService.log({
+        user: { id: user.id, organizationId: organization.id },
+        entity: 'order',
+        entityId: 'order-123',
+        action: 'custom.event',
+        newValues: { foo: 'bar' },
+      }),
+    ).rejects.toThrow('Invalid audit action: custom.event');
   });
 
   it('preserves known audit actions without remapping', async () => {
@@ -75,7 +73,8 @@ describe('AuditLogService', () => {
       user: { id: user.id, organizationId: organization.id },
       entity: 'order',
       entityId: 'order-456',
-      action: 'CREATE',
+      action: 'order.created',
+      auditAction: AuditAction.CREATE,
     });
 
     const logs = await prisma.auditLog.findMany({ where: { entityId: 'order-456' } });
