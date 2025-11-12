@@ -7,18 +7,21 @@ if (API_BASE_URL && OpenAPI.BASE !== API_BASE_URL) {
   OpenAPI.BASE = API_BASE_URL;
 }
 
-OpenAPI.TOKEN = async () => {
-  const token = getBrowserToken();
-  return token ?? undefined;
-};
-
 OpenAPI.HEADERS = async () => {
-  if (typeof window === 'undefined') {
-    return {};
+  const headers: Record<string, string> = {};
+  const token = getBrowserToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  const organizationId = window.localStorage?.getItem('organizationId');
-  return organizationId ? { 'x-organization-id': organizationId } : {};
+  if (typeof window !== 'undefined') {
+    const organizationId = window.localStorage?.getItem('organizationId');
+    if (organizationId) {
+      headers['x-organization-id'] = organizationId;
+    }
+  }
+
+  return headers;
 };
 
 export * from '@meocrm/api-client';
