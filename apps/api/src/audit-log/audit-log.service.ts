@@ -16,6 +16,19 @@ interface AuditLogPayload {
 
 @Injectable()
 export class AuditLogService {
+  private static readonly ALLOWED_EVENT_PREFIXES = [
+    'order.',
+    'refund.',
+    'inventory.',
+    'shipping.',
+    'commission.',
+    'settings.',
+    'user.',
+    'product.',
+    'customer.',
+    'webhook.',
+  ];
+
   constructor(private readonly prisma: PrismaService) {}
 
   async log({
@@ -33,6 +46,7 @@ export class AuditLogService {
       throw new Error('Audit logs require organization context');
     }
 
+    this.ensureKnownAuditEvent(action);
     const normalizedNewValues: Prisma.InputJsonValue = {
       event: action,
       ...(newValues ?? {}),
@@ -60,5 +74,15 @@ export class AuditLogService {
       throw new BadRequestException(`Invalid audit action: ${action}`);
     }
     return action;
+  }
+
+  private ensureKnownAuditEvent(event: string) {
+    if (
+      !AuditLogService.ALLOWED_EVENT_PREFIXES.some((prefix) =>
+        event?.toLowerCase().startsWith(prefix),
+      )
+    ) {
+      throw new BadRequestException(`Invalid audit action: ${event}`);
+    }
   }
 }

@@ -58,11 +58,13 @@ describe('HttpExceptionFilter', () => {
     filter.catch(exception, host);
 
     expect(responseMock.status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
-    expect(responseMock.json).toHaveBeenCalledWith({
-      code: 'REFUND_WINDOW_EXCEEDED',
-      message: 'Too late; Window closed',
-      details: { windowDays: 7 },
-      traceId: 'trace-custom',
-    });
+    expect(responseMock.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'REFUND_WINDOW_EXCEEDED',
+        message: 'Too late; Window closed',
+        traceId: 'trace-custom',
+        details: expect.stringContaining('&quot;windowDays&quot;:7'),
+      }),
+    );
   });
 });

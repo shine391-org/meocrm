@@ -1,6 +1,16 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 
+const SOFT_DELETE_MODELS = [
+  'product',
+  'productVariant',
+  'customer',
+  'order',
+  'supplier',
+] as const;
+
+type SoftDeleteQueryableModel = (typeof SOFT_DELETE_MODELS)[number];
+
 const SOFT_DELETE_ACTIONS = [
   'findFirst',
   'findFirstOrThrow',
@@ -11,6 +21,7 @@ const SOFT_DELETE_ACTIONS = [
 ] as const;
 
 type SoftDeleteAction = (typeof SOFT_DELETE_ACTIONS)[number];
+
 const createSoftDeleteHandlers = () => {
   const handlers: Record<SoftDeleteAction, ({ args, query }: any) => Promise<any>> = {} as any;
 
@@ -39,23 +50,35 @@ const createSoftDeleteHandlers = () => {
 
 const softDeleteExtension = Prisma.defineExtension({
   name: 'softDelete',
-  query: {
-    product: createSoftDeleteHandlers(),
-    productVariant: createSoftDeleteHandlers(),
-    customer: createSoftDeleteHandlers(),
-    order: createSoftDeleteHandlers(),
-    supplier: createSoftDeleteHandlers(),
-  },
+  query: SOFT_DELETE_MODELS.reduce<Record<SoftDeleteQueryableModel, Record<SoftDeleteAction, any>>>(
+    (acc, model) => {
+      acc[model] = createSoftDeleteHandlers();
+      return acc;
+    },
+    {} as any,
+  ),
 });
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  private static instance: PrismaService | null = null;
+
   constructor() {
+    if (PrismaService.instance) {
+      return PrismaService.instance;
+    }
+
     super({
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     });
 
-    this.applySoftDeleteExtension();
+    const extendedClient = this.$extends(softDeleteExtension) as PrismaService;
+    extendedClient.onModuleInit = PrismaService.prototype.onModuleInit;
+    extendedClient.onModuleDestroy = PrismaService.prototype.onModuleDestroy;
+    extendedClient.cleanDatabase = PrismaService.prototype.cleanDatabase;
+
+    PrismaService.instance = extendedClient;
+    return PrismaService.instance;
   }
 
   async onModuleInit() {
@@ -87,8 +110,4 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     );
   }
 
-  private applySoftDeleteExtension() {
-    const extendedClient = this.$extends(softDeleteExtension);
-    Object.assign(this, extendedClient as PrismaClient);
-  }
 }

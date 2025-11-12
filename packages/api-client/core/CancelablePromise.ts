@@ -113,12 +113,14 @@ export class CancelablePromise<T> implements Promise<T> {
         this.#isCancelled = true;
         let handlerError: unknown = null;
         if (this.#cancelHandlers.length) {
-            try {
-                for (const cancelHandler of this.#cancelHandlers) {
+            for (const cancelHandler of this.#cancelHandlers) {
+                try {
                     cancelHandler();
+                } catch (error) {
+                    if (!handlerError) {
+                        handlerError = error;
+                    }
                 }
-            } catch (error) {
-                handlerError = error;
             }
         }
         this.#cancelHandlers.length = 0;

@@ -75,7 +75,8 @@ export class WebhooksController {
   @ApiOperation({ summary: 'List configured webhooks' })
   @ApiResponse({ status: 200, type: WebhookEntity, isArray: true })
   async list(@CurrentUser() user: User) {
-    return this.webhooksService.listWebhooks(user.organizationId);
+    const organizationId = this.ensureOrganizationContext(user);
+    return this.webhooksService.listWebhooks(organizationId);
   }
 
   @Post()
@@ -84,7 +85,8 @@ export class WebhooksController {
   @ApiOperation({ summary: 'Create a webhook subscription' })
   @ApiResponse({ status: 201, type: WebhookEntity })
   async create(@Body() dto: CreateWebhookDto, @CurrentUser() user: User) {
-    return this.webhooksService.createWebhook(dto, user.organizationId);
+    const organizationId = this.ensureOrganizationContext(user);
+    return this.webhooksService.createWebhook(dto, organizationId);
   }
 
   @Patch(':id')
@@ -93,7 +95,8 @@ export class WebhooksController {
   @ApiOperation({ summary: 'Update a webhook subscription' })
   @ApiResponse({ status: 200, type: WebhookEntity })
   async update(@Param('id') id: string, @Body() dto: UpdateWebhookDto, @CurrentUser() user: User) {
-    return this.webhooksService.updateWebhook(id, dto, user.organizationId);
+    const organizationId = this.ensureOrganizationContext(user);
+    return this.webhooksService.updateWebhook(id, dto, organizationId);
   }
 
   @Post(':id/test')
@@ -101,12 +104,19 @@ export class WebhooksController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   async testWebhook(@Param('id') id: string, @CurrentUser() user: User) {
+    const organizationId = this.ensureOrganizationContext(user);
+
+    return this.webhooksService.testWebhook(id, organizationId);
+  }
+
+  private ensureOrganizationContext(user: User): string {
     if (!user.organizationId) {
       throw new BadRequestException({
         code: 'USER_ORG_MISSING',
         message: 'User is not associated with an organization.',
       });
     }
-    return this.webhooksService.testWebhook(id, user.organizationId);
+
+    return user.organizationId;
   }
 }

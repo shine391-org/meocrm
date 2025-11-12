@@ -250,7 +250,7 @@ model Lead {
   organizationId     String
   organization       Organization @relation(fields: [organizationId], references: [id])
 
-  code               String?
+  code               String       @default(cuid())
   priorityAuto       LeadPriority @default(HIGH)
   priorityManual     LeadPriority?
   priorityUpdatedAt  DateTime     @default(now())
