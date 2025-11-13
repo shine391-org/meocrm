@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { Prisma } from '@prisma/client';
+import { CustomerSegmentationService } from './services/customer-segmentation.service';
 
 const CUSTOMER_SORTABLE_FIELDS: Array<keyof Prisma.CustomerOrderByWithRelationInput> = [
   'createdAt',
@@ -20,9 +21,16 @@ const CUSTOMER_SORTABLE_FIELDS: Array<keyof Prisma.CustomerOrderByWithRelationIn
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly segmentationService: CustomerSegmentationService,
+  ) {}
 
-  async create(dto: CreateCustomerDto, organizationId: string) {
+  async create(
+    dto: CreateCustomerDto,
+    organizationId: string,
+    userId: string
+  ) {
     const code = await this.generateCode(organizationId);
 
     const existingPhone = await this.prisma.customer.findFirst({
@@ -37,15 +45,26 @@ export class CustomersService {
       throw new ConflictException('Phone number already exists for this organization');
     }
 
-    return this.prisma.customer.create({
+    const customer = await this.prisma.customer.create({
       data: {
         ...dto,
         code,
-        organization: {
-          connect: { id: organizationId },
+        organizationId,
+        birthday: dto.birthday ? new Date(dto.birthday) : undefined,
+        creator: {
+          connect: { id: userId },
         },
       },
+      include: {
+        group: true,
+        creator: { select: { id: true, name: true, email: true } },
+      }
     });
+
+    // Initial segmentation
+    await this.segmentationService.updateSegment(customer.id);
+
+    return customer;
   }
 
   async findAll(
