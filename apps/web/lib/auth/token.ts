@@ -1,29 +1,31 @@
-type StorageLike = {
-  getItem(key: string): string | null;
+export const getBrowserToken = (): string | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const token = localStorage.getItem('accessToken');
+  if (token === 'null' || token === 'undefined') {
+    return null;
+  }
+  return token;
 };
 
-function resolveStorage(): StorageLike | null {
-  if (typeof globalThis === 'undefined') {
-    return null;
+export const setBrowserToken = (
+  accessToken: string,
+  refreshToken?: string
+): void => {
+  if (typeof window === 'undefined') {
+    return;
   }
-
-  const candidate = (globalThis as { localStorage?: StorageLike }).localStorage;
-  return candidate ?? null;
-}
-
-export function getBrowserToken(): string | null {
-  const storage = resolveStorage();
-  if (!storage) {
-    return null;
+  localStorage.setItem('accessToken', accessToken);
+  if (refreshToken) {
+    localStorage.setItem('refreshToken', refreshToken);
   }
+};
 
-  try {
-    const raw = storage.getItem('token');
-    if (!raw || raw === 'null' || raw === 'undefined') {
-      return null;
-    }
-    return raw;
-  } catch {
-    return null;
+export const clearBrowserToken = (): void => {
+  if (typeof window === 'undefined') {
+    return;
   }
-}
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+};
