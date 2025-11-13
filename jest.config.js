@@ -21,7 +21,7 @@ module.exports = {
     '!apps/api/src/**/dto/**',
     '!apps/api/src/**/entities/**',
   ],
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', '\\.e2e-spec\\.ts$'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
   roots: ['<rootDir>/apps/api'],

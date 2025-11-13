@@ -51,23 +51,4 @@ export class ProductsController {
     return this.productsService.remove(id, req.user.organizationId);
   }
 
-  @Post(':id/variants')
-  createVariant(@Param('id') id: string, @Body() dto: CreateVariantDto, @Req() req: any) {
-    return this.productsService.createVariant(id, dto, req.user.organizationId);
-  }
-
-  @Get(':id/variants')
-  findVariants(@Param('id') id: string, @Req() req: any) {
-    return this.productsService.findVariants(id, req.user.organizationId);
-  }
-
-  @Patch('variants/:id')
-  updateVariant(@Param('id') id: string, @Body() dto: UpdateVariantDto, @Req() req: any) {
-    return this.productsService.updateVariant(id, dto, req.user.organizationId);
-  }
-
-  @Delete('variants/:id')
-  removeVariant(@Param('id') id: string, @Req() req: any) {
-    return this.productsService.removeVariant(id, req.user.organizationId);
-  }
 }
