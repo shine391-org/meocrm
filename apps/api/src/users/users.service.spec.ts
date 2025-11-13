@@ -33,7 +33,7 @@ describe('UsersService', () => {
 
   describe('create', () => {
     it('hashes password, enforces unique email, and sanitizes response', async () => {
-      prisma.user.create.mockResolvedValue({
+      (prisma as any).user.create.mockResolvedValue({
         id: 'user_1',
         email: 'test@example.com',
         password: 'hashed-password',
@@ -46,7 +46,7 @@ describe('UsersService', () => {
         'org_1',
       );
 
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      expect((prisma as any).user.findUnique).toHaveBeenCalledWith({
         where: { email: 'test@example.com' },
         select: { id: true },
       });
@@ -61,7 +61,7 @@ describe('UsersService', () => {
     });
 
     it('throws if email already taken', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 'existing' } as any);
+      (prisma as any).user.findUnique.mockResolvedValue({ id: 'existing' } as any);
       await expect(
         service.create({ email: 'dup@example.com', password: '123456', name: 'Dup' }, 'org_1'),
       ).rejects.toThrow(ConflictException);
@@ -74,14 +74,14 @@ describe('UsersService', () => {
     });
 
     it('caps page size, applies filters, and sanitizes data', async () => {
-      prisma.user.findMany.mockResolvedValue([
+      (prisma as any).user.findMany.mockResolvedValue([
         { id: 'user_1', email: 'one@example.com', password: 'secret', name: 'One' } as any,
       ]);
-      prisma.user.count.mockResolvedValue(250);
+      (prisma as any).user.count.mockResolvedValue(250);
 
       const result = await service.findAll('org_1', { limit: 500, search: 'one', role: UserRole.ADMIN });
 
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect((prisma as any).user.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           take: 100,
           where: expect.objectContaining({
@@ -99,7 +99,7 @@ describe('UsersService', () => {
 
   describe('findOne', () => {
     it('throws when user is not found', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
+      (prisma as any).user.findFirst.mockResolvedValue(null);
       await expect(service.findOne('missing', 'org_1')).rejects.toThrow(NotFoundException);
     });
   });
@@ -107,21 +107,21 @@ describe('UsersService', () => {
   describe('update', () => {
     it('returns sanitized user when no changes provided', async () => {
       const existing = { id: 'user_1', email: 'test@example.com', name: 'Old', role: UserRole.STAFF } as any;
-      prisma.user.findFirst.mockResolvedValueOnce(existing);
+      (prisma as any).user.findFirst.mockResolvedValueOnce(existing);
 
       const result = await service.update('user_1', {}, 'org_1');
 
-      expect(prisma.user.updateMany).not.toHaveBeenCalled();
+      expect((prisma as any).user.updateMany).not.toHaveBeenCalled();
       expect(result).toEqual(expect.objectContaining({ email: 'test@example.com' }));
     });
 
     it('hashes password and updates email when provided', async () => {
       const existing = { id: 'user_1', email: 'old@example.com', name: 'Old', role: UserRole.STAFF } as any;
-      prisma.user.findFirst
+      (prisma as any).user.findFirst
         .mockResolvedValueOnce(existing)
         .mockResolvedValueOnce({ ...existing, email: 'new@example.com', name: 'New Name' });
-      prisma.user.updateMany.mockResolvedValue({ count: 1 });
-      prisma.user.findFirst.mockResolvedValueOnce(existing).mockResolvedValueOnce({
+      (prisma as any).user.updateMany.mockResolvedValue({ count: 1 });
+      (prisma as any).user.findFirst.mockResolvedValueOnce(existing).mockResolvedValueOnce({
         ...existing,
         email: 'new@example.com',
       });
@@ -132,7 +132,7 @@ describe('UsersService', () => {
         'org_1',
       );
 
-      expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      expect((prisma as any).user.updateMany).toHaveBeenCalledWith({
         where: { id: 'user_1', organizationId: 'org_1' },
         data: expect.objectContaining({
           email: 'new@example.com',
@@ -144,10 +144,38 @@ describe('UsersService', () => {
     });
 
     it('throws when attempting to update missing user', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
+      (prisma as any).user.findFirst.mockResolvedValue(null);
       await expect(
         service.update('user_missing', { name: 'Nope' }, 'org_1'),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should not update email if it is the same', async () => {
+      const existing = { id: 'user_1', email: 'test@example.com', name: 'Old', role: UserRole.STAFF } as any;
+      const updated = { ...existing, name: 'New Name' };
+      (prisma as any).user.findFirst.mockResolvedValueOnce(existing);
+      (prisma as any).user.updateMany.mockResolvedValue({ count: 1 });
+      (prisma as any).user.findFirst.mockResolvedValueOnce(updated);
+
+      const result = await service.update('user_1', { email: 'test@example.com', name: 'New Name' }, 'org_1');
+
+      expect((prisma as any).user.updateMany).toHaveBeenCalledWith({
+        where: { id: 'user_1', organizationId: 'org_1' },
+        data: expect.objectContaining({
+          name: 'New Name',
+        }),
+      });
+      expect(result.name).toBe('New Name');
+    });
+
+    it('throws if updated email is already taken', async () => {
+      const existing = { id: 'user_1', email: 'old@example.com' } as any;
+      (prisma as any).user.findFirst.mockResolvedValueOnce(existing);
+      (prisma as any).user.findUnique.mockResolvedValue({ id: 'existing_user_2' } as any);
+
+      await expect(
+        service.update('user_1', { email: 'new@example.com' }, 'org_1'),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -157,7 +185,7 @@ describe('UsersService', () => {
     });
 
     it('throws when deleteMany affects no records', async () => {
-      prisma.user.deleteMany.mockResolvedValue({ count: 0 });
+      (prisma as any).user.deleteMany.mockResolvedValue({ count: 0 });
       await expect(service.remove('user_2', 'org_1', 'user_1')).rejects.toThrow(NotFoundException);
     });
   });
