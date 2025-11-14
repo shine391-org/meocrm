@@ -1,11 +1,19 @@
 /* istanbul ignore file */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthService } from './auth/auth.service';
 import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import * as express from 'express';
+import * as bodyParser from 'body-parser';
+import {
+  createWebhookRawMiddleware,
+  resolveWebhookRawLimit,
+  WEBHOOK_RAW_BODY_DEFAULT,
+} from './config/server.config';
 
 export const DEFAULT_TEST_ORG_PREFIX = 'E2E_';
 
@@ -50,7 +58,7 @@ export async function cleanupTestOrganizations(
  * Sets up and returns a fully initialized NestJS application instance for E2E testing.
  * This includes creating a mock organization and user, and generating a valid JWT access token.
  */
-export async function setupTestApp(): Promise<{
+export async function setupTestApp(options: { skipCleanup?: boolean } = {}): Promise<{
   app: INestApplication;
   prisma: PrismaService;
   accessToken: string;
@@ -61,13 +69,33 @@ export async function setupTestApp(): Promise<{
     imports: [AppModule],
   }).compile();
 
-  const app = moduleFixture.createNestApplication();
+  const app = moduleFixture.createNestApplication({
+    bodyParser: false,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  const configService = app.get<ConfigService>(ConfigService);
+  const rawLimit = resolveWebhookRawLimit(configService, WEBHOOK_RAW_BODY_DEFAULT);
+  const rawBodyBuffer = (
+    req: express.Request & { rawBody?: string },
+    _res: express.Response,
+    buf: Buffer,
+    encoding: BufferEncoding,
+  ) => {
+    if (buf && buf.length) {
+      req.rawBody = buf.toString(encoding || 'utf8');
+    }
+  };
+  app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
+  app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
+  app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
 
   const prisma = app.get<PrismaService>(PrismaService);
   const authService = app.get<AuthService>(AuthService);
 
-  await cleanupTestOrganizations(prisma);
+  if (!options.skipCleanup) {
+    await cleanupTestOrganizations(prisma);
+  }
 
   const organization = await prisma.organization.create({
     data: {
@@ -94,6 +122,8 @@ export async function setupTestApp(): Promise<{
     email: user.email,
     password: 'password',
   } as any);
+
+  await app.init();
 
   return { app, prisma, accessToken, organizationId, userId };
 }

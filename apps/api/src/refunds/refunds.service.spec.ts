@@ -66,7 +66,7 @@ describe('RefundsService', () => {
             id: 'variant-1',
             productId: 'prod-1',
             sku: 'SKU-001',
-            sellPrice: 50 as any,
+            additionalPrice: 0 as any,
             name: 'Variant',
             organizationId: 'org-1',
             isActive: true,

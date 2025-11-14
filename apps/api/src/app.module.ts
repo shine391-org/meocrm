@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
@@ -22,6 +22,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { RefundsApiModule } from './refunds/refunds.module';
 import { CronModule } from './modules/cron/cron.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { RequestContextMiddleware } from './common/context/request-context.middleware';
 
 @Module({
   imports: [
@@ -57,4 +58,8 @@ import { ReportsModule } from './modules/reports/reports.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}

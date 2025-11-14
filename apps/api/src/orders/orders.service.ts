@@ -27,6 +27,34 @@ export class OrdersService {
     private readonly pricingService: PricingService,
   ) {}
 
+  private mapOrderResponse<T extends { subtotal: any; tax: any; shipping: any; discount: any; total: any; paidAmount: any; items?: any[] }>(
+    order: T,
+  ): T {
+    if (!order) {
+      return order;
+    }
+
+    const normalize = (value: Prisma.Decimal | number) =>
+      typeof value === 'number' ? value : Number(value);
+
+    return {
+      ...order,
+      subtotal: normalize(order.subtotal),
+      tax: normalize(order.tax),
+      shipping: normalize(order.shipping),
+      discount: normalize(order.discount),
+      total: normalize(order.total),
+      paidAmount: normalize(order.paidAmount),
+      items: Array.isArray(order.items)
+        ? order.items.map((item) => ({
+            ...item,
+            unitPrice: normalize(item.unitPrice),
+            subtotal: normalize(item.subtotal),
+          }))
+        : order.items,
+    };
+  }
+
   async generateOrderCode(
     organizationId: string,
     prisma?: PrismaTransactionalClient,
@@ -34,7 +62,7 @@ export class OrdersService {
     const db = prisma || this.prisma;
     const lastOrder = await db.order.findFirst({
       where: { organizationId, code: { startsWith: 'ORD' } },
-      orderBy: { code: 'desc' },
+      orderBy: { createdAt: 'desc' },
       select: { code: true },
     });
 
@@ -133,7 +161,7 @@ export class OrdersService {
         },
       });
 
-      return order;
+      return this.mapOrderResponse(order);
     });
   }
 
@@ -307,7 +335,8 @@ export class OrdersService {
         throw new NotFoundException(`Product ${item.productId} not found`);
       }
 
-      let unitPrice = Number(product.sellPrice);
+      const basePrice = Number(product.sellPrice);
+      let unitPrice = basePrice;
       let selectedVariant = null;
 
       if (item.variantId) {
@@ -315,7 +344,11 @@ export class OrdersService {
         if (!variant) {
           throw new NotFoundException(`Variant ${item.variantId} not found`);
         }
-        unitPrice = Number(variant.sellPrice);
+        const variantPrice = basePrice + Number(variant.additionalPrice ?? 0);
+        if (variantPrice <= 0) {
+          throw new BadRequestException('Variant price must be greater than zero');
+        }
+        unitPrice = variantPrice;
         selectedVariant = variant;
       }
 
@@ -390,8 +423,9 @@ export class OrdersService {
     return {
       data: orders.map((order) => {
         const { _count, ...rest } = order;
+        const normalized = this.mapOrderResponse(rest);
         return {
-          ...rest,
+          ...normalized,
           itemsCount: _count.items,
         };
       }),
@@ -422,7 +456,7 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${id} not found`);
     }
 
-    return order;
+    return this.mapOrderResponse(order);
   }
 
   async updateStatus(
@@ -459,7 +493,7 @@ export class OrdersService {
 
     // Customer stats are not adjusted for CANCELLED orders per clarification
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id },
       data: {
         status: dto.status,
@@ -478,5 +512,7 @@ export class OrdersService {
         },
       },
     });
+
+    return this.mapOrderResponse(updated);
   }
 }

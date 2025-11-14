@@ -1,6 +1,6 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 
 export const API_PORT_DEFAULT = 2003;
 export const PORT_MIN = 1;
@@ -28,8 +28,40 @@ export function resolveWebhookRawLimit(
   return configService.get<string>('WEBHOOK_MAX_BODY') ?? defaultLimit;
 }
 
+type RawRequest = Request & {
+  rawBody?: string;
+  _body?: boolean;
+};
+
 export function createWebhookRawMiddleware(limit: string) {
-  return express.raw({ type: '*/*', limit });
+  const rawParser = express.raw({ type: '*/*', limit });
+
+  return (req: RawRequest, res: Response, next: NextFunction) => {
+    rawParser(req, res, (err?: unknown) => {
+      if (err) {
+        return next(err);
+      }
+
+      if (Buffer.isBuffer(req.body)) {
+        req.rawBody = req.body.toString('utf8');
+        const contentType = req.headers['content-type'] ?? '';
+        const isJson =
+          typeof contentType === 'string' &&
+          contentType.toLowerCase().includes('application/json');
+
+        if (isJson && req.rawBody) {
+          try {
+            req.body = JSON.parse(req.rawBody);
+          } catch (parseError) {
+            return next(parseError);
+          }
+        }
+      }
+
+      req._body = true;
+      next();
+    });
+  };
 }
 
 function parsePort(value: string, source: 'PORT' | 'API_PORT'): number {
