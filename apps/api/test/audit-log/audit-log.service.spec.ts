@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { AuditLogService } from '../../src/audit-log/audit-log.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { PrismaModule } from '../../src/prisma/prisma.module';
 import { cleanupDatabase } from '../../src/test-utils';
 import { AuditAction } from '@prisma/client';
 
@@ -10,13 +11,8 @@ describe('AuditLogService', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      providers: [
-        {
-          provide: PrismaService,
-          useFactory: () => PrismaService.getInstance(),
-        },
-        AuditLogService,
-      ],
+      imports: [PrismaModule],
+      providers: [AuditLogService],
     }).compile();
 
     prisma = moduleRef.get(PrismaService);
