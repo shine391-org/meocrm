@@ -21,6 +21,8 @@ describe('ProductsService', () => {
     productVariant: {
       findMany: jest.fn(),
       create: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
     },
     $transaction: jest.fn().mockImplementation((promises) => Promise.all(promises)),
   };

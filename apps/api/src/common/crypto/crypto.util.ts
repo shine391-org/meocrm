@@ -84,6 +84,7 @@ export const decryptSecret = (payload: EncryptedSecretPayload, key: Buffer): str
 
     return plaintext.toString('utf8');
   } catch (error) {
+    void error;
     throw new Error('Failed to decrypt webhook secret');
   }
 };

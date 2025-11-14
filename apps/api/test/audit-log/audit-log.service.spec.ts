@@ -10,7 +10,13 @@ describe('AuditLogService', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      providers: [PrismaService, AuditLogService],
+      providers: [
+        {
+          provide: PrismaService,
+          useFactory: () => PrismaService.getInstance(),
+        },
+        AuditLogService,
+      ],
     }).compile();
 
     prisma = moduleRef.get(PrismaService);

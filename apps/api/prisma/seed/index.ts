@@ -22,7 +22,7 @@ function ensureSafeEnvironment() {
 }
 
 async function clearDatabase() {
-  const env = ensureSafeEnvironment();
+  ensureSafeEnvironment();
 
   console.log('🗑️  Clearing existing data (transaction)...');
   await prisma.$transaction(async (tx) => {

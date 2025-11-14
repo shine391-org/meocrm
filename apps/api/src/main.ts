@@ -1,6 +1,6 @@
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
-import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestFactory } from '@nestjs/core';
@@ -12,8 +12,6 @@ import {
   resolveWebhookRawLimit,
   WEBHOOK_RAW_BODY_DEFAULT,
 } from './config/server.config';
-
-const routeLogger = new Logger('RouteLogger');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -75,42 +73,40 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.listen(port);
+
+  const env = (process.env.NODE_ENV ?? 'development').toLowerCase();
+  if (env !== 'production') {
+    const server = typeof app.getHttpServer === 'function' ? app.getHttpServer() : null;
+    const requestHandlers = server?._events?.request;
+    const primaryRouter = server?._events?.request?._router;
+    const arrayRouter =
+      Array.isArray(requestHandlers) && requestHandlers.length
+        ? requestHandlers.find((handler: any) => handler?._router)?. _router
+        : undefined;
+    const httpAdapter = typeof app.getHttpAdapter === 'function' ? app.getHttpAdapter() : null;
+    const expressInstance = httpAdapter?.getInstance?.();
+    const adapterRouter = expressInstance?.router ?? expressInstance?._router;
+    const router = primaryRouter ?? arrayRouter ?? adapterRouter;
+    const stack = Array.isArray(router?.stack) ? router.stack : null;
+    if (stack?.length) {
+      console.log('\n📍 Registered Routes:');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      stack
+        .filter((layer: any) => layer?.route)
+        .forEach((layer: any) => {
+          const methods = Object.keys(layer.route.methods ?? {})
+            .map((method) => method.toUpperCase())
+            .join(', ');
+          const paddedMethods = (methods || 'ALL').padEnd(10);
+          console.log(`  ${paddedMethods} ${layer.route.path}`);
+        });
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    } else {
+      console.log('⚠️  Route logging skipped: router stack unavailable.');
+    }
+  }
+
   console.log(`🚀 API running on: http://localhost:${port}`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api`);
-  logRegisteredRoutes(app);
 }
 bootstrap();
-
-function logRegisteredRoutes(app: INestApplication) {
-  const env = (process.env.NODE_ENV ?? 'development').toLowerCase();
-  if (env !== 'development') {
-    return;
-  }
-
-  try {
-    const httpAdapter = app.getHttpAdapter?.();
-    const instance = httpAdapter?.getInstance?.();
-    const routerStack = instance?._router?.stack;
-    if (!Array.isArray(routerStack)) {
-      return;
-    }
-
-    const routes = routerStack
-      .filter((layer) => layer?.route?.path)
-      .map((layer) => {
-        const methods = Object.entries(layer.route.methods ?? {})
-          .filter(([, enabled]) => enabled)
-          .map(([method]) => method.toUpperCase())
-          .join('|');
-        return `${methods || 'ALL'} ${layer.route.path}`;
-      });
-
-    if (routes.length) {
-      routeLogger.debug(`Registered routes (${routes.length}):\n${routes.join('\n')}`);
-    }
-  } catch (error) {
-    routeLogger.warn(
-      `Route logging skipped: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
