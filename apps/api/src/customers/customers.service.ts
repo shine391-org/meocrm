@@ -1,8 +1,8 @@
-import { 
-  Injectable, 
-  NotFoundException, 
+import {
+  Injectable,
+  NotFoundException,
   BadRequestException,
-  ConflictException 
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -26,11 +26,7 @@ export class CustomersService {
     private readonly segmentationService: CustomerSegmentationService,
   ) {}
 
-  async create(
-    dto: CreateCustomerDto,
-    organizationId: string,
-    userId: string
-  ) {
+  async create(dto: CreateCustomerDto, organizationId: string, userId: string) {
     const code = await this.generateCode(organizationId);
 
     const existingPhone = await this.prisma.customer.findFirst({
@@ -45,12 +41,16 @@ export class CustomersService {
       throw new ConflictException('Phone number already exists for this organization');
     }
 
+    const { birthday, ...rest } = dto;
+
     const customer = await this.prisma.customer.create({
       data: {
-        ...dto,
+        ...rest,
         code,
-        organizationId,
-        birthday: dto.birthday ? new Date(dto.birthday) : undefined,
+        organization: {
+          connect: { id: organizationId },
+        },
+        birthday: birthday ? new Date(birthday) : undefined,
         creator: {
           connect: { id: userId },
         },
@@ -58,13 +58,12 @@ export class CustomersService {
       include: {
         group: true,
         creator: { select: { id: true, name: true, email: true } },
-      }
+      },
     });
 
-    // Initial segmentation
-    await this.segmentationService.updateSegment(customer.id);
+    const segment = await this.segmentationService.updateSegment(customer.id, organizationId);
 
-    return customer;
+    return segment ? { ...customer, segment } : customer;
   }
 
   async findAll(
@@ -154,10 +153,22 @@ export class CustomersService {
       }
     }
 
-    return this.prisma.customer.update({
-      where: { id },
-      data: dto,
+    const { birthday, ...rest } = dto;
+
+    await this.prisma.customer.update({
+      where: {
+        organizationId_id: {
+          id,
+          organizationId,
+        },
+      },
+      data: {
+        ...rest,
+        birthday: birthday ? new Date(birthday) : undefined,
+      },
     });
+
+    return this.findOne(id, organizationId);
   }
 
   async remove(id: string, organizationId: string) {
@@ -185,7 +196,12 @@ export class CustomersService {
     }
 
     await this.prisma.customer.update({
-      where: { id },
+      where: {
+        organizationId_id: {
+          id,
+          organizationId,
+        },
+      },
       data: { deletedAt: new Date() },
     });
 

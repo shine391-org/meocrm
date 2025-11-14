@@ -4,9 +4,10 @@ import { CustomersService } from './customers.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CustomerSegmentationService } from './services/customer-segmentation.service';
 import { CustomerStatsService } from './services/customer-stats.service';
+import { SettingsModule } from '../modules/settings/settings.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, SettingsModule],
   controllers: [CustomersController],
   providers: [
     CustomersService,

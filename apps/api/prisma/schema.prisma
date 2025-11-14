@@ -320,15 +320,16 @@ model User {
   name     String
   role     UserRole @default(STAFF)
 
-  auditLogs     AuditLog[]
-  cashRegisters CashRegister[]
-  appointments  Appointment[]
-  tasks         Task[]
-  activities    Activity[]
-  attendances   Attendance[]
-  timesheets    Timesheet[]
-  refreshTokens RefreshToken[]
-  leadsAssigned Lead[]        @relation("LeadAssignedUser")
+  auditLogs        AuditLog[]
+  cashRegisters    CashRegister[]
+  appointments     Appointment[]
+  tasks            Task[]
+  activities       Activity[]
+  attendances      Attendance[]
+  timesheets       Timesheet[]
+  refreshTokens    RefreshToken[]
+  leadsAssigned    Lead[]        @relation("LeadAssignedUser")
+  customersCreated Customer[]   @relation("CustomerCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -457,12 +458,12 @@ model Customer {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
 
-  code  String  @unique
-  name  String
-  phone String
-  email String?
+  code    String
+  name    String
+  phone   String
+  email   String?
+  address String?
 
-  address  String?
   province String?
   district String?
   ward     String?
@@ -472,6 +473,10 @@ model Customer {
   totalOrders Int       @default(0)
   debt        Decimal   @default(0) @db.Decimal(12, 2)
   lastOrderAt DateTime?
+  birthday    DateTime?
+
+  creatorId String?
+  creator   User? @relation("CustomerCreatedBy", fields: [creatorId], references: [id])
 
   groupId String?
   group   CustomerGroup? @relation(fields: [groupId], references: [id])
@@ -490,10 +495,13 @@ model Customer {
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
+  @@unique([organizationId, code])
+  @@unique([organizationId, id])
   @@index([organizationId])
   @@index([code])
   @@index([phone])
   @@index([groupId])
+  @@index([creatorId])
   @@map("customers")
 }
 

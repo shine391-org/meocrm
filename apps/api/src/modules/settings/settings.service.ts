@@ -20,6 +20,14 @@ export class SettingsService {
   async get<T>(key: string, defaultValue?: T): Promise<T | undefined> {
     const organizationId = this.getOrganizationId();
 
+    return this.getForOrganization(organizationId, key, defaultValue);
+  }
+
+  async getForOrganization<T>(
+    organizationId: string,
+    key: string,
+    defaultValue?: T,
+  ): Promise<T | undefined> {
     const setting = await this.prisma.setting.findUnique({
       where: {
         organizationId_key: {

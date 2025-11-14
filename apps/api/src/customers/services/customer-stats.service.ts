@@ -23,8 +23,22 @@ export class CustomerStatsService {
   ): Promise<void> {
     const prisma = tx || this.prisma;
 
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, deletedAt: null },
+      select: { organizationId: true },
+    });
+
+    if (!customer) {
+      return;
+    }
+
     await prisma.customer.update({
-      where: { id: customerId },
+      where: {
+        organizationId_id: {
+          id: customerId,
+          organizationId: customer.organizationId,
+        },
+      },
       data: {
         totalSpent: { increment: orderTotal },
         totalOrders: { increment: 1 },
@@ -34,7 +48,7 @@ export class CustomerStatsService {
 
     // Update segment (outside transaction to avoid deadlock)
     if (!tx) {
-      await this.segmentationService.updateSegment(customerId);
+      await this.segmentationService.updateSegment(customerId, customer.organizationId);
     }
   }
 
@@ -49,11 +63,12 @@ export class CustomerStatsService {
   ): Promise<void> {
     const prisma = tx || this.prisma;
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, deletedAt: null },
       select: {
         totalSpent: true,
         totalOrders: true,
+        organizationId: true,
       },
     });
 
@@ -64,7 +79,12 @@ export class CustomerStatsService {
     const newTotalOrders = Math.max(0, customer.totalOrders - 1);
 
     await prisma.customer.update({
-      where: { id: customerId },
+      where: {
+        organizationId_id: {
+          id: customerId,
+          organizationId: customer.organizationId,
+        },
+      },
       data: {
         totalSpent: newTotalSpent,
         totalOrders: newTotalOrders,
@@ -73,7 +93,7 @@ export class CustomerStatsService {
 
     // Update segment
     if (!tx) {
-      await this.segmentationService.updateSegment(customerId);
+      await this.segmentationService.updateSegment(customerId, customer.organizationId);
     }
   }
 
@@ -87,8 +107,22 @@ export class CustomerStatsService {
   ): Promise<void> {
     const prisma = tx || this.prisma;
 
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, deletedAt: null },
+      select: { organizationId: true },
+    });
+
+    if (!customer) {
+      return;
+    }
+
     await prisma.customer.update({
-      where: { id: customerId },
+      where: {
+        organizationId_id: {
+          id: customerId,
+          organizationId: customer.organizationId,
+        },
+      },
       data: {
         debt: { increment: amount },
       },

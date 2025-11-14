@@ -1,9 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { setupTestApp, TestContext } from '../src/test-utils';
+import request from 'supertest';
+import { AppModule } from '../../src/app.module';
+import { PrismaService } from '../../src/prisma/prisma.service';
+import { cleanupTestOrganizations, setupTestApp, TestContext } from '../../src/test-utils';
+import { CustomerStatsService } from '../../src/customers/services/customer-stats.service';
 
 describe('Customers E2E', () => {
   let app: INestApplication;
@@ -21,8 +22,7 @@ describe('Customers E2E', () => {
   });
 
   beforeEach(async () => {
-    await prisma.customer.deleteMany({});
-    await prisma.organization.deleteMany({});
+    await cleanupTestOrganizations(prisma);
   });
 
   it('should create a customer and auto-generate code', async () => {
@@ -61,7 +61,7 @@ describe('Customers E2E', () => {
 
   it('should update customer and segment', async () => {
     const { token, organization } = await testContext.createUserAndOrg();
-    const statsService = app.get('CustomerStatsService');
+    const statsService = app.get(CustomerStatsService);
 
     const { body: customer } = await request(app.getHttpServer())
       .post('/customers')

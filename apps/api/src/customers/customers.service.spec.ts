@@ -56,28 +56,29 @@ describe('CustomersService', () => {
   });
 
   describe('create', () => {
-    it('creates a customer, saves createdBy, and calls segmentation', async () => {
+    it('creates a customer, saves creator, and calls segmentation', async () => {
       const dto = { name: 'Test Customer', phone: '0987654321' };
-      const expected = { id: '1', code: 'KH000001', ...dto };
+      const created = { id: '1', code: 'KH000001', ...dto, segment: null };
 
       prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
       prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
-      prisma.customer.create.mockResolvedValue(expected);
+      prisma.customer.create.mockResolvedValue(created);
       segmentationService.updateSegment.mockResolvedValue('Regular');
 
       const result = await service.create(dto, organizationId, userId);
 
       expect(prisma.customer.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          ...dto,
+          name: dto.name,
+          phone: dto.phone,
           code: 'KH000001',
-          organizationId,
-          createdBy: userId,
+          organization: { connect: { id: organizationId } },
+          creator: { connect: { id: userId } },
         }),
         include: expect.any(Object),
       });
-      expect(segmentationService.updateSegment).toHaveBeenCalledWith('1');
-      expect(result).toEqual(expected);
+      expect(segmentationService.updateSegment).toHaveBeenCalledWith('1', organizationId);
+      expect(result).toEqual({ ...created, segment: 'Regular' });
     });
 
     it('throws when phone already exists', async () => {
@@ -129,13 +130,14 @@ describe('CustomersService', () => {
     it('updates customer details', async () => {
       prisma.customer.findFirst
         .mockResolvedValueOnce({ id: '1', phone: '111', organizationId }) // findOne
-        .mockResolvedValueOnce(null); // duplicate phone check
+        .mockResolvedValueOnce(null) // duplicate phone check
+        .mockResolvedValueOnce({ id: '1', name: 'Updated' }); // findOne after update
       prisma.customer.update.mockResolvedValue({ id: '1', name: 'Updated' });
 
       const result = await service.update('1', { name: 'Updated', phone: '222' }, organizationId);
 
       expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { id: '1' },
+        where: { organizationId_id: { id: '1', organizationId } },
         data: { name: 'Updated', phone: '222' },
       });
       expect(result).toEqual({ id: '1', name: 'Updated' });
@@ -158,7 +160,7 @@ describe('CustomersService', () => {
       const result = await service.remove('1', organizationId);
 
       expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { id: '1' },
+        where: { organizationId_id: { id: '1', organizationId } },
         data: { deletedAt: expect.any(Date) },
       });
       expect(result.message).toBe('Customer deleted successfully');

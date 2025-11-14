@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthService } from './auth/auth.service';
-import { UserRole } from '@prisma/client';
+import { Organization, User, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
@@ -58,13 +58,20 @@ export async function cleanupTestOrganizations(
  * Sets up and returns a fully initialized NestJS application instance for E2E testing.
  * This includes creating a mock organization and user, and generating a valid JWT access token.
  */
-export async function setupTestApp(options: { skipCleanup?: boolean } = {}): Promise<{
+type SetupTestAppResult = {
   app: INestApplication;
   prisma: PrismaService;
   accessToken: string;
   organizationId: string;
   userId: string;
-}> {
+  createUserAndOrg: (codePrefix?: string) => Promise<{
+    token: string;
+    organization: Organization;
+    user: User;
+  }>;
+};
+
+export async function setupTestApp(options: { skipCleanup?: boolean } = {}): Promise<SetupTestAppResult> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
@@ -123,10 +130,44 @@ export async function setupTestApp(options: { skipCleanup?: boolean } = {}): Pro
     password: 'password',
   } as any);
 
+  const createUserAndOrg = async (codePrefix?: string) => {
+    const normalizedPrefix = (codePrefix ?? DEFAULT_TEST_ORG_PREFIX).toUpperCase();
+    const organization = await prisma.organization.create({
+      data: {
+        name: `Test Organization ${normalizedPrefix}`,
+        slug: `test-org-${normalizedPrefix.toLowerCase()}-${Date.now()}`,
+        code: `${normalizedPrefix}${Date.now()}`,
+      },
+    });
+
+    const email = `test-user-${Date.now()}@${normalizedPrefix.toLowerCase()}.com`;
+    const password = 'password';
+    const hashed = await bcrypt.hash(password, 10);
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        name: `E2E User ${normalizedPrefix}`,
+        password: hashed,
+        organizationId: organization.id,
+        role: UserRole.OWNER,
+      },
+    });
+
+    const { accessToken: token } = await authService.login({ email, password } as any);
+
+    return {
+      token,
+      organization,
+      user: newUser,
+    };
+  };
+
   await app.init();
 
-  return { app, prisma, accessToken, organizationId, userId };
+  return { app, prisma, accessToken, organizationId, userId, createUserAndOrg };
 }
+
+export type TestContext = Awaited<ReturnType<typeof setupTestApp>>;
 
 export async function createOrganization(prisma: PrismaService) {
   return prisma.organization.create({
