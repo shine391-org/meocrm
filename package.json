@@ -25,7 +25,6 @@
     "@types/uuid": "^9.0.8",
     "@typescript-eslint/eslint-plugin": "^8.46.3",
     "@typescript-eslint/parser": "^8.46.3",
-    "axios": "^1.13.2",
     "concurrently": "^8.2.2",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
@@ -38,6 +37,7 @@
   "dependencies": {
     "@nestjs/event-emitter": "^3.0.1",
     "@nestjs/schedule": "^6.0.1",
+    "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "uuid": "^9.0.1"
   }
