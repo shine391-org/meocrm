@@ -77,7 +77,7 @@ describe('RefundsService', () => {
             createdAt: new Date(),
             updatedAt: new Date(),
           },
-        },
+        } as unknown as OrderItem & { variant: ProductVariant | null },
       ],
     } as Order & { items: (OrderItem & { variant: ProductVariant | null })[]; commissions: any[] };
     return { ...baseOrder, ...overrides };

@@ -13,6 +13,7 @@ describe('ProductsService', () => {
       create: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+      update: jest.fn(),
       updateMany: jest.fn(),
     },
     category: {
