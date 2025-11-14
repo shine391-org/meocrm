@@ -1,13 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 
-const SOFT_DELETE_MODELS = [
-  'product',
-  'productVariant',
-  'customer',
-  'order',
-  'supplier',
-] as const;
+const SOFT_DELETE_MODELS = ['product', 'customer', 'order', 'supplier'] as const;
 
 type SoftDeleteQueryableModel = (typeof SOFT_DELETE_MODELS)[number];
 

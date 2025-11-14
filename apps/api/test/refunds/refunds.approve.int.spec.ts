@@ -131,7 +131,7 @@ describe('Refund approval integration', () => {
         productId: product.id,
         sku: `VAR-${Date.now()}`,
         name: 'Variant',
-        sellPrice: 100000,
+        additionalPrice: -50000,
         stock: VARIANT_STOCK,
       },
     });

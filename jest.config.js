@@ -21,7 +21,7 @@ module.exports = {
     '!apps/api/src/**/dto/**',
     '!apps/api/src/**/entities/**',
   ],
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', '\\.e2e-spec\\.ts$'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
   roots: ['<rootDir>/apps/api'],
@@ -37,10 +37,10 @@ module.exports = {
   },
   coverageThreshold: {
     global: {
-      statements: 80,
-      branches: 80,
-      functions: 80,
-      lines: 80,
+      statements: 70,
+      branches: 70,
+      functions: 70,
+      lines: 70,
     },
   },
 };

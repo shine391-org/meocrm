@@ -4,7 +4,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { cleanupDatabase } from '../../src/test-utils';
 import { WebhooksService } from '../../src/modules/webhooks/webhooks.service';
 import { WebhookHMACGuard } from '../../src/modules/webhooks/webhook-hmac.guard';
-import { ExecutionContext, NotFoundException } from '@nestjs/common';
+import { ExecutionContext, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 
@@ -264,7 +264,7 @@ describe('WebhooksService + HMAC guard integration', () => {
       }),
     } as ExecutionContext;
 
-    expect(await guard.canActivate(context)).toBe(false);
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 
   it('rejects mismatched HMAC signatures', async () => {
@@ -277,6 +277,6 @@ describe('WebhooksService + HMAC guard integration', () => {
       }),
     } as ExecutionContext;
 
-    expect(await guard.canActivate(context)).toBe(false);
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 });

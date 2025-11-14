@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable, Logger } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 import * as crypto from 'crypto';
@@ -18,18 +24,18 @@ export class WebhookHMACGuard implements CanActivate {
 
     if (!signature) {
       this.logger.warn('Missing X-MeoCRM-Signature header');
-      return false;
+      throw new UnauthorizedException('Missing webhook signature');
     }
 
     const secret = this.configService.get<string>('WEBHOOK_SECRET');
     if (!secret) {
       this.logger.error('WEBHOOK_SECRET is not configured');
-      return false;
+      throw new UnauthorizedException('Webhook secret is not configured');
     }
 
     if (!/^[0-9a-f]+$/i.test(signature)) {
       this.logger.warn('Signature is not a valid hex digest');
-      return false;
+      throw new UnauthorizedException('Invalid webhook signature format');
     }
 
     const rawBody =
@@ -44,7 +50,7 @@ export class WebhookHMACGuard implements CanActivate {
 
     if (digest.length !== checksum.length || !crypto.timingSafeEqual(digest, checksum)) {
       this.logger.warn('Invalid signature');
-      return false;
+      throw new UnauthorizedException('Invalid webhook signature');
     }
 
     return true;
