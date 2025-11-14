@@ -22,8 +22,10 @@ describe('Product Variants E2E', () => {
   });
 
   beforeEach(async () => {
-    await prisma.productVariant.deleteMany();
-    await prisma.product.deleteMany();
+    await prisma.orderItem.deleteMany({ where: { organizationId } });
+    await prisma.order.deleteMany({ where: { organizationId } });
+    await prisma.productVariant.deleteMany({ where: { organizationId } });
+    await prisma.product.deleteMany({ where: { organizationId } });
   });
 
   it('should create product with 3 variants', async () => {
@@ -50,6 +52,40 @@ describe('Product Variants E2E', () => {
         where: { productId: response.body.id },
     });
     expect(variantsInDb).toHaveLength(3);
+  });
+
+  it('allows variants with negative additional price as long as total price stays positive', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/products')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        sku: 'VDNT10',
+        name: 'Ví da xanh',
+        costPrice: 100000,
+        sellPrice: 200000,
+        variants: [
+          { name: 'Sale', additionalPrice: -50000, stock: 2 },
+        ],
+      })
+      .expect(201);
+
+    expect(response.body.variants[0].name).toBe('Sale');
+  });
+
+  it('rejects variants whose price would drop below zero', async () => {
+    await request(app.getHttpServer())
+      .post('/products')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        sku: 'VDNT11',
+        name: 'Ví da đỏ',
+        costPrice: 50000,
+        sellPrice: 60000,
+        variants: [
+          { name: 'Invalid', additionalPrice: -70000, stock: 1 },
+        ],
+      })
+      .expect(400);
   });
 
   it('should update variant stock independently', async () => {
@@ -86,7 +122,7 @@ describe('Product Variants E2E', () => {
   });
 
   it('should enforce tenant isolation', async () => {
-    const anotherSetup = await setupTestApp();
+    const anotherSetup = await setupTestApp({ skipCleanup: true });
 
     const product = await prisma.product.create({
         data: {

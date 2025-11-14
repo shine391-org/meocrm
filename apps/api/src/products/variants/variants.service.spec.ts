@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { VariantsService } from './variants.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
 const mockPrismaService = {
   product: {
@@ -11,8 +11,8 @@ const mockPrismaService = {
     findFirst: jest.fn(),
     create: jest.fn(),
     findMany: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
+    updateMany: jest.fn(),
+    deleteMany: jest.fn(),
   },
 };
 
@@ -33,85 +33,129 @@ describe('VariantsService', () => {
 
     service = module.get<VariantsService>(VariantsService);
     prisma = module.get(PrismaService);
+
+    jest.clearAllMocks();
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
+  const product = { id: 'prod-1', sku: 'PROD', sellPrice: 100 } as any;
 
   describe('create', () => {
-    it('should create a variant with auto-generated SKU', async () => {
-      const productId = 'product-id';
-      const organizationId = 'org-id';
-      const createDto = { name: 'D' };
-      const product = { id: productId, sku: 'VDNT09' };
-      const expectedSku = 'VDNT09-D';
-      const expectedVariant = { id: 'variant-id', sku: expectedSku, ...createDto };
-
+    it('creates variant with generated SKU and validates price', async () => {
       prisma.product.findFirst.mockResolvedValue(product);
-      prisma.productVariant.findFirst.mockResolvedValue(null);
-      prisma.productVariant.create.mockResolvedValue(expectedVariant);
+      prisma.productVariant.findFirst.mockResolvedValueOnce(null);
+      prisma.productVariant.create.mockResolvedValue({ id: 'variant-1' });
 
-      const result = await service.create(productId, createDto, organizationId);
+      const result = await service.create('prod-1', { name: 'S', stock: 5 }, 'org-1');
 
-      expect(prisma.product.findFirst).toHaveBeenCalledWith({
-        where: { id: productId, organizationId, deletedAt: null },
-      });
-      expect(prisma.productVariant.findFirst).toHaveBeenCalledWith({
-        where: { sku: expectedSku, organizationId },
-      });
       expect(prisma.productVariant.create).toHaveBeenCalledWith({
-        data: {
-          ...createDto,
-          sku: expectedSku,
-          productId,
-          organizationId,
-        },
+        data: expect.objectContaining({
+          sku: 'PROD-S',
+          additionalPrice: 0,
+          productId: 'prod-1',
+          organizationId: 'org-1',
+        }),
         include: { product: true },
       });
-      expect(result).toEqual(expectedVariant);
+      expect(result).toEqual({ id: 'variant-1' });
     });
 
-    it('should create a variant with manual SKU', async () => {
-        const productId = 'product-id';
-        const organizationId = 'org-id';
-        const createDto = { name: 'D', sku: 'CUSTOM-SKU' };
-        const product = { id: productId, sku: 'VDNT09' };
-        const expectedVariant = { id: 'variant-id', ...createDto };
-
-        prisma.product.findFirst.mockResolvedValue(product);
-        prisma.productVariant.findFirst.mockResolvedValue(null);
-        prisma.productVariant.create.mockResolvedValue(expectedVariant);
-
-        const result = await service.create(productId, createDto, organizationId);
-
-        expect(result.sku).toBe('CUSTOM-SKU');
-      });
-
-    it('should throw ConflictException if variant SKU already exists', async () => {
-      const productId = 'product-id';
-      const organizationId = 'org-id';
-      const createDto = { name: 'D' };
-      const product = { id: productId, sku: 'VDNT09' };
-      const expectedSku = 'VDNT09-D';
-
+    it('allows negative additionalPrice as long as final price > 0', async () => {
       prisma.product.findFirst.mockResolvedValue(product);
-      prisma.productVariant.findFirst.mockResolvedValue({ id: 'existing-variant' });
+      prisma.productVariant.findFirst.mockResolvedValueOnce(null);
+      prisma.productVariant.create.mockResolvedValue({ id: 'variant-2' });
 
-      await expect(service.create(productId, createDto, organizationId)).rejects.toThrow(
-        ConflictException
+      await expect(
+        service.create('prod-1', { name: 'Discount', additionalPrice: -20 }, 'org-1'),
+      ).resolves.toEqual({ id: 'variant-2' });
+    });
+
+    it('throws when variant price is not positive', async () => {
+      prisma.product.findFirst.mockResolvedValue(product);
+
+      await expect(
+        service.create('prod-1', { name: 'Invalid', additionalPrice: -150 }, 'org-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws ConflictException on duplicate SKU', async () => {
+      prisma.product.findFirst.mockResolvedValue(product);
+      prisma.productVariant.findFirst.mockResolvedValueOnce({ id: 'dup' });
+
+      await expect(service.create('prod-1', { name: 'S' }, 'org-1')).rejects.toThrow(
+        ConflictException,
       );
     });
 
-    it('should throw NotFoundException if product not found', async () => {
-      const productId = 'product-id';
-      const organizationId = 'org-id';
-      const createDto = { name: 'D' };
-
+    it('throws when product is missing', async () => {
       prisma.product.findFirst.mockResolvedValue(null);
 
-      await expect(service.create(productId, createDto, organizationId)).rejects.toThrow(
-        NotFoundException
+      await expect(service.create('missing', { name: 'S' }, 'org-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('update', () => {
+    it('updates variant with org guard and validates new price', async () => {
+      prisma.product.findFirst.mockResolvedValue(product);
+      prisma.productVariant.findFirst.mockResolvedValueOnce({
+        id: 'variant-1',
+        productId: 'prod-1',
+        organizationId: 'org-1',
+        sku: 'PROD-S',
+        additionalPrice: 0,
+      });
+      prisma.productVariant.updateMany.mockResolvedValue({ count: 1 });
+      prisma.productVariant.findFirst.mockResolvedValueOnce({ id: 'variant-1', sku: 'PROD-S' });
+
+      const result = await service.update(
+        'prod-1',
+        'variant-1',
+        { additionalPrice: 5 },
+        'org-1',
+      );
+
+      expect(prisma.productVariant.updateMany).toHaveBeenCalledWith({
+        where: { id: 'variant-1', organizationId: 'org-1' },
+        data: expect.objectContaining({ additionalPrice: 5 }),
+      });
+      expect(result).toEqual({ id: 'variant-1', sku: 'PROD-S' });
+    });
+
+    it('throws when variant becomes non-positive after update', async () => {
+      prisma.product.findFirst.mockResolvedValue(product);
+      prisma.productVariant.findFirst.mockResolvedValueOnce({
+        id: 'variant-1',
+        productId: 'prod-1',
+        organizationId: 'org-1',
+        sku: 'PROD-S',
+        additionalPrice: 0,
+      });
+
+      await expect(
+        service.update('prod-1', 'variant-1', { additionalPrice: -200 }, 'org-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('remove', () => {
+    it('deletes variant scoped by organization', async () => {
+      prisma.product.findFirst.mockResolvedValue(product);
+      prisma.productVariant.deleteMany.mockResolvedValue({ count: 1 });
+
+      await service.remove('prod-1', 'variant-1', 'org-1');
+
+      expect(prisma.productVariant.deleteMany).toHaveBeenCalledWith({
+        where: { id: 'variant-1', productId: 'prod-1', organizationId: 'org-1' },
+      });
+    });
+
+    it('throws if deleteMany affects zero rows', async () => {
+      prisma.product.findFirst.mockResolvedValue(product);
+      prisma.productVariant.deleteMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.remove('prod-1', 'variant-1', 'org-1')).rejects.toThrow(
+        NotFoundException,
       );
     });
   });

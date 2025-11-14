@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsArray, Min, ValidateNested } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsArray, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -12,11 +12,10 @@ export class CreateVariantDto {
   @IsString()
   name: string;
 
-  @ApiPropertyOptional({ example: 10000, default: 0 })
+  @ApiPropertyOptional({ example: 10000, default: 0, description: 'Có thể âm nếu variant rẻ hơn base product' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
   additionalPrice?: number;
 
   @ApiPropertyOptional({ example: 50, default: 0 })

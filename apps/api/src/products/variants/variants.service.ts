@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -6,24 +7,47 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
+import { Prisma } from '@prisma/client';
+
+type PrismaTx = Prisma.TransactionClient;
 
 @Injectable()
 export class VariantsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    productId: string,
-    createDto: CreateVariantDto,
-    organizationId: string
-  ) {
-    const product = await this.prisma.product.findFirst({
+  private assertVariantPrice(basePrice: Prisma.Decimal | number, additionalPrice: number) {
+    const price = Number(basePrice ?? 0) + Number(additionalPrice ?? 0);
+    if (price <= 0) {
+      throw new BadRequestException('Variant price must be greater than zero');
+    }
+    return price;
+  }
+
+  private normalizeVariantSku(productSku: string, variant: CreateVariantDto) {
+    const rawSku = (variant.sku ?? `${productSku}-${variant.name}`).trim();
+    if (!rawSku) {
+      throw new BadRequestException('Variant SKU cannot be empty');
+    }
+    return rawSku;
+  }
+
+  private async verifyProductOwnership(productId: string, organizationId: string, tx?: PrismaTx) {
+    const client = tx ?? this.prisma;
+    const product = await client.product.findFirst({
       where: { id: productId, organizationId, deletedAt: null },
     });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
+    return product;
+  }
 
-    const sku = createDto.sku || `${product.sku}-${createDto.name}`;
+  async create(productId: string, createDto: CreateVariantDto, organizationId: string) {
+    const product = await this.verifyProductOwnership(productId, organizationId);
+    const basePrice = Number(product.sellPrice);
+    const sku = this.normalizeVariantSku(product.sku, createDto);
+    const additionalPrice = createDto.additionalPrice ?? 0;
+    this.assertVariantPrice(basePrice, additionalPrice);
 
     const existing = await this.prisma.productVariant.findFirst({
       where: { sku, organizationId },
@@ -36,6 +60,9 @@ export class VariantsService {
       data: {
         ...createDto,
         sku,
+        additionalPrice,
+        stock: createDto.stock ?? 0,
+        images: createDto.images ?? [],
         productId,
         organizationId,
       },
@@ -67,51 +94,44 @@ export class VariantsService {
     productId: string,
     variantId: string,
     updateDto: UpdateVariantDto,
-    organizationId: string
+    organizationId: string,
   ) {
-    await this.verifyProductOwnership(productId, organizationId);
-
+    const product = await this.verifyProductOwnership(productId, organizationId);
     const variant = await this.prisma.productVariant.findFirst({
       where: { id: variantId, productId, organizationId },
     });
+
     if (!variant) {
       throw new NotFoundException('Variant not found');
     }
 
-    return this.prisma.productVariant.update({
-      where: { id: variantId },
-      data: updateDto,
-    });
-  }
+    const existingAdditional = variant.additionalPrice ? Number(variant.additionalPrice) : 0;
+    const nextAdditionalPrice = updateDto.additionalPrice ?? existingAdditional;
+    this.assertVariantPrice(Number(product.sellPrice), nextAdditionalPrice);
 
-  async remove(
-    productId: string,
-    variantId: string,
-    organizationId: string
-  ) {
-    await this.verifyProductOwnership(productId, organizationId);
-
-    const variant = await this.prisma.productVariant.findFirst({
-      where: { id: variantId, productId, organizationId },
+    const { count } = await this.prisma.productVariant.updateMany({
+      where: { id: variantId, organizationId },
+      data: {
+        ...updateDto,
+        additionalPrice: nextAdditionalPrice,
+      },
     });
-    if (!variant) {
+
+    if (count === 0) {
       throw new NotFoundException('Variant not found');
     }
 
-    await this.prisma.productVariant.delete({
-      where: { id: variantId },
-    });
+    return this.prisma.productVariant.findFirst({ where: { id: variantId, organizationId } });
   }
 
-  private async verifyProductOwnership(
-    productId: string,
-    organizationId: string
-  ) {
-    const product = await this.prisma.product.findFirst({
-      where: { id: productId, organizationId, deletedAt: null },
+  async remove(productId: string, variantId: string, organizationId: string) {
+    await this.verifyProductOwnership(productId, organizationId);
+    const { count } = await this.prisma.productVariant.deleteMany({
+      where: { id: variantId, productId, organizationId },
     });
-    if (!product) {
-      throw new NotFoundException('Product not found');
+
+    if (count === 0) {
+      throw new NotFoundException('Variant not found');
     }
   }
 }

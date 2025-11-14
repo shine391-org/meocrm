@@ -1,6 +1,6 @@
 /* istanbul ignore file */
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsIn, IsDate, IsUUID } from 'class-validator';
+import { IsOptional, IsIn, IsDate, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetDebtReportDto {

@@ -127,6 +127,7 @@ export class AuthService {
         refreshToken: newRefreshToken,
       };
     } catch (error) {
+      void error;
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -157,6 +158,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
+      organizationId: user.organizationId,
       organization: user.organization,
     };
   }
