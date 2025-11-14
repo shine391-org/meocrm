@@ -1,25 +1,40 @@
 'use client';
+
 import {
   createContext,
+  useCallback,
   useContext,
-  useState,
   useEffect,
+  useState,
   ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  AuthService,
-  LoginDto,
-  RegisterUserDto,
-  User,
-} from '@/lib/api-client';
-import { setBrowserToken, clearBrowserToken } from '@/lib/auth/token';
 import { jwtDecode } from 'jwt-decode';
+import {
+  AuthUser,
+  fetchCurrentUser,
+  loginApi,
+  logoutApi,
+  refreshSessionApi,
+  registerApi,
+} from '@/lib/api/auth';
+import {
+  persistSession,
+  clearSession,
+  getBrowserToken,
+  getRefreshToken,
+  setOrganizationId,
+} from '@/lib/auth/token';
 
 interface AuthContextType {
-  user: User | null;
-  login: (data: LoginDto) => Promise<void>;
-  register: (data: RegisterUserDto) => Promise<void>;
+  user: AuthUser | null;
+  login: (data: { email: string; password: string }) => Promise<void>;
+  register: (data: {
+    name: string;
+    email: string;
+    password: string;
+    organizationCode: string;
+  }) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -27,75 +42,107 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    const accessToken = localStorage.getItem('accessToken');
-    if (accessToken) {
-      fetchUser();
-    } else {
-      setIsLoading(false);
+  const logout = useCallback(() => {
+    const refreshTokenValue = getRefreshToken();
+    if (refreshTokenValue) {
+      logoutApi({ refreshToken: refreshTokenValue }).catch(() => {
+        // ignore logout errors so user can still leave the session
+      });
     }
-  }, []);
+    clearSession();
+    setUser(null);
+    router.replace('/login');
+  }, [router]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const accessToken = localStorage.getItem('accessToken');
-      if (accessToken) {
-        const decodedToken: { exp: number } = jwtDecode(accessToken);
-        const buffer = 5 * 60 * 1000; // 5 minutes
-        if (decodedToken.exp * 1000 < Date.now() + buffer) {
-          refreshToken();
-        }
-      }
-    }, 1 * 60 * 1000); // Check every minute
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchUser = async () => {
+  const fetchUser = useCallback(async () => {
     try {
-      const me = await AuthService.authControllerGetMe();
+      const me = await fetchCurrentUser();
       setUser(me);
-    } catch (error) {
+      setOrganizationId(me.organization.id);
+    } catch {
       logout();
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [logout]);
 
-  const login = async (data: LoginDto) => {
-    const response = await AuthService.authControllerLogin({ requestBody: data });
-    setBrowserToken(response.accessToken, response.refreshToken);
-    await fetchUser();
-    router.push('/dashboard');
-  };
+  const login = useCallback(
+    async (data: { email: string; password: string }) => {
+      const response = await loginApi(data);
+      persistSession({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+        organizationId: response.user.organization.id,
+      });
+      setUser(response.user);
+      router.replace('/');
+    },
+    [router],
+  );
 
-  const register = async (data: RegisterUserDto) => {
-    const response = await AuthService.authControllerRegister({
-      requestBody: data,
+  const register = useCallback(async (data: {
+    name: string;
+    email: string;
+    password: string;
+    organizationCode: string;
+  }) => {
+    const response = await registerApi(data);
+    persistSession({
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      organizationId: response.user.organization.id,
     });
-    setBrowserToken(response.accessToken, response.refreshToken);
-    await fetchUser();
-    router.push('/dashboard');
-  };
+    setUser(response.user);
+    router.replace('/');
+  }, [router]);
 
-  const refreshToken = async () => {
+  const refreshToken = useCallback(async () => {
     try {
-      const response = await AuthService.authControllerRefresh();
-      setBrowserToken(response.accessToken, response.refreshToken);
-    } catch (error) {
+      const refreshTokenValue = getRefreshToken();
+      if (!refreshTokenValue) {
+        logout();
+        return;
+      }
+
+      const refreshed = await refreshSessionApi({ refreshToken: refreshTokenValue });
+      persistSession({
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+      });
+    } catch {
       logout();
     }
-  };
+  }, [logout]);
 
-  const logout = () => {
-    clearBrowserToken();
-    setUser(null);
-    router.push('/login');
-  };
+  useEffect(() => {
+    const token = getBrowserToken();
+    if (token) {
+      void fetchUser();
+    } else {
+      setIsLoading(false);
+    }
+  }, [fetchUser]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const accessToken = getBrowserToken();
+      if (!accessToken) {
+        return;
+      }
+
+      const decodedToken: { exp: number } = jwtDecode(accessToken);
+      const buffer = 5 * 60 * 1000; // 5 minutes
+      if (decodedToken.exp * 1000 < Date.now() + buffer) {
+        void refreshToken();
+      }
+    }, 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [refreshToken]);
 
   return (
     <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>

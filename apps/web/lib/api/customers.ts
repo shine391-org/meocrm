@@ -1,24 +1,32 @@
 // apps/web/lib/api/customers.ts
-import { getBrowserToken } from '@/lib/auth/token';
+import { getBrowserToken, getOrganizationId } from '@/lib/auth/token';
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api';
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api').replace(/\/$/, '');
 
-export const getAuthHeaders = () => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+export const getAuthHeaders = (options: { includeJson?: boolean } = {}) => {
+  const headers: Record<string, string> = {};
+  if (options.includeJson ?? true) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const token = getBrowserToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
+  const organizationId = getOrganizationId();
+  if (organizationId) {
+    headers['x-organization-id'] = organizationId;
+  }
+
   return headers;
 };
 
 export async function getCustomers(page: number = 1, limit: number = 20, search: string = '') {
-  const response = await fetch(`${API_BASE_URL}/customers?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`, { headers: getAuthHeaders() });
+  const response = await fetch(
+    `${API_BASE_URL}/customers?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`,
+    { headers: getAuthHeaders() },
+  );
   if (!response.ok) {
     throw new Error('Failed to fetch customers');
   }

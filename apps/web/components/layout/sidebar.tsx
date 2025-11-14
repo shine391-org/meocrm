@@ -12,11 +12,11 @@ import {
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/dashboard/products', icon: Package, label: 'Products' },
-  { href: '/dashboard/customers', icon: Users, label: 'Customers' },
-  { href: '/dashboard/orders', icon: ShoppingCart, label: 'Orders' },
-  { href: '/dashboard/pos', icon: CreditCard, label: 'POS' },
+  { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/products', icon: Package, label: 'Products' },
+  { href: '/customers', icon: Users, label: 'Customers' },
+  { href: '/orders', icon: ShoppingCart, label: 'Orders' },
+  { href: '/pos', icon: CreditCard, label: 'POS' },
 ];
 
 export function Sidebar() {
@@ -31,7 +31,8 @@ export function Sidebar() {
       <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href;
+          const isActive =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}

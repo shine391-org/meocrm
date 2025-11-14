@@ -12,6 +12,7 @@ export function RegisterForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [organizationCode, setOrganizationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,10 +27,10 @@ export function RegisterForm() {
 
     try {
       await register({
-        fullName: name,
+        name,
         email,
         password,
-        organizationCode: 'default',
+        organizationCode,
       });
     } catch (err: any) {
       toast.error('Registration Failed', {
@@ -84,6 +85,18 @@ export function RegisterForm() {
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
           placeholder="********"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="organizationCode">Organization Code</Label>
+        <Input
+          id="organizationCode"
+          type="text"
+          value={organizationCode}
+          onChange={(e) => setOrganizationCode(e.target.value.toUpperCase())}
+          required
+          placeholder="ORG_ABC123"
+          className="uppercase"
         />
       </div>
       <Button type="submit" className="w-full" disabled={isLoading}>

@@ -34,7 +34,7 @@ function CustomersPageContent() {
   });
 
   useEffect(() => {
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams(searchParams.toString());
     if (page > 1) {
       params.set('page', String(page));
     } else {
@@ -47,7 +47,8 @@ function CustomersPageContent() {
     } else {
       params.delete('search');
     }
-    router.replace(`${pathname}?${params.toString()}`);
+    const queryString = params.toString();
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname);
   }, [page, debouncedSearch, pathname, router, searchParams]);
 
 

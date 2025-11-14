@@ -1,5 +1,5 @@
 import { OpenAPI } from '@meocrm/api-client';
-import { getBrowserToken } from '@/lib/auth/token';
+import { getBrowserToken, getOrganizationId } from '@/lib/auth/token';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
@@ -14,11 +14,9 @@ OpenAPI.HEADERS = async () => {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  if (typeof window !== 'undefined') {
-    const organizationId = window.localStorage?.getItem('organizationId');
-    if (organizationId) {
-      headers['x-organization-id'] = organizationId;
-    }
+  const organizationId = getOrganizationId();
+  if (organizationId) {
+    headers['x-organization-id'] = organizationId;
   }
 
   return headers;
