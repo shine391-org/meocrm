@@ -7,7 +7,11 @@ import Redis from 'ioredis';
   providers: [
     {
       provide: 'REDIS_CLIENT',
-      useFactory: (configService: ConfigService) => {
+      useFactory: async (configService: ConfigService) => {
+        if (configService.get<string>('NODE_ENV') === 'test') {
+          const { default: RedisMock } = await import('ioredis-mock');
+          return new RedisMock();
+        }
         return new Redis({
           host: configService.get<string>('REDIS_HOST'),
           port: configService.get<number>('REDIS_PORT'),
