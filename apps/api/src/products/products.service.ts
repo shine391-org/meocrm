@@ -2,16 +2,28 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { QueryProductsDto } from './dto/query-products.dto';
+import { QueryProductsDto, ProductSortBy, SortOrder } from './dto/query-products.dto';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async ensureCategoryBelongsToOrganization(categoryId: string, organizationId: string) {
+    const category = await this.prisma.category.findFirst({
+      where: { id: categoryId, organizationId },
+      select: { id: true },
+    });
+
+    if (!category) {
+      throw new BadRequestException('Category does not belong to this organization');
+    }
+  }
 
   async create(createProductDto: CreateProductDto, organizationId: string) {
     // Check SKU uniqueness within organization
@@ -27,10 +39,15 @@ export class ProductsService {
       throw new ConflictException(`SKU "${createProductDto.sku}" already exists`);
     }
 
+    if (createProductDto.categoryId) {
+      await this.ensureCategoryBelongsToOrganization(createProductDto.categoryId, organizationId);
+    }
+
     return this.prisma.product.create({
       data: {
         ...createProductDto,
         organizationId,
+        images: createProductDto.images ?? [],
       },
       include: {
         category: true,
@@ -39,7 +56,20 @@ export class ProductsService {
   }
 
   async findAll(query: QueryProductsDto, organizationId: string) {
-    const { page, limit, search, categoryId, minPrice, maxPrice, inStock, sortBy, sortOrder } = query;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      categoryId,
+      minPrice,
+      maxPrice,
+      inStock,
+      sortBy = ProductSortBy.CREATED_AT,
+      sortOrder = SortOrder.DESC,
+    } = query;
+
+    const normalizedLimit = Math.max(1, Math.min(limit, 100));
+    const skip = (page - 1) * normalizedLimit;
 
     // Build where clause
     const where: Prisma.ProductWhereInput = {
@@ -76,15 +106,12 @@ export class ProductsService {
       where.stock = inStock ? { gt: 0 } : { lte: 0 };
     }
 
-    // Pagination
-    const skip = (page - 1) * limit;
-
     // Execute queries
     const [products, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
         skip,
-        take: limit,
+        take: normalizedLimit,
         orderBy: { [sortBy]: sortOrder },
         include: {
           category: true,
@@ -98,8 +125,8 @@ export class ProductsService {
       meta: {
         total,
         page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+        limit: normalizedLimit,
+        totalPages: Math.ceil(total / normalizedLimit),
       },
     };
   }
@@ -125,26 +152,35 @@ export class ProductsService {
   }
 
   async update(id: string, updateProductDto: UpdateProductDto, organizationId: string) {
-    // Check if product exists and belongs to organization
-    await this.findOne(id, organizationId);
+    const existing = await this.findOne(id, organizationId);
 
-    return this.prisma.product.update({
-      where: { id },
+    if (
+      updateProductDto.categoryId &&
+      updateProductDto.categoryId !== existing.categoryId
+    ) {
+      await this.ensureCategoryBelongsToOrganization(updateProductDto.categoryId, organizationId);
+    }
+
+    const { count } = await this.prisma.product.updateMany({
+      where: { id, organizationId },
       data: updateProductDto,
-      include: {
-        category: true,
-      },
     });
+
+    if (count === 0) {
+      throw new NotFoundException(`Product with ID "${id}" not found`);
+    }
+
+    return this.findOne(id, organizationId);
   }
 
   async remove(id: string, organizationId: string) {
-    // Check if product exists and belongs to organization
-    await this.findOne(id, organizationId);
-
-    // Soft delete
-    await this.prisma.product.update({
-      where: { id },
+    const { count } = await this.prisma.product.updateMany({
+      where: { id, organizationId, deletedAt: null },
       data: { deletedAt: new Date() },
     });
+
+    if (count === 0) {
+      throw new NotFoundException(`Product with ID "${id}" not found`);
+    }
   }
 }

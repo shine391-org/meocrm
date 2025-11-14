@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ListUsersDto } from './dto/list-users.dto';
-import { Prisma, User } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -20,6 +20,7 @@ export class UsersService {
 
   private sanitize<T extends { password?: string }>(user: T) {
     const { password, ...rest } = user;
+    void password;
     return rest;
   }
 
