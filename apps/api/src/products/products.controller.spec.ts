@@ -35,24 +35,24 @@ describe('ProductsController', () => {
   describe('findAll', () => {
     it('should return paginated products', async () => {
       const mockResult = { data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } };
-      const mockReq = { user: { organizationId: 'org1' } };
+      const mockUser = { organizationId: 'org1' };
       const queryDto = {};
       mockProductsService.findAll.mockResolvedValue(mockResult);
 
-      const result = await controller.findAll(queryDto, mockReq);
+      const result = await controller.findAll(queryDto as any, mockUser);
 
       expect(result).toEqual(mockResult);
-      expect(service.findAll).toHaveBeenCalledWith(1, 20, 'org1', {});
+      expect(service.findAll).toHaveBeenCalledWith(queryDto, 'org1');
     });
   });
 
   describe('findOne', () => {
     it('should return a product', async () => {
       const mockProduct = { id: '1', name: 'Product 1' };
-      const mockReq = { user: { organizationId: 'org1' } };
+      const mockUser = { organizationId: 'org1' };
       mockProductsService.findOne.mockResolvedValue(mockProduct);
 
-      const result = await controller.findOne('1', mockReq);
+      const result = await controller.findOne('1', mockUser);
       expect(result).toEqual(mockProduct);
     });
   });

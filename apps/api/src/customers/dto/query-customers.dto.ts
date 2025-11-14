@@ -3,7 +3,7 @@ import { IsOptional, IsNumber, IsString, IsIn, Min, Max } from 'class-validator'
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class ListCustomersDto {
+export class QueryCustomersDto {
   @ApiPropertyOptional({ default: 1, description: 'Page number (minimum 1)' })
   @IsOptional()
   @Type(() => Number)

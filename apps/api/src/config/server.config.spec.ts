@@ -59,14 +59,22 @@ describe('server.config helpers', () => {
       const app = express();
       app.use('/webhooks', createWebhookRawMiddleware('1kb'));
       app.post('/webhooks', (req, res) => {
-        res.json({ isBuffer: Buffer.isBuffer(req.body) });
+        res.json({
+          parsed: req.body,
+          rawBody: (req as any).rawBody,
+          isBuffer: Buffer.isBuffer(req.body),
+        });
       });
 
       await request(app)
         .post('/webhooks')
         .set('Content-Type', 'application/json')
-        .send(Buffer.alloc(8, '.'))
-        .expect(200, { isBuffer: true });
+        .send(JSON.stringify({ ping: true }))
+        .expect(200, {
+          parsed: { ping: true },
+          rawBody: JSON.stringify({ ping: true }),
+          isBuffer: false,
+        });
     });
 
     it('rejects payloads that exceed the configured limit', async () => {

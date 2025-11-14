@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ListUsersDto } from './dto/list-users.dto';
-import { Prisma, User } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -20,6 +20,7 @@ export class UsersService {
 
   private sanitize<T extends { password?: string }>(user: T) {
     const { password, ...rest } = user;
+    void password;
     return rest;
   }
 
@@ -122,8 +123,14 @@ export class UsersService {
       data.email = dto.email;
     }
 
-    if (dto.name) {
-      data.name = dto.name;
+    if (dto.name !== undefined) {
+      const normalizedName = dto.name.trim();
+      if (!normalizedName) {
+        throw new BadRequestException('Name cannot be empty');
+      }
+      if (normalizedName !== user.name) {
+        data.name = normalizedName;
+      }
     }
 
     if (dto.role) {
