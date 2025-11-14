@@ -123,8 +123,14 @@ export class UsersService {
       data.email = dto.email;
     }
 
-    if (dto.name) {
-      data.name = dto.name;
+    if (dto.name !== undefined) {
+      const normalizedName = dto.name.trim();
+      if (!normalizedName) {
+        throw new BadRequestException('Name cannot be empty');
+      }
+      if (normalizedName !== user.name) {
+        data.name = normalizedName;
+      }
     }
 
     if (dto.role) {

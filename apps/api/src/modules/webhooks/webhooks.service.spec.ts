@@ -366,6 +366,49 @@ describe('WebhooksService', () => {
     });
   });
 
+  describe('resolveWebhookSecret', () => {
+    it('re-encrypts legacy payloads and returns plaintext secret', async () => {
+      const webhook = {
+        id: 'wh-legacy',
+        organizationId: 'org1',
+        secretEncrypted: { legacySecret: 'whsec_legacy' },
+      } as any;
+
+      const secret = await (service as any).resolveWebhookSecret(webhook);
+
+      expect(secret).toBe('whsec_legacy');
+      expect((prisma as any).webhook.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'wh-legacy' },
+          data: expect.objectContaining({
+            secretEncrypted: expect.any(Object),
+          }),
+        }),
+      );
+    });
+
+    it('returns null when decrypting AES payload fails', async () => {
+      const webhook = {
+        id: 'wh-fail',
+        organizationId: 'org1',
+        secretEncrypted: {
+          version: 'aes-256-gcm',
+          iv: 'a',
+          authTag: 'b',
+          ciphertext: 'c',
+        },
+      } as any;
+      const decryptSpy = jest.spyOn(cryptoUtil, 'decryptSecret').mockImplementation(() => {
+        throw new Error('decrypt failed');
+      });
+
+      const secret = await (service as any).resolveWebhookSecret(webhook);
+
+      expect(secret).toBeNull();
+      decryptSpy.mockRestore();
+    });
+  });
+
   describe('backfillEncryptedSecrets', () => {
     it('returns early when there are no legacy secrets', async () => {
       (prisma as any).webhook.findMany.mockResolvedValue([

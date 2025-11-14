@@ -168,6 +168,31 @@ describe('UsersService', () => {
       expect(result.name).toBe('New Name');
     });
 
+    it('trims whitespace before saving name updates', async () => {
+      const existing = { id: 'user_1', email: 'test@example.com', name: 'Old', role: UserRole.STAFF } as any;
+      const updated = { ...existing, name: 'New Name' };
+      (prisma as any).user.findFirst.mockResolvedValueOnce(existing).mockResolvedValueOnce(updated);
+      (prisma as any).user.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.update('user_1', { name: '  New Name  ' }, 'org_1');
+
+      expect((prisma as any).user.updateMany).toHaveBeenCalledWith({
+        where: { id: 'user_1', organizationId: 'org_1' },
+        data: expect.objectContaining({
+          name: 'New Name',
+        }),
+      });
+      expect(result.name).toBe('New Name');
+    });
+
+    it('throws BadRequestException when name is empty after trimming', async () => {
+      const existing = { id: 'user_1', email: 'test@example.com', name: 'Old', role: UserRole.STAFF } as any;
+      (prisma as any).user.findFirst.mockResolvedValue(existing);
+
+      await expect(service.update('user_1', { name: '   ' }, 'org_1')).rejects.toThrow(BadRequestException);
+      expect((prisma as any).user.updateMany).not.toHaveBeenCalled();
+    });
+
     it('throws if updated email is already taken', async () => {
       const existing = { id: 'user_1', email: 'old@example.com' } as any;
       (prisma as any).user.findFirst.mockResolvedValueOnce(existing);
