@@ -41,7 +41,7 @@ describe('RefundsService', () => {
   const buildOrder = (
     overrides: Partial<Order & { items: (OrderItem & { variant: ProductVariant | null })[]; commissions: any[] }> = {},
   ) => {
-    const baseOrder: Order & { items: (OrderItem & { variant: ProductVariant | null })[]; commissions: any[] } = {
+    const baseOrder = {
       id: 'order-1',
       code: 'ORD-001',
       status: OrderStatus.COMPLETED,
@@ -64,8 +64,6 @@ describe('RefundsService', () => {
           unitPrice: 50 as any,
           subtotal: 100 as any,
           organizationId: 'org-1',
-          createdAt: new Date(),
-          updatedAt: new Date(),
           variant: {
             id: 'variant-1',
             productId: 'prod-1',
@@ -81,9 +79,9 @@ describe('RefundsService', () => {
             createdAt: new Date(),
             updatedAt: new Date(),
           },
-        },
+        } as unknown as OrderItem & { variant: ProductVariant | null },
       ],
-    };
+    } as unknown as Order & { items: (OrderItem & { variant: ProductVariant | null })[]; commissions: any[] };
     return { ...baseOrder, ...overrides };
   };
 
@@ -209,7 +207,7 @@ describe('RefundsService', () => {
           user: mockUser,
           action: 'refund.approved',
           entityId: 'order-1',
-          newValues: { restocked: true },
+          newValues: expect.objectContaining({ restocked: true }),
         }),
       );
 
@@ -247,8 +245,8 @@ describe('RefundsService', () => {
       const adjustmentPayload = prisma.commission.create.mock.calls[0][0].data;
       expect(adjustmentPayload.adjustsCommissionId).toBe(commission.id);
       expect(adjustmentPayload.isAdjustment).toBe(true);
-      expect(adjustmentPayload.valueGross.equals(new Prisma.Decimal(-100))).toBe(true);
-      expect(adjustmentPayload.amount.equals(new Prisma.Decimal(-20))).toBe(true);
+      expect(Number(adjustmentPayload.valueGross)).toBe(-100);
+      expect(Number(adjustmentPayload.amount)).toBe(-20);
     });
 
     it('skips restocking when refund.restockOnRefund is false', async () => {

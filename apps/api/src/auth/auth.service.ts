@@ -127,6 +127,7 @@ export class AuthService {
         refreshToken: newRefreshToken,
       };
     } catch (error) {
+      void error;
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
