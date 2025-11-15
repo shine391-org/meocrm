@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
-import { ListSuppliersDto } from './dto/list-suppliers.dto';
+import { QuerySuppliersDto } from './dto/query-suppliers.dto';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
@@ -50,7 +50,7 @@ return this.prisma.supplier.create({
 });
 }
 
-async findAll(organizationId: string, query: ListSuppliersDto) {
+async findAll(organizationId: string, query: QuerySuppliersDto) {
 const { page = 1, limit = 20, search, sortBy = 'createdAt', sortOrder = 'desc' } = query;
 
 const where: Prisma.SupplierWhereInput = {
