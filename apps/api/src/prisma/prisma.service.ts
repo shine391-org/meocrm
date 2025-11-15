@@ -80,6 +80,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     return extendedClient;
   }
 
+  static async resetForTests() {
+    if (process.env.NODE_ENV !== 'test') {
+      throw new Error('resetForTests can only be used in the test environment');
+    }
+    if (PrismaService.instance) {
+      await PrismaService.instance.$disconnect();
+      PrismaService.instance = null;
+    }
+  }
+
   async onModuleInit() {
     await this.$connect();
   }

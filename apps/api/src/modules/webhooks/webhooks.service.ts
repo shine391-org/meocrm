@@ -165,6 +165,7 @@ export class WebhooksService implements OnModuleInit {
           'X-MeoCRM-Delivery-ID': deliveryId,
           'Content-Type': 'application/json',
         },
+        timeout: 30000,
       });
       this.logger.log(`Successfully sent test webhook to ${webhook.url}`);
       return { success: true, message: 'Test webhook sent successfully', deliveryId };
@@ -209,11 +210,6 @@ export class WebhooksService implements OnModuleInit {
     }
 
     if (isLegacySecretPayload(payload)) {
-      const encrypted = encryptSecret(payload.legacySecret, this.webhookSecretKey);
-      await this.prisma.webhook.update({
-        where: { id: webhook.id },
-        data: { secretEncrypted: encrypted as unknown as Prisma.InputJsonValue },
-      });
       return payload.legacySecret;
     }
 

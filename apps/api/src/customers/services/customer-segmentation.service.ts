@@ -80,8 +80,14 @@ export class CustomerSegmentationService {
     private settingsService: SettingsService,
   ) {}
 
-  async updateSegment(customerId: string, organizationIdHint?: string): Promise<string | null> {
-    const customer = await this.prisma.customer.findFirst({
+  async updateSegment(
+    customerId: string,
+    organizationIdHint?: string,
+    prismaClient?: Prisma.TransactionClient,
+  ): Promise<string | null> {
+    const prisma = prismaClient ?? this.prisma;
+
+    const customer = await prisma.customer.findFirst({
       where: {
         id: customerId,
         deletedAt: null,
@@ -102,12 +108,12 @@ export class CustomerSegmentationService {
       return null;
     }
 
-    const segmentation =
-      (await this.settingsService.getForOrganization<CustomerSegmentationSettings>(
-        customer.organizationId,
-        'customerSegmentation',
-        DEFAULT_SEGMENTATION_SETTINGS,
-      )) ?? DEFAULT_SEGMENTATION_SETTINGS;
+    const segmentation = await this.settingsService.getForOrganization<CustomerSegmentationSettings>(
+      customer.organizationId,
+      'customerSegmentation',
+      DEFAULT_SEGMENTATION_SETTINGS,
+      isCustomerSegmentationSettings,
+    );
 
     if (!segmentation.enabled) {
       return customer.segment;
@@ -119,12 +125,11 @@ export class CustomerSegmentationService {
       return customer.segment ?? segment;
     }
 
-    await this.prisma.customer.update({
+    await prisma.customer.updateMany({
       where: {
-        organizationId_id: {
-          id: customer.id,
-          organizationId: customer.organizationId,
-        },
+        id: customer.id,
+        organizationId: customer.organizationId,
+        deletedAt: null,
       },
       data: { segment },
     });
@@ -206,4 +211,50 @@ export class CustomerSegmentationService {
     const diff = Math.abs(date2.getTime() - date1.getTime());
     return Math.floor(diff / (1000 * 60 * 60 * 24));
   }
+}
+
+const SEGMENT_FIELDS: readonly SegmentField[] = ['totalSpent', 'totalOrders', 'daysSinceLastOrder', 'daysSinceCreated'];
+const SEGMENT_OPERATORS: readonly SegmentOperator[] = ['>', '>=', '<', '<=', '==', '!='];
+
+function isSegmentCondition(value: unknown): value is SegmentCondition {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<SegmentCondition>;
+  return (
+    typeof candidate.field === 'string' &&
+    SEGMENT_FIELDS.includes(candidate.field as SegmentField) &&
+    typeof candidate.operator === 'string' &&
+    SEGMENT_OPERATORS.includes(candidate.operator as SegmentOperator) &&
+    typeof candidate.value === 'number' &&
+    Number.isFinite(candidate.value)
+  );
+}
+
+function isSegmentConfig(value: unknown): value is SegmentConfig {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<SegmentConfig>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.autoApply === 'boolean' &&
+    Array.isArray(candidate.conditions) &&
+    candidate.conditions.every(isSegmentCondition) &&
+    (candidate.priority === undefined || (typeof candidate.priority === 'number' && Number.isFinite(candidate.priority)))
+  );
+}
+
+function isCustomerSegmentationSettings(value: unknown): value is CustomerSegmentationSettings {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<CustomerSegmentationSettings>;
+  return (
+    typeof candidate.enabled === 'boolean' &&
+    Array.isArray(candidate.segments) &&
+    candidate.segments.every(isSegmentConfig) &&
+    (candidate.fallback === undefined || typeof candidate.fallback === 'string')
+  );
 }

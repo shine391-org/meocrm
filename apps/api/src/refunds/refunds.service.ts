@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AuditAction, Commission, CommissionStatus, OrderStatus, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotificationsService } from '../modules/notifications/notifications.service';
-import { SettingsService } from '../modules/settings/settings.service';
+import { SettingsService, isBooleanSetting, isNumberSetting } from '../modules/settings/settings.service';
 import { RefundRequestDto } from './dto/refund-request.dto';
 import { RefundRejectDto } from './dto/refund-reject.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -23,6 +23,7 @@ export class RefundsService {
     dto: RefundRequestDto,
     user: User,
   ) {
+    this.ensureRequestPermission(user);
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -51,10 +52,9 @@ export class RefundsService {
   }
 
   async approveRefund(orderId: string, user: User) {
-    const windowDays =
-      (await this.settings.get<number>('refund.windowDays')) ?? 7;
-    const restockOnRefund =
-      (await this.settings.get<boolean>('refund.restockOnRefund')) ?? true;
+    this.ensureDecisionPermission(user);
+    const windowDays = await this.settings.get<number>('refund.windowDays', 7, isNumberSetting);
+    const restockOnRefund = await this.settings.get<boolean>('refund.restockOnRefund', true, isBooleanSetting);
 
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -160,6 +160,7 @@ export class RefundsService {
     dto: RefundRejectDto,
     user: User,
   ) {
+    this.ensureDecisionPermission(user);
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -236,4 +237,31 @@ export class RefundsService {
 
     return commissionsToAdjust.length;
   }
+
+  private normalizeRole(user: User): string {
+    return (user.role ?? '').toString().toUpperCase();
+  }
+
+  private ensureRequestPermission(user: User) {
+    const role = this.normalizeRole(user);
+    if (!REQUEST_REFUND_ROLE_SET.has(role)) {
+      throw new ForbiddenException({
+        code: 'REFUND_REQUEST_FORBIDDEN',
+        message: 'Bạn không có quyền yêu cầu hoàn tiền cho đơn hàng này.',
+      });
+    }
+  }
+
+  private ensureDecisionPermission(user: User) {
+    const role = this.normalizeRole(user);
+    if (!DECISION_ROLE_SET.has(role)) {
+      throw new ForbiddenException({
+        code: 'REFUND_DECISION_FORBIDDEN',
+        message: 'Bạn không có quyền duyệt hoặc từ chối yêu cầu hoàn tiền.',
+      });
+    }
+  }
 }
+
+const REQUEST_REFUND_ROLE_SET = new Set(['CUSTOMER', 'SALES', 'STAFF', 'CASHIER']);
+const DECISION_ROLE_SET = new Set(['MANAGER', 'ADMIN']);

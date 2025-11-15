@@ -7,7 +7,7 @@ import { RequestContextService } from './request-context.service';
 export class RequestContextMiddleware implements NestMiddleware {
   constructor(private readonly requestContext: RequestContextService) {}
 
-  use(_req: Request, _res: Response, next: NextFunction) {
-    this.requestContext.run(() => next());
+  async use(_req: Request, _res: Response, next: NextFunction) {
+    await this.requestContext.run(() => next());
   }
 }

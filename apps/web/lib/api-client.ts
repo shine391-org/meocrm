@@ -1,10 +1,19 @@
 import { OpenAPI } from '@meocrm/api-client';
 import { getBrowserToken, getOrganizationId } from '@/lib/auth/token';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '');
+if (!rawBaseUrl) {
+  throw new Error('NEXT_PUBLIC_API_URL is not defined. Please set it in your environment.');
+}
+try {
+  // Validate that the URL is well-formed.
+  new URL(rawBaseUrl);
+} catch (error) {
+  throw new Error(`NEXT_PUBLIC_API_URL is invalid: ${(error as Error).message}`);
+}
 
-if (API_BASE_URL && OpenAPI.BASE !== API_BASE_URL) {
-  OpenAPI.BASE = API_BASE_URL;
+if (OpenAPI.BASE !== rawBaseUrl) {
+  OpenAPI.BASE = rawBaseUrl;
 }
 
 OpenAPI.HEADERS = async () => {

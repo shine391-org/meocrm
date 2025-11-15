@@ -38,14 +38,26 @@ export class WebhookHMACGuard implements CanActivate {
       throw new UnauthorizedException('Invalid webhook signature format');
     }
 
-    const rawBody =
-      typeof request.rawBody === 'string'
-        ? request.rawBody
-        : Buffer.isBuffer(request.rawBody)
-          ? request.rawBody.toString('utf8')
-          : '';
+    const rawBodyInput = request.rawBody;
+    if (rawBodyInput === undefined || rawBodyInput === null) {
+      this.logger.warn('Raw request body missing, cannot validate webhook signature');
+      throw new UnauthorizedException('Missing webhook payload');
+    }
+
+    let payloadBuffer: Buffer | null = null;
+    if (typeof rawBodyInput === 'string') {
+      payloadBuffer = Buffer.from(rawBodyInput, 'utf8');
+    } else if (Buffer.isBuffer(rawBodyInput)) {
+      payloadBuffer = rawBodyInput;
+    }
+
+    if (!payloadBuffer) {
+      this.logger.warn('Unsupported raw body type for webhook signature validation');
+      throw new UnauthorizedException('Invalid webhook payload');
+    }
+
     const hmac = crypto.createHmac('sha256', secret);
-    const digest = Buffer.from(hmac.update(rawBody).digest('hex'), 'hex');
+    const digest = hmac.update(payloadBuffer).digest();
     const checksum = Buffer.from(signature, 'hex');
 
     if (digest.length !== checksum.length || !crypto.timingSafeEqual(digest, checksum)) {

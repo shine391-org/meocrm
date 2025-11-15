@@ -25,4 +25,11 @@ describe('ParseDatePipe', () => {
   it('rejects values outside the strict pattern', () => {
     expect(() => pipe.transform('01-2024')).toThrow(BadRequestException);
   });
+
+  it.each(['2023-02-30', '2023-13-01', '2023-00-01', '2023-01-00', '2023-01-32'])(
+    'rejects invalid calendar dates such as %s',
+    (input) => {
+      expect(() => pipe.transform(input)).toThrow(BadRequestException);
+    },
+  );
 });

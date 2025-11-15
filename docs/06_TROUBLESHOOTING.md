@@ -99,7 +99,7 @@ Cannot connect to PostgreSQL at localhost:2001
 
 ### Solution Workflow
 
-**Step 1: Use the Diagnostic Script**
+### Step 1: Use the Diagnostic Script
 
 A diagnostic script is available at `scripts/diagnose-db.sh` to automatically check for common connection issues.
 
@@ -107,7 +107,7 @@ A diagnostic script is available at `scripts/diagnose-db.sh` to automatically ch
 ./scripts/diagnose-db.sh
 ```
 
-**Step 2: Fix .env (Most Common Fix)**
+### Step 2: Fix .env (Most Common Fix)
 
 Update your `apps/api/.env` to use `127.0.0.1` instead of `localhost`.
 
@@ -116,14 +116,14 @@ Update your `apps/api/.env` to use `127.0.0.1` instead of `localhost`.
 DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev?schema=public"
 ```
 
-**Step 3: Restart snapshot containers (if needed)**
+### Step 3: Restart snapshot containers (if needed)
 
 ```bash
 sudo docker ps --filter "name=db"
 sudo docker compose -f /tmp/meocrm-compose.yaml up -d db
 ```
 
-**Step 4: Verify Fix**
+### Step 4: Verify Fix
 
 ```bash
 # Test connection
@@ -139,7 +139,7 @@ pnpm prisma db pull
 ## ⚠️ ISSUE #3: Next.js cannot resolve `@meocrm/api-client`
 
 ### Symptom
-```
+```text
 Module not found: Can't resolve '@meocrm/api-client'
 ```
 
@@ -162,7 +162,7 @@ Module not found: Can't resolve '@meocrm/api-client'
 ## ⚠️ ISSUE #4: Redis connection refused on port 2002
 
 ### Symptom
-```
+```text
 Error: connect ECONNREFUSED 127.0.0.1:2002
 ```
 

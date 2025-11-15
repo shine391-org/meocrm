@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { SettingsService } from '../settings/settings.service';
+import { SettingsService, isBooleanSetting, isStringSetting } from '../settings/settings.service';
 
 @Injectable()
 export class NotificationsService {
@@ -23,8 +23,9 @@ export class NotificationsService {
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-    const timeoutMs =
-      Number(this.configService.get<string>('TELEGRAM_TIMEOUT_MS')) || 5000;
+    const timeoutInput = this.configService.get<string>('TELEGRAM_TIMEOUT_MS');
+    const parsedTimeout = timeoutInput !== undefined ? Number.parseInt(timeoutInput, 10) : Number.NaN;
+    const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout >= 0 ? Math.floor(parsedTimeout) : 5000;
 
     try {
       await axios.post(
@@ -44,11 +45,15 @@ export class NotificationsService {
   }
 
   async sendToStaff(message: string): Promise<void> {
-    const staffNotificationsEnabled = await this.settingsService.get(
+    const staffNotificationsEnabled = await this.settingsService.get<boolean>(
       'notifications.staff.enabled',
+      false,
+      isBooleanSetting,
     );
-    const provider = await this.settingsService.get(
+    const provider = await this.settingsService.get<string>(
       'notifications.staff.provider',
+      'telegram',
+      isStringSetting,
     );
 
     if (!staffNotificationsEnabled || provider !== 'telegram') {

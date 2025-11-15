@@ -1,4 +1,16 @@
-import { IsOptional, IsString, IsNumber, IsBoolean, IsEnum, Min } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsEnum,
+  Min,
+  IsInt,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -14,19 +26,34 @@ export enum SortOrder {
   DESC = 'desc',
 }
 
+@ValidatorConstraint({ name: 'maxPriceGteMinPrice', async: false })
+export class MaxPriceGreaterOrEqualConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args: ValidationArguments) {
+    const dto = args.object as QueryProductsDto;
+    if (dto.minPrice === undefined || dto.maxPrice === undefined) {
+      return true;
+    }
+    return dto.maxPrice >= dto.minPrice;
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    return `${args.property} must be greater than or equal to minPrice`;
+  }
+}
+
 export class QueryProductsDto {
   // Pagination
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   @Min(1)
   page?: number = 1;
 
   @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   @Min(1)
   limit?: number = 20;
 
@@ -46,12 +73,15 @@ export class QueryProductsDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
   minPrice?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
+  @Validate(MaxPriceGreaterOrEqualConstraint)
   maxPrice?: number;
 
   @ApiPropertyOptional({ description: 'Filter products in stock (stock > 0)' })

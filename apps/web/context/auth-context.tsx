@@ -18,13 +18,7 @@ import {
   refreshSessionApi,
   registerApi,
 } from '@/lib/api/auth';
-import {
-  persistSession,
-  clearSession,
-  getBrowserToken,
-  getRefreshToken,
-  setOrganizationId,
-} from '@/lib/auth/token';
+import { persistSession, clearSession, getBrowserToken, setOrganizationId } from '@/lib/auth/token';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -47,12 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const logout = useCallback(() => {
-    const refreshTokenValue = getRefreshToken();
-    if (refreshTokenValue) {
-      logoutApi({ refreshToken: refreshTokenValue }).catch(() => {
-        // ignore logout errors so user can still leave the session
-      });
-    }
+    logoutApi().catch(() => {
+      // ignore logout errors so user can still leave the session
+    });
     clearSession();
     setUser(null);
     router.replace('/login');
@@ -75,7 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await loginApi(data);
       persistSession({
         accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
         organizationId: response.user.organization.id,
       });
       setUser(response.user);
@@ -93,7 +83,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await registerApi(data);
     persistSession({
       accessToken: response.accessToken,
-      refreshToken: response.refreshToken,
       organizationId: response.user.organization.id,
     });
     setUser(response.user);
@@ -102,16 +91,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshToken = useCallback(async () => {
     try {
-      const refreshTokenValue = getRefreshToken();
-      if (!refreshTokenValue) {
-        logout();
-        return;
-      }
-
-      const refreshed = await refreshSessionApi({ refreshToken: refreshTokenValue });
+      const refreshed = await refreshSessionApi();
       persistSession({
         accessToken: refreshed.accessToken,
-        refreshToken: refreshed.refreshToken,
       });
     } catch {
       logout();
@@ -134,9 +116,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const decodedToken: { exp: number } = jwtDecode(accessToken);
-      const buffer = 5 * 60 * 1000; // 5 minutes
-      if (decodedToken.exp * 1000 < Date.now() + buffer) {
+      try {
+        const decodedToken: { exp: number } = jwtDecode(accessToken);
+        const buffer = 5 * 60 * 1000; // 5 minutes
+        if (decodedToken.exp * 1000 < Date.now() + buffer) {
+          void refreshToken();
+        }
+      } catch (error) {
+        console.error('Failed to decode access token', error);
         void refreshToken();
       }
     }, 60 * 1000);

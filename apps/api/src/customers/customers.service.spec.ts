@@ -13,6 +13,7 @@ describe('CustomersService', () => {
       findMany: jest.Mock;
       count: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
   let segmentationService: {
@@ -22,19 +23,23 @@ describe('CustomersService', () => {
   const userId = 'user-123';
 
   beforeEach(async () => {
+    const customerMock = {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CustomersService,
         {
           provide: PrismaService,
           useValue: {
-            customer: {
-              findFirst: jest.fn(),
-              create: jest.fn(),
-              findMany: jest.fn(),
-              count: jest.fn(),
-              update: jest.fn(),
-            },
+            customer: customerMock,
+            $transaction: jest.fn((cb: any) => cb({ customer: customerMock })),
           },
         },
         {
@@ -77,7 +82,7 @@ describe('CustomersService', () => {
         }),
         include: expect.any(Object),
       });
-      expect(segmentationService.updateSegment).toHaveBeenCalledWith('1', organizationId);
+      expect(segmentationService.updateSegment).toHaveBeenCalledWith('1', organizationId, expect.anything());
       expect(result).toEqual({ ...created, segment: 'Regular' });
     });
 
@@ -132,12 +137,12 @@ describe('CustomersService', () => {
         .mockResolvedValueOnce({ id: '1', phone: '111', organizationId }) // findOne
         .mockResolvedValueOnce(null) // duplicate phone check
         .mockResolvedValueOnce({ id: '1', name: 'Updated' }); // findOne after update
-      prisma.customer.update.mockResolvedValue({ id: '1', name: 'Updated' });
+      prisma.customer.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.update('1', { name: 'Updated', phone: '222' }, organizationId);
 
-      expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { organizationId_id: { id: '1', organizationId } },
+      expect(prisma.customer.updateMany).toHaveBeenCalledWith({
+        where: { id: '1', organizationId, deletedAt: null },
         data: { name: 'Updated', phone: '222' },
       });
       expect(result).toEqual({ id: '1', name: 'Updated' });
@@ -155,12 +160,12 @@ describe('CustomersService', () => {
   describe('remove', () => {
     it('soft deletes customers without orders', async () => {
       prisma.customer.findFirst.mockResolvedValue({ id: '1', orders: [] });
-      prisma.customer.update.mockResolvedValue({ id: '1', deletedAt: new Date() });
+      prisma.customer.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.remove('1', organizationId);
 
-      expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { organizationId_id: { id: '1', organizationId } },
+      expect(prisma.customer.updateMany).toHaveBeenCalledWith({
+        where: { id: '1', organizationId, deletedAt: null },
         data: { deletedAt: expect.any(Date) },
       });
       expect(result.message).toBe('Customer deleted successfully');

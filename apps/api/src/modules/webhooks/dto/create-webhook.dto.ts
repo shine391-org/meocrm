@@ -6,7 +6,7 @@ export class CreateWebhookDto {
     description: 'Destination URL that will receive webhook calls.',
     example: 'https://hooks.example.com/meocrm',
   })
-  @IsUrl()
+  @IsUrl({ protocols: ['https'], require_tld: true, require_protocol: true })
   url!: string;
 
   @ApiProperty({

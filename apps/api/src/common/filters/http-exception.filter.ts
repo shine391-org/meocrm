@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { RequestContextService } from '../context/request-context.service';
 
 interface NormalizedError {
   code: string;
@@ -40,6 +41,7 @@ const HTML_ESCAPE_LOOKUP: Record<string, string> = {
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
+  constructor(private readonly requestContextService: RequestContextService) {}
 
   catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -47,7 +49,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = exception.getStatus();
     const exceptionResponse = exception.getResponse();
 
-    const traceId = uuidv4();
+    const existingTraceId = this.requestContextService?.getTraceId();
+    const traceId = existingTraceId ?? uuidv4();
 
     const normalized: NormalizedError = {
       code: `HTTP_${status}`,

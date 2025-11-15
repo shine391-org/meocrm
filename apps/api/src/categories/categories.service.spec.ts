@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CategoriesService } from './categories.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -93,16 +94,40 @@ describe('CategoriesService', () => {
   });
 
   describe('remove', () => {
-    it('should soft delete a category', async () => {
-      const organizationId = 'org-id';
-      const category = { id: '1', name: 'Category', parentId: null, organizationId, createdAt: new Date(), updatedAt: new Date(), deletedAt: null, children: [], products: [] };
+    it('prevents deleting categories with children', async () => {
+      prisma.category.findFirst.mockResolvedValueOnce({
+        id: 'cat',
+        organizationId: 'org_1',
+        children: [{ id: 'child' }],
+        products: [],
+      } as any);
 
-      prisma.category.findFirst.mockResolvedValue(category as any);
+      await expect(service.remove('cat', 'org_1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('prevents deleting categories with products', async () => {
+      prisma.category.findFirst.mockResolvedValueOnce({
+        id: 'cat',
+        organizationId: 'org_1',
+        children: [],
+        products: [{ id: 'prod' }],
+      } as any);
+      await expect(service.remove('cat', 'org_1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('soft deletes category when it has no children or products', async () => {
+      const category = {
+        id: 'cat',
+        organizationId: 'org_1',
+        children: [],
+        products: [],
+      } as any;
+      prisma.category.findFirst.mockResolvedValueOnce(category);
       prisma.category.update.mockResolvedValue({ ...category, deletedAt: new Date() } as any);
 
-      await expect(service.remove('1', organizationId)).resolves.toEqual({ message: 'Category deleted successfully' });
+      await expect(service.remove('cat', 'org_1')).resolves.toEqual({ message: 'Category deleted successfully' });
       expect(prisma.category.update).toHaveBeenCalledWith({
-        where: { id: '1' },
+        where: { id: 'cat' },
         data: { deletedAt: expect.any(Date) },
       });
     });
@@ -112,9 +137,13 @@ describe('CategoriesService', () => {
     it('should return a nested tree with product counts', async () => {
       const organizationId = 'org-id';
       const tree = [
-        { id: '1', name: 'A', parentId: null, _count: { products: 1 }, children: [
-          { id: '2', name: 'B', parentId: '1', _count: { products: 2 }, children: [] },
-        ]},
+        {
+          id: '1',
+          name: 'A',
+          parentId: null,
+          _count: { products: 1 },
+          children: [{ id: '2', name: 'B', parentId: '1', _count: { products: 2 }, children: [] }],
+        },
       ];
       prisma.category.findMany.mockResolvedValue(tree as any);
 

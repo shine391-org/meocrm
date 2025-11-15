@@ -497,7 +497,6 @@ model Customer {
   deletedAt DateTime?
 
   @@unique([organizationId, code])
-  @@unique([organizationId, id])
   @@index([organizationId])
   @@index([code])
   @@index([phone])

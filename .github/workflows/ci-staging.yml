@@ -51,7 +51,7 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm --filter @meocrm/api run prisma:generate
         env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_URL: file:./prisma-ci.db
 
       - name: Build
         run: pnpm -w build

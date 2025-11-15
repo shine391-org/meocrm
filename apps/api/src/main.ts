@@ -6,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { RequestContextService } from './common/context/request-context.service';
 import {
   createWebhookRawMiddleware,
   resolveApiPort,
@@ -47,7 +48,8 @@ async function bootstrap() {
       },
     }),
   );
-  app.useGlobalFilters(new HttpExceptionFilter());
+  const requestContextService = app.get(RequestContextService);
+  app.useGlobalFilters(new HttpExceptionFilter(requestContextService));
 
   const port = resolveApiPort(configService);
 
@@ -58,10 +60,29 @@ async function bootstrap() {
         .map((origin) => origin.trim())
         .filter(Boolean)
     : [];
-  app.enableCors({
-    origin: allowedOrigins.length ? allowedOrigins : true,
-    credentials: true,
-  });
+  const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
+  if (!allowedOrigins.length) {
+    if (nodeEnv === 'production') {
+      throw new Error('CORS_ORIGIN must be configured in production environments');
+    }
+    app.enableCors({
+      origin: false,
+      credentials: false,
+    });
+  } else {
+    app.enableCors({
+      origin: (origin, callback) => {
+        if (!origin) {
+          return callback(null, false);
+        }
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error('Origin not allowed'), false);
+      },
+      credentials: true,
+    });
+  }
 
   const config = new DocumentBuilder()
     .setTitle('MeoCRM API')

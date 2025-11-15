@@ -36,6 +36,7 @@ export async function loginApi(payload: { email: string; password: string }): Pr
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(payload),
   });
   return handleResponse<AuthResponse>(response);
@@ -50,16 +51,17 @@ export async function registerApi(payload: {
   const response = await fetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(payload),
   });
   return handleResponse<AuthResponse>(response);
 }
 
-export async function refreshSessionApi(payload: { refreshToken: string }) {
+export async function refreshSessionApi() {
   const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    credentials: 'include',
   });
   return handleResponse<{ accessToken: string; refreshToken: string }>(response);
 }
@@ -71,11 +73,11 @@ export async function fetchCurrentUser() {
   return handleResponse<AuthUser>(response);
 }
 
-export async function logoutApi(payload: { refreshToken: string }) {
+export async function logoutApi() {
   const response = await fetch(`${API_BASE_URL}/auth/logout`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
+    credentials: 'include',
   });
   return handleResponse<{ message: string }>(response);
 }

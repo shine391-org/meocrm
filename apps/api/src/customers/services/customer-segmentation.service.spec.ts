@@ -10,6 +10,7 @@ describe('CustomerSegmentationService', () => {
       findFirst: jest.Mock;
       findMany: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
   let settings: { getForOrganization: jest.Mock };
@@ -36,13 +37,14 @@ describe('CustomerSegmentationService', () => {
               findFirst: jest.fn(),
               findMany: jest.fn(),
               update: jest.fn(),
+              updateMany: jest.fn(),
             },
           },
         },
         {
           provide: SettingsService,
           useValue: {
-            getForOrganization: jest.fn().mockResolvedValue(undefined),
+            getForOrganization: jest.fn().mockResolvedValue(DEFAULT_SEGMENTATION_SETTINGS),
           },
         },
       ],
@@ -129,7 +131,7 @@ describe('CustomerSegmentationService', () => {
         lastOrderAt: new Date(),
       });
       prisma.customer.findFirst.mockResolvedValue(customerData);
-      prisma.customer.update.mockResolvedValue({ ...customerData, segment: 'VIP' });
+      prisma.customer.updateMany.mockResolvedValue({ count: 1 });
 
       const newSegment = await service.updateSegment('cust-1');
 
@@ -141,13 +143,13 @@ describe('CustomerSegmentationService', () => {
         customerData.organizationId,
         'customerSegmentation',
         DEFAULT_SEGMENTATION_SETTINGS,
+        expect.any(Function),
       );
-      expect(prisma.customer.update).toHaveBeenCalledWith({
+      expect(prisma.customer.updateMany).toHaveBeenCalledWith({
         where: {
-          organizationId_id: {
-            id: 'cust-1',
-            organizationId: customerData.organizationId,
-          },
+          id: 'cust-1',
+          organizationId: customerData.organizationId,
+          deletedAt: null,
         },
         data: { segment: 'VIP' },
       });
@@ -158,7 +160,7 @@ describe('CustomerSegmentationService', () => {
       prisma.customer.findFirst.mockResolvedValue(null);
       const result = await service.updateSegment('non-existent');
       expect(result).toBeNull();
-      expect(prisma.customer.update).not.toHaveBeenCalled();
+      expect(prisma.customer.updateMany).not.toHaveBeenCalled();
     });
   });
 });

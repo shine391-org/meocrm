@@ -21,6 +21,7 @@ type SeedRefundOptions = {
   restockOnRefund?: boolean;
   windowDays?: number;
   createCommission?: boolean;
+  userRole?: UserRole;
 };
 
 type SeedRefundResult = {
@@ -93,6 +94,7 @@ describe('Refund approval integration', () => {
     restockOnRefund = true,
     windowDays = 30,
     createCommission = true,
+    userRole = UserRole.MANAGER,
   }: SeedRefundOptions = {}): Promise<SeedRefundResult> => {
     const organization = await prisma.organization.create({
       data: {
@@ -108,7 +110,7 @@ describe('Refund approval integration', () => {
         name: 'Refund Manager',
         password: 'hashed',
         organizationId: organization.id,
-        role: UserRole.OWNER,
+        role: userRole,
       },
     });
 
@@ -255,7 +257,7 @@ describe('Refund approval integration', () => {
         name: 'Owner',
         password: 'hashed',
         organizationId,
-        role: UserRole.OWNER,
+        role: UserRole.MANAGER,
       },
     });
     const product = await prisma.product.create({
@@ -309,7 +311,7 @@ describe('Refund approval integration', () => {
   });
 
   it('throws when requesting refunds for unknown orders', async () => {
-    const seed = await seedRefundScenario({ createCommission: false });
+    const seed = await seedRefundScenario({ createCommission: false, userRole: UserRole.STAFF });
 
     await expect(
       refundsService.requestRefund('missing-order', { reason: 'dup' } as any, seed.user),

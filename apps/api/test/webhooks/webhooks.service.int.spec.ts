@@ -157,7 +157,7 @@ describe('WebhooksService + HMAC guard integration', () => {
     await expect(webhooksService.testWebhook(webhook.id, orgB.id)).rejects.toThrow(NotFoundException);
   });
 
-  it('re-encrypts legacy secrets before sending test payloads', async () => {
+  it('handles legacy secrets without mutating stored payloads', async () => {
     const { organization } = await seedOrder('WEBHOOK-LEGACY');
     const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
     await prisma.webhook.update({
@@ -175,7 +175,7 @@ describe('WebhooksService + HMAC guard integration', () => {
     expect(result.success).toBe(true);
 
     const stored = await prisma.webhook.findUnique({ where: { id: webhook.id } });
-    expect((stored?.secretEncrypted as Record<string, unknown>).version).toBe('aes-256-gcm');
+    expect(stored?.secretEncrypted).toEqual({ legacySecret: 'legacy-secret' } as any);
 
     axiosSpy.mockRestore();
   });

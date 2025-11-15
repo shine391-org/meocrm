@@ -43,11 +43,11 @@ export class ReportsService {
       whereConditions.push(Prisma.sql`"capturedAt" <= ${toDate}`);
     }
 
-    let dateTrunc;
+    let dateTrunc: Prisma.Sql;
     if (groupBy === 'day') {
-      dateTrunc = 'day';
+      dateTrunc = Prisma.raw(`'day'`);
     } else if (groupBy === 'month') {
-      dateTrunc = 'month';
+      dateTrunc = Prisma.raw(`'month'`);
     } else {
       throw new BadRequestException('Invalid groupBy value. Must be "day" or "month".');
     }

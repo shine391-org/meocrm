@@ -72,12 +72,12 @@ describe('RefundsRolesGuard', () => {
     const context = {
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { role: UserRole.OWNER },
+          user: { role: UserRole.MANAGER },
         }),
       }),
     } as ExecutionContext;
 
-    settingsService.get.mockResolvedValue(null);
+    settingsService.get.mockImplementation((_key, defaultValue) => Promise.resolve(defaultValue));
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
   });

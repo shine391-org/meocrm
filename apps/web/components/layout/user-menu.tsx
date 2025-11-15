@@ -20,10 +20,20 @@ export function UserMenu() {
   }
 
   const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
+    if (!name) {
+      return '?';
+    }
+    const parts = name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!parts.length) {
+      return '?';
+    }
+    return parts
+      .map((segment) => segment.charAt(0))
       .join('')
+      .slice(0, 2)
       .toUpperCase();
   };
 

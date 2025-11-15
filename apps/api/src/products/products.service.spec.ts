@@ -39,7 +39,12 @@ describe('ProductsService', () => {
     prisma = module.get<typeof mockPrismaService>(PrismaService);
 
     jest.clearAllMocks();
-    prisma.$transaction.mockImplementation((callback: any) => callback(prisma));
+    const mockTransactionClient = {
+      product: prisma.product,
+      category: prisma.category,
+      productVariant: prisma.productVariant,
+    };
+    prisma.$transaction.mockImplementation((callback: any) => callback(mockTransactionClient));
     prisma.productVariant.findMany.mockResolvedValue([]);
   });
 

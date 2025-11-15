@@ -367,7 +367,7 @@ describe('WebhooksService', () => {
   });
 
   describe('resolveWebhookSecret', () => {
-    it('re-encrypts legacy payloads and returns plaintext secret', async () => {
+    it('returns legacy payloads without mutating database records', async () => {
       const webhook = {
         id: 'wh-legacy',
         organizationId: 'org1',
@@ -377,14 +377,7 @@ describe('WebhooksService', () => {
       const secret = await (service as any).resolveWebhookSecret(webhook);
 
       expect(secret).toBe('whsec_legacy');
-      expect((prisma as any).webhook.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'wh-legacy' },
-          data: expect.objectContaining({
-            secretEncrypted: expect.any(Object),
-          }),
-        }),
-      );
+      expect((prisma as any).webhook.update).not.toHaveBeenCalled();
     });
 
     it('returns null when decrypting AES payload fails', async () => {

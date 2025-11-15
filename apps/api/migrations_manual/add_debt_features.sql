@@ -12,7 +12,7 @@ CREATE OR REPLACE VIEW "vw_customer_debt_runtime" AS
 SELECT
   "o"."organizationId",
   "o"."customerId",
-  SUM("o"."total" - "o"."paidAmount") AS "debtValue"
+  SUM(COALESCE("o"."total", 0) - COALESCE("o"."paidAmount", 0)) AS "debtValue"
 FROM
   "orders" "o"
 WHERE

@@ -1,6 +1,7 @@
 import { ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter';
 import { v4 as uuidv4 } from 'uuid';
+import { RequestContextService } from '../context/request-context.service';
 
 jest.mock('uuid', () => ({ v4: jest.fn() }));
 
@@ -17,9 +18,16 @@ describe('HttpExceptionFilter', () => {
     jest.clearAllMocks();
   });
 
+  const createFilter = (traceId?: string) => {
+    const requestContextService = {
+      getTraceId: jest.fn().mockReturnValue(traceId),
+    } as unknown as RequestContextService;
+    return new HttpExceptionFilter(requestContextService);
+  };
+
   it('normalizes simple HttpException payloads with traceId', () => {
     (uuidv4 as jest.Mock).mockReturnValue('trace-simple');
-    const filter = new HttpExceptionFilter();
+    const filter = createFilter();
     const responseMock = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
@@ -39,7 +47,7 @@ describe('HttpExceptionFilter', () => {
 
   it('prioritizes custom code, message array and details', () => {
     (uuidv4 as jest.Mock).mockReturnValue('trace-custom');
-    const filter = new HttpExceptionFilter();
+    const filter = createFilter();
     const responseMock = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
@@ -71,7 +79,7 @@ describe('HttpExceptionFilter', () => {
   it('returns stable fallback when details contain circular references', () => {
     (uuidv4 as jest.Mock).mockReturnValue('trace-circular');
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    const filter = new HttpExceptionFilter();
+    const filter = createFilter();
     const responseMock = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),

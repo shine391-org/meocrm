@@ -32,12 +32,11 @@ export class CustomerStatsService {
       return;
     }
 
-    await prisma.customer.update({
+    await prisma.customer.updateMany({
       where: {
-        organizationId_id: {
-          id: customerId,
-          organizationId: customer.organizationId,
-        },
+        id: customerId,
+        organizationId: customer.organizationId,
+        deletedAt: null,
       },
       data: {
         totalSpent: { increment: orderTotal },
@@ -78,12 +77,11 @@ export class CustomerStatsService {
     const newTotalSpent = Math.max(0, Number(customer.totalSpent) - orderTotal);
     const newTotalOrders = Math.max(0, customer.totalOrders - 1);
 
-    await prisma.customer.update({
+    await prisma.customer.updateMany({
       where: {
-        organizationId_id: {
-          id: customerId,
-          organizationId: customer.organizationId,
-        },
+        id: customerId,
+        organizationId: customer.organizationId,
+        deletedAt: null,
       },
       data: {
         totalSpent: newTotalSpent,
@@ -116,12 +114,11 @@ export class CustomerStatsService {
       return;
     }
 
-    await prisma.customer.update({
+    await prisma.customer.updateMany({
       where: {
-        organizationId_id: {
-          id: customerId,
-          organizationId: customer.organizationId,
-        },
+        id: customerId,
+        organizationId: customer.organizationId,
+        deletedAt: null,
       },
       data: {
         debt: { increment: amount },

@@ -62,7 +62,7 @@ export class OrdersService {
     const db = prisma || this.prisma;
     const lastOrder = await db.order.findFirst({
       where: { organizationId, code: { startsWith: 'ORD' } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { code: 'desc' },
       select: { code: true },
     });
 

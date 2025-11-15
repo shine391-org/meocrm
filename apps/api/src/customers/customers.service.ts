@@ -43,27 +43,29 @@ export class CustomersService {
 
     const { birthday, ...rest } = dto;
 
-    const customer = await this.prisma.customer.create({
-      data: {
-        ...rest,
-        code,
-        organization: {
-          connect: { id: organizationId },
+    return this.prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.create({
+        data: {
+          ...rest,
+          code,
+          organization: {
+            connect: { id: organizationId },
+          },
+          birthday: birthday ? new Date(birthday) : undefined,
+          creator: {
+            connect: { id: userId },
+          },
         },
-        birthday: birthday ? new Date(birthday) : undefined,
-        creator: {
-          connect: { id: userId },
+        include: {
+          group: true,
+          creator: { select: { id: true, name: true, email: true } },
         },
-      },
-      include: {
-        group: true,
-        creator: { select: { id: true, name: true, email: true } },
-      },
+      });
+
+      const segment = await this.segmentationService.updateSegment(customer.id, organizationId, tx);
+
+      return segment ? { ...customer, segment } : customer;
     });
-
-    const segment = await this.segmentationService.updateSegment(customer.id, organizationId);
-
-    return segment ? { ...customer, segment } : customer;
   }
 
   async findAll(
@@ -155,12 +157,11 @@ export class CustomersService {
 
     const { birthday, ...rest } = dto;
 
-    await this.prisma.customer.update({
+    await this.prisma.customer.updateMany({
       where: {
-        organizationId_id: {
-          id,
-          organizationId,
-        },
+        id,
+        organizationId,
+        deletedAt: null,
       },
       data: {
         ...rest,
@@ -195,12 +196,11 @@ export class CustomersService {
       );
     }
 
-    await this.prisma.customer.update({
+    await this.prisma.customer.updateMany({
       where: {
-        organizationId_id: {
-          id,
-          organizationId,
-        },
+        id,
+        organizationId,
+        deletedAt: null,
       },
       data: { deletedAt: new Date() },
     });

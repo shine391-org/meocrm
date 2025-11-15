@@ -87,16 +87,15 @@ describe('WebhookHMACGuard', () => {
     expect(guard.canActivate(context)).toBe(true);
   });
 
-  it('uses empty string when rawBody is not a string or buffer', () => {
+  it('rejects when rawBody is not a string or buffer', () => {
     const secret = 'secret';
     const guard = createGuard(secret);
-    const digest = crypto.createHmac('sha256', secret).update('').digest('hex');
     const context = createContext({
-      headers: { 'x-meocrm-signature': digest },
+      headers: { 'x-meocrm-signature': 'aa'.repeat(32) },
       rawBody: { unexpected: true },
     });
 
-    expect(guard.canActivate(context)).toBe(true);
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 
   it('coerces buffer raw bodies before signing', () => {
