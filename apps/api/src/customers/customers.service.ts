@@ -128,10 +128,10 @@ export class CustomersService {
 
   async findOne(id: string, organizationId: string) {
     const customer = await this.prisma.customer.findFirst({
-      where: { 
-        id, 
-        organizationId, 
-        deletedAt: null 
+      where: {
+        id,
+        organizationId,
+        deletedAt: null
       },
     });
 
@@ -139,11 +139,11 @@ export class CustomersService {
       throw new NotFoundException(`Customer ${id} not found`);
     }
 
-    return customer;
+    return { data: customer };
   }
 
   async update(id: string, dto: UpdateCustomerDto, organizationId: string) {
-    const customer = await this.findOne(id, organizationId);
+    const { data: customer } = await this.findOne(id, organizationId);
 
     if (dto.phone && dto.phone !== customer.phone) {
       const existingPhone = await this.prisma.customer.findFirst({

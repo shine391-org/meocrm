@@ -18,11 +18,12 @@ export default function OrdersPage() {
       setIsLoading(true);
       setErrorMessage(null);
       try {
-        const latestOrders = await OrdersService.getOrders();
+        const response = await OrdersService.getOrders();
         if (!isMounted) {
           return;
         }
-        setOrders(latestOrders);
+        // API returns { data: [...], meta: {...} }
+        setOrders(response.data || []);
       } catch (error) {
         console.error('Failed to fetch orders', error);
         if (isMounted) {

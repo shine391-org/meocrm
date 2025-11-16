@@ -52,6 +52,8 @@ async function bootstrap() {
   const requestContextService = app.get(RequestContextService);
   app.useGlobalFilters(new HttpExceptionFilter(requestContextService));
 
+  app.setGlobalPrefix('api');
+
   const port = resolveApiPort(configService);
 
   const corsOrigin = configService.get<string>('CORS_ORIGIN');
