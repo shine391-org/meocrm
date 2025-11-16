@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | **🚀 Agent Start** | **[AGENTS-QUICKSTART.md](../AGENTS-QUICKSTART.md)** | **NEW! 15-min onboarding cho Jules/Claude/Gemini. Đọc đầu tiên!** |
 | Ops Manual | [AGENTS.md](../AGENTS.md) | Quy trình cho Agents (setup → coordination → PR checklist). Section 5 = workflow. |
+| **Lessons Learned** | **[DEVELOPMENT_LESSONS_LEARNED.md](../DEVELOPMENT_LESSONS_LEARNED.md)** | **12 lessons: API format, UUID codes, DB performance, etc. Must-read cho AI developers!** |
 | Overview | [docs/README.md](./README.md) | Hướng dẫn đọc docset + chuẩn lỗi hệ thống. |
 | Map | [docs/Documentation-Map.md](./Documentation-Map.md) | (File hiện tại) Sơ đồ liên kết toàn bộ tài liệu. |
 | **Roadmap** | **[ROADMAP.md](../ROADMAP.md)** | **187 tasks breakdown, tiến độ 30%, timeline 3-4 tuần, critical path.** |

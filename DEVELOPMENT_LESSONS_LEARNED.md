@@ -9,8 +9,7 @@
 - **Related Docs**:
   - [AGENTS.md](./AGENTS.md) - Agent operations manual
   - [README.md](./README.md) - Project overview
-  - [docs/LESSONS_LEARNED.md](./docs/LESSONS_LEARNED.md) - Team knowledge base (45+ lessons)
-  - [docs/technical/coding-standards.md](./docs/technical/coding-standards.md) - Coding standards
+  - [docs/README.md](./docs/README.md) - Documentation hub
 
 ---
 
