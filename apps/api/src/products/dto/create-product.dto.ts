@@ -1,6 +1,7 @@
 /* istanbul ignore file */
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, Min, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CreateVariantDto } from '../variants/dto/create-variant.dto';
 
 export class CreateProductDto {
