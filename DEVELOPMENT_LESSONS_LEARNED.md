@@ -340,6 +340,132 @@ const url = `${API_BASE_URL}/customers`;
 
 ---
 
+## 11. Timestamp-Based Code Generation Collision
+
+### ❌ Lỗi đã mắc phải
+**File**: `apps/api/src/inventory/inventory.service.ts`
+
+Sử dụng `Date.now()` để generate mã adjustment codes:
+```typescript
+// ❌ Có thể collision khi tạo nhiều adjustments cùng lúc
+code: `ADJ-${Date.now()}`
+
+// ❌ Trong transaction, OUT và IN được tạo gần như đồng thời
+code: `ADJ-OUT-${Date.now()}`
+code: `ADJ-IN-${Date.now()}`  // Có thể trùng với OUT
+```
+
+**Vấn đề**:
+- Khi tạo nhiều adjustments trong cùng millisecond → codes bị trùng
+- Trong database transaction, các codes được tạo gần như đồng thời
+- Đặc biệt nghiêm trọng với inter-branch transfers (OUT và IN cùng lúc)
+
+### ✅ Cách sửa đúng
+Sử dụng UUID để đảm bảo uniqueness:
+```typescript
+import { randomUUID } from 'crypto';
+
+// ✅ Single adjustment
+const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
+code: `ADJ-${uniqueSuffix}`
+
+// ✅ Transfer adjustments (cùng UUID nhưng khác prefix)
+const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
+code: `ADJ-OUT-${transfer.id}-${uniqueSuffix}`
+code: `ADJ-IN-${transfer.id}-${uniqueSuffix}`
+```
+
+**Lợi ích**:
+- Collision-resistant với UUID
+- Transfer OUT và IN có chung suffix để dễ trace
+- Short format (8 ký tự) vẫn đủ unique trong practical use
+
+### 📋 Quy tắc
+- **KHÔNG BAO GIỜ** dùng `Date.now()` một mình cho unique IDs/codes
+- **LUÔN** sử dụng UUID hoặc crypto-secure random generators
+- Với paired records (như transfer OUT/IN), dùng chung unique identifier
+- Consider sử dụng `nanoid` nếu cần codes ngắn hơn
+
+---
+
+## 12. Database Query Performance - In-Memory Filtering
+
+### ❌ Lỗi đã mắc phải
+**File**: `apps/api/src/inventory/inventory.service.ts`
+
+Fetch toàn bộ data rồi filter trong memory:
+```typescript
+// ❌ Fetch ALL items từ database
+let allItems = await this.prisma.inventory.findMany({
+  where: { branchId, product: { organizationId } },
+  include: { product: { include: { category: true } }, branch: true }
+});
+
+// ❌ Filter trong memory (low stock: quantity <= minStock)
+if (lowStockOnly) {
+  allItems = allItems.filter(
+    (item) => item.quantity <= item.product.minStock
+  );
+}
+
+// ❌ Pagination trong memory
+const total = allItems.length;
+const items = allItems.slice(skip, skip + limit);
+```
+
+**Vấn đề**:
+- Fetch 10,000 records để chỉ hiển thị 20 items
+- Filter quan hệ giữa 2 columns (`inventory.quantity <= product.minStock`) không thể dùng Prisma where
+- Total count sai vì tính trên tất cả items, không phải filtered items
+- Pagination không hoạt động đúng vì slice trên filtered array
+
+### ✅ Cách sửa đúng
+Push filtering xuống database level bằng raw SQL:
+```typescript
+if (lowStockOnly) {
+  // ✅ Build dynamic WHERE với parameterized queries
+  const conditions = [
+    'i."branchId" = $1',
+    'p."organizationId" = $2',
+    'p."deletedAt" IS NULL',
+    'i.quantity <= p."minStock"'  // ✅ Compare columns tại DB level
+  ];
+  const params = [branchId, organizationId];
+
+  // ✅ Count từ filtered query
+  const countResult = await prisma.$queryRawUnsafe(
+    `SELECT COUNT(*)::bigint FROM "Inventory" i
+     INNER JOIN "Product" p ON i."productId" = p.id
+     WHERE ${conditions.join(' AND ')}`,
+    ...params
+  );
+
+  // ✅ Paginate tại DB level với LIMIT/OFFSET
+  const items = await prisma.$queryRawUnsafe(
+    `SELECT ... FROM "Inventory" i ...
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY p.name ASC
+     LIMIT $${n} OFFSET $${n+1}`,
+    ...params, limit, skip
+  );
+}
+```
+
+**Best Practices**:
+- Luôn filter tại database level, không fetch rồi filter
+- Sử dụng raw SQL khi Prisma không support (column comparison)
+- Count phải dùng cùng filter conditions với select query
+- Apply pagination (LIMIT/OFFSET) tại database level
+
+### 📋 Quy tắc
+- **LUÔN** push filtering xuống database layer
+- **KHÔNG** fetch all rồi filter/paginate trong memory
+- Với Prisma limitations, sử dụng `$queryRawUnsafe` hoặc `$queryRaw` với Prisma.sql
+- **BẮT BUỘC** parameterize queries để prevent SQL injection
+- Count và select queries phải có cùng WHERE conditions
+
+---
+
 ## Summary Checklist for AI Developers
 
 ### Trước khi code
@@ -358,6 +484,10 @@ const url = `${API_BASE_URL}/customers`;
 - [ ] SWR checks bao gồm cả `response` và `response.data`?
 - [ ] Unused config files đã được xóa?
 - [ ] Environment variables có bao gồm `/api` suffix?
+- [ ] Unique codes/IDs được generate bằng UUID, không dùng `Date.now()`?
+- [ ] Database filtering được push xuống DB level, không filter trong memory?
+- [ ] Pagination được apply tại DB level với LIMIT/OFFSET?
+- [ ] Count queries có cùng filter conditions với select queries?
 
 **Multi-Tenant & Security** (theo AGENTS.md):
 - [ ] Queries không thiếu `organizationId` filter?
