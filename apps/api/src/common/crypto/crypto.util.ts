@@ -1,5 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { Logger } from '@nestjs/common';
 
+const logger = new Logger('CryptoUtil');
 const AES_GCM_ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH_BYTES = 32;
 const GCM_IV_LENGTH_BYTES = 12;
@@ -85,12 +87,24 @@ export const decryptSecret = (payload: EncryptedSecretPayload, key: Buffer): str
     return plaintext.toString('utf8');
   } catch (error) {
     // Log error details for debugging without exposing sensitive data
-    console.error('Failed to decrypt webhook secret:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+    const logContext = {
       hasIv: !!payload?.iv,
       hasAuthTag: !!payload?.authTag,
       hasCiphertext: !!payload?.ciphertext,
-    });
+    };
+
+    // Only include detailed error info in development/debug mode
+    if (process.env.NODE_ENV === 'development') {
+      logger.error('Failed to decrypt webhook secret', {
+        ...logContext,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    } else {
+      // Production: emit generic message with safe boolean flags only
+      logger.error('Failed to decrypt webhook secret', logContext);
+    }
+
     throw new Error('Failed to decrypt webhook secret');
   }
 };
