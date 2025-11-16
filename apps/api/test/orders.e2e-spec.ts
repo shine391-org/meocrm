@@ -194,12 +194,14 @@ describe('Orders E2E', () => {
 
       const order = await prisma.order.findFirst({ where: { customerId: customer.id }});
       const orderTotal = Number(createResponse.body.total);
+      const amountOwed = Number(createResponse.body.amountOwed || 0);
+      const expectedTotalSpent = orderTotal - amountOwed; // Business logic: totalSpent = what customer actually paid
 
       const customerBefore = await prisma.customer.findUnique({
         where: { id: customer.id },
       });
 
-      expect(Number(customerBefore?.totalSpent)).toBe(orderTotal);
+      expect(Number(customerBefore?.totalSpent)).toBe(expectedTotalSpent);
       expect(customerBefore?.totalOrders).toBe(1);
 
       await request(app.getHttpServer())

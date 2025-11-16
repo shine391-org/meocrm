@@ -440,7 +440,7 @@ model ProductVariant {
   images          String[]
 
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   orderItems OrderItem[]
 

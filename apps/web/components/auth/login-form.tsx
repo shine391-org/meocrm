@@ -6,6 +6,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
+// Map error codes to user-friendly messages
+const ERROR_MESSAGES: Record<string, string> = {
+  'INVALID_CREDENTIALS': 'Invalid email or password. Please try again.',
+  'USER_NOT_FOUND': 'No account found with this email address.',
+  'ACCOUNT_LOCKED': 'Your account has been locked. Please contact support.',
+  'NETWORK_ERROR': 'Unable to connect. Please check your internet connection.',
+  'UNAUTHORIZED': 'Invalid email or password. Please try again.',
+};
+
+const getErrorMessage = (err: any): string => {
+  // Check for specific error codes
+  const errorCode = err.body?.code || err.code;
+  if (errorCode && ERROR_MESSAGES[errorCode]) {
+    return ERROR_MESSAGES[errorCode];
+  }
+
+  // Check for HTTP status codes
+  const status = err.status || err.statusCode;
+  if (status === 401) {
+    return ERROR_MESSAGES.INVALID_CREDENTIALS;
+  }
+  if (status === 429) {
+    return 'Too many login attempts. Please try again later.';
+  }
+  if (status >= 500) {
+    return 'Server error. Please try again later.';
+  }
+
+  // Default safe message
+  return 'Login failed. Please try again.';
+};
+
 export function LoginForm() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
@@ -20,7 +52,7 @@ export function LoginForm() {
       await login({ email, password });
     } catch (err: any) {
       toast.error('Login Failed', {
-        description: err.body?.message || 'An unexpected error occurred.',
+        description: getErrorMessage(err),
       });
     } finally {
       setIsLoading(false);

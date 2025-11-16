@@ -170,10 +170,23 @@ export class CategoriesService {
   private async getCategoryLevel(categoryId: string): Promise<number> {
     let level = 1;
     let currentId: string | null = categoryId;
+    const visited = new Set<string>();
+    const MAX_DEPTH = 10; // Prevent infinite loops on corrupted data
 
     // Iteratively traverse up the hierarchy with individual queries
     // More efficient than eager loading entire parent chain
     while (currentId) {
+      // Cycle detection: check if we've seen this ID before
+      if (visited.has(currentId)) {
+        throw new Error(`Category hierarchy cycle detected at category ${currentId}`);
+      }
+      visited.add(currentId);
+
+      // Depth limit check
+      if (level > MAX_DEPTH) {
+        throw new Error(`Category hierarchy depth exceeds maximum allowed depth of ${MAX_DEPTH}`);
+      }
+
       const category = await this.prisma.category.findUnique({
         where: { id: currentId },
         select: { parentId: true },

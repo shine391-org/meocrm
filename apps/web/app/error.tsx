@@ -20,7 +20,7 @@ export default function Error({
           Something went wrong
         </h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          {error.message || 'An unexpected error occurred'}
+          An unexpected error occurred. Please try again or contact support if the problem persists.
         </p>
         {error.digest && (
           <p className="mb-4 text-xs text-muted-foreground">

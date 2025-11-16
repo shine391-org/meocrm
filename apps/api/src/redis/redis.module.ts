@@ -7,7 +7,7 @@ import Redis from 'ioredis';
   providers: [
     {
       provide: 'REDIS_CLIENT',
-      useFactory: async (configService: ConfigService) => {
+      useFactory: async (configService: ConfigService): Promise<Redis | null> => {
         const logger = new Logger('RedisModule');
         const nodeEnv = configService.get<string>('NODE_ENV');
 

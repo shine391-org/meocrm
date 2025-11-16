@@ -43,18 +43,20 @@ export class ReportsService {
       whereConditions.push(Prisma.sql`"capturedAt" <= ${toDate}`);
     }
 
-    let dateTrunc: Prisma.Sql;
+    // Validate and build the DATE_TRUNC interval as a raw SQL literal
+    let dateTruncInterval: string;
     if (groupBy === 'day') {
-      dateTrunc = Prisma.raw(`'day'`);
+      dateTruncInterval = 'day';
     } else if (groupBy === 'month') {
-      dateTrunc = Prisma.raw(`'month'`);
+      dateTruncInterval = 'month';
     } else {
       throw new BadRequestException('Invalid groupBy value. Must be "day" or "month".');
     }
 
+    // Build query with inline raw SQL for DATE_TRUNC interval
     const queryRaw = Prisma.sql`
       SELECT
-        DATE_TRUNC(${dateTrunc}, "capturedAt") as period,
+        DATE_TRUNC(${Prisma.raw(`'${dateTruncInterval}'`)}, "capturedAt") as period,
         MAX("capturedAt") as "capturedAt",
         "customerId",
         (array_agg("debtValue" ORDER BY "capturedAt" DESC))[1] as "closingDebt"

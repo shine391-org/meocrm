@@ -14,7 +14,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  * }
  */
 export const OrganizationId = createParamDecorator(
-  (data: unknown, ctx: ExecutionContext): string => {
+  (data: unknown, ctx: ExecutionContext): string | undefined => {
     const request = ctx.switchToHttp().getRequest();
     return request.user?.organizationId || request.organizationId;
   },

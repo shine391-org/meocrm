@@ -83,6 +83,7 @@ export class AuthController {
       secure: this.isSecureCookie(),
       maxAge: REFRESH_TOKEN_MAX_AGE,
       path: '/',
+      signed: true,
     });
   }
 
@@ -93,11 +94,12 @@ export class AuthController {
       secure: this.isSecureCookie(),
       expires: new Date(0),
       path: '/',
+      signed: true,
     });
   }
 
   private extractRefreshToken(req: Request): string | null {
-    return req.cookies?.[REFRESH_TOKEN_COOKIE] || null;
+    return req.signedCookies?.[REFRESH_TOKEN_COOKIE] || null;
   }
 
   private isSecureCookie(): boolean {

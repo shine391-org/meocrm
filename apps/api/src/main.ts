@@ -22,6 +22,12 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const rawLimit = resolveWebhookRawLimit(configService, WEBHOOK_RAW_BODY_DEFAULT);
 
+  // Fail fast if COOKIE_SECRET is not configured
+  const cookieSecret = configService.get<string>('COOKIE_SECRET');
+  if (!cookieSecret) {
+    throw new Error('COOKIE_SECRET environment variable is required for signed cookies');
+  }
+
   const rawBodyBuffer = (
     req: express.Request & { rawBody?: string },
     _res: express.Response,
@@ -35,7 +41,7 @@ async function bootstrap() {
   app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
   app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
   app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
-  app.use(cookieParser());
+  app.use(cookieParser(cookieSecret));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

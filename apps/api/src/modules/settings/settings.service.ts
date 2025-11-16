@@ -72,15 +72,24 @@ export class SettingsService {
       return defaultValue;
     }
 
-    if (validator && !validator(setting.value)) {
-      const message = `Invalid value for setting "${key}" in organization ${organizationId}`;
-      if (defaultValue !== undefined) {
-        this.logger.warn(message);
-        return defaultValue;
+    // Always validate before casting to ensure runtime type safety
+    if (validator) {
+      if (!validator(setting.value)) {
+        const message = `Invalid value for setting "${key}" in organization ${organizationId}`;
+        if (defaultValue !== undefined) {
+          this.logger.warn(message);
+          return defaultValue;
+        }
+        throw new Error(message);
       }
-      throw new Error(message);
+      return setting.value as T;
+    } else {
+      // When no validator provided, warn and return the raw value
+      // Callers should always provide validators for type safety
+      this.logger.warn(
+        `Setting "${key}" accessed without validator. This may lead to runtime type errors.`,
+      );
+      return setting.value as T;
     }
-
-    return setting.value as T;
   }
 }

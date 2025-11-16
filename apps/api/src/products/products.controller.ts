@@ -10,7 +10,6 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
-  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,16 +18,16 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { OrganizationGuard } from '../common/guards';
+import { OrganizationId } from '../common/decorators/organization-id.decorator';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
-import { User } from '@prisma/client';
 
 @ApiTags('Products')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, OrganizationGuard)
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
@@ -40,12 +39,9 @@ export class ProductsController {
   @ApiResponse({ status: 409, description: 'SKU already exists' })
   create(
     @Body() createProductDto: CreateProductDto,
-    @CurrentUser() user: User,
+    @OrganizationId() organizationId: string,
   ) {
-    if (!user.organizationId) {
-      throw new BadRequestException('User is not associated with an organization.');
-    }
-    return this.productsService.create(createProductDto, user.organizationId);
+    return this.productsService.create(createProductDto, organizationId);
   }
 
   @Get()
@@ -53,12 +49,9 @@ export class ProductsController {
   @ApiResponse({ status: 200, description: 'Products retrieved successfully' })
   findAll(
     @Query() query: QueryProductsDto,
-    @CurrentUser() user: User,
+    @OrganizationId() organizationId: string,
   ) {
-    if (!user.organizationId) {
-      throw new BadRequestException('User is not associated with an organization.');
-    }
-    return this.productsService.findAll(query, user.organizationId);
+    return this.productsService.findAll(query, organizationId);
   }
 
   @Get(':id')
@@ -67,12 +60,9 @@ export class ProductsController {
   @ApiResponse({ status: 404, description: 'Product not found' })
   findOne(
     @Param('id') id: string,
-    @CurrentUser() user: User,
+    @OrganizationId() organizationId: string,
   ) {
-    if (!user.organizationId) {
-      throw new BadRequestException('User is not associated with an organization.');
-    }
-    return this.productsService.findOne(id, user.organizationId);
+    return this.productsService.findOne(id, organizationId);
   }
 
   @Patch(':id')
@@ -82,12 +72,9 @@ export class ProductsController {
   update(
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
-    @CurrentUser() user: User,
+    @OrganizationId() organizationId: string,
   ) {
-    if (!user.organizationId) {
-      throw new BadRequestException('User is not associated with an organization.');
-    }
-    return this.productsService.update(id, updateProductDto, user.organizationId);
+    return this.productsService.update(id, updateProductDto, organizationId);
   }
 
   @Delete(':id')
@@ -97,11 +84,8 @@ export class ProductsController {
   @ApiResponse({ status: 404, description: 'Product not found' })
   async remove(
     @Param('id') id: string,
-    @CurrentUser() user: User,
+    @OrganizationId() organizationId: string,
   ): Promise<void> {
-    if (!user.organizationId) {
-      throw new BadRequestException('User is not associated with an organization.');
-    }
-    await this.productsService.remove(id, user.organizationId);
+    await this.productsService.remove(id, organizationId);
   }
 }
