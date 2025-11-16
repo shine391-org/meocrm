@@ -8,30 +8,6 @@ describe('PricingService', () => {
     get: jest.fn(),
   };
 
-  const mockSettingsValues = (overrides?: {
-    freeShipThreshold?: number;
-    applyChannels?: string[];
-    baseFee?: number;
-  }) => {
-    const {
-      freeShipThreshold = 0,
-      applyChannels = [],
-      baseFee = 30000,
-    } = overrides ?? {};
-    settings.get.mockImplementation((key: string) => {
-      if (key === 'shipping.freeShipThreshold') {
-        return Promise.resolve(freeShipThreshold);
-      }
-      if (key === 'shipping.applyChannels') {
-        return Promise.resolve(applyChannels);
-      }
-      if (key === 'shipping.baseFee') {
-        return Promise.resolve(baseFee);
-      }
-      return Promise.resolve(undefined);
-    });
-  };
-
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -48,7 +24,7 @@ describe('PricingService', () => {
   });
 
   it('applies free shipping when channel matches and subtotal is above threshold', async () => {
-    mockSettingsValues({ freeShipThreshold: 500000, applyChannels: ['ONLINE'] });
+    settings.get.mockResolvedValueOnce(500000).mockResolvedValueOnce(['ONLINE']);
 
     const result = await service.calculateTotals({
       channel: 'ONLINE',
@@ -59,7 +35,7 @@ describe('PricingService', () => {
   });
 
   it('returns default shipping fee when threshold not met', async () => {
-    mockSettingsValues({ freeShipThreshold: 500000, applyChannels: ['ONLINE'] });
+    settings.get.mockResolvedValueOnce(500000).mockResolvedValueOnce(['ONLINE']);
 
     const result = await service.calculateTotals({
       channel: 'POS',

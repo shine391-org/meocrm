@@ -20,7 +20,7 @@ import { PrismaModule } from '../prisma/prisma.module';
         if (!secret) {
           throw new Error('JWT_SECRET is not configured');
         }
-        const expiresIn = (config.get<string | number>('JWT_EXPIRES_IN') ?? '7d') as SignOptions['expiresIn'];
+        const expiresIn = config.get<string>('JWT_EXPIRES_IN') || '7d';
         return {
           secret,
           signOptions: {

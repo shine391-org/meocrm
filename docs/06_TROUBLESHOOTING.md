@@ -281,9 +281,6 @@ API_PREFIX=api
 API_VERSION=v1
 PRISMA_HIDE_UPDATE_MESSAGE=true
 
-# Auth
-JWT_SECRET=dev-secret-jules-vm
-JWT_REFRESH_SECRET=dev-refresh-secret-jules-vm
-JWT_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
+# CORS
+CORS_ORIGIN=http://localhost:2004
 ```

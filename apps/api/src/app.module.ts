@@ -22,7 +22,6 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { RefundsApiModule } from './refunds/refunds.module';
 import { CronModule } from './modules/cron/cron.module';
 import { ReportsModule } from './modules/reports/reports.module';
-import { RequestContextMiddleware } from './common/context/request-context.middleware';
 
 @Module({
   imports: [

@@ -5,7 +5,6 @@ import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { Prisma, PrismaClient, OrderStatus } from '@prisma/client';
 import { PricingService } from './pricing.service';
 import { SettingsService } from '../modules/settings/settings.service';
-import { BadRequestException } from '@nestjs/common';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 

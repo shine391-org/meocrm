@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { OrdersService, Order } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { formatCurrency } from '@/lib/utils';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -18,12 +17,11 @@ export default function OrdersPage() {
       setIsLoading(true);
       setErrorMessage(null);
       try {
-        const response = await OrdersService.getOrders();
+        const latestOrders = await OrdersService.getOrders();
         if (!isMounted) {
           return;
         }
-        // API returns Array<Order>
-        setOrders(response || []);
+        setOrders(latestOrders);
       } catch (error) {
         console.error('Failed to fetch orders', error);
         if (isMounted) {
@@ -57,7 +55,7 @@ export default function OrdersPage() {
             <div key={order.id} className="border p-4 my-2 rounded-md">
               <p>Order #{order.code ?? order.id}</p>
               <p>Status: {order.status}</p>
-              <p>Tổng tiền: {typeof order.total === 'number' ? formatCurrency(order.total) : 'N/A'}</p>
+              <p>Total: {order.total}</p>
               <Link href={`/orders/${order.id}`}>
                 <Button>View Details</Button>
               </Link>

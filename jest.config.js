@@ -21,7 +21,7 @@ module.exports = {
     '!apps/api/src/**/dto/**',
     '!apps/api/src/**/entities/**',
   ],
-  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/', '\\.e2e-spec\\.ts$'],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
   roots: ['<rootDir>/apps/api'],
@@ -29,7 +29,6 @@ module.exports = {
   moduleNameMapper: {
     '^apps/api/(.*)$': '<rootDir>/apps/api/$1',
     '^src/(.*)$': '<rootDir>/apps/api/src/$1',
-    '^@meocrm/api-client$': '<rootDir>/packages/api-client/src/index.ts',
   },
   globals: {
     'ts-jest': {

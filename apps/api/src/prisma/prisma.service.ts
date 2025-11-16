@@ -1,7 +1,13 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 
-const SOFT_DELETE_MODELS = ['product', 'customer', 'order', 'supplier'] as const;
+const SOFT_DELETE_MODELS = [
+  'product',
+  'productVariant',
+  'customer',
+  'order',
+  'supplier',
+] as const;
 
 type SoftDeleteQueryableModel = (typeof SOFT_DELETE_MODELS)[number];
 
@@ -78,16 +84,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     extendedClient.onModuleDestroy = PrismaService.prototype.onModuleDestroy;
     extendedClient.cleanDatabase = PrismaService.prototype.cleanDatabase;
     return extendedClient;
-  }
-
-  static async resetForTests() {
-    if (process.env.NODE_ENV !== 'test') {
-      throw new Error('resetForTests can only be used in the test environment');
-    }
-    if (PrismaService.instance) {
-      await PrismaService.instance.$disconnect();
-      PrismaService.instance = null;
-    }
   }
 
   async onModuleInit() {

@@ -57,7 +57,7 @@ ADD COLUMN     "approvedAt" TIMESTAMP(3),
 ADD COLUMN     "currency" TEXT NOT NULL DEFAULT 'VND',
 ADD COLUMN     "customerId" TEXT,
 ADD COLUMN     "isAdjustment" BOOLEAN NOT NULL DEFAULT false,
-ADD COLUMN     "organizationId" TEXT NOT NULL DEFAULT 'UNKNOWN',
+ADD COLUMN     "organizationId" TEXT NOT NULL,
 ADD COLUMN     "periodMonth" TEXT NOT NULL,
 ADD COLUMN     "ratePercent" DECIMAL(5,2) NOT NULL,
 ADD COLUMN     "source" "CommissionSource" NOT NULL,
@@ -67,14 +67,6 @@ ADD COLUMN     "valueGross" DECIMAL(18,2) NOT NULL,
 ADD COLUMN     "valueNet" DECIMAL(18,2) NOT NULL,
 ALTER COLUMN "ruleId" DROP NOT NULL,
 ALTER COLUMN "amount" SET DATA TYPE DECIMAL(18,2);
-
--- Backfill organizationId for existing commissions
-UPDATE "commissions" c SET "organizationId" = o."organizationId"
-FROM "orders" o
-WHERE c."orderId" = o.id AND c."organizationId" = 'UNKNOWN';
-
--- AlterTable
-ALTER TABLE "commissions" ALTER COLUMN "organizationId" DROP DEFAULT;
 
 -- CreateTable
 CREATE TABLE "leads" (

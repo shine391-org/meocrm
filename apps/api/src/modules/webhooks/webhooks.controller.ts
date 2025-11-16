@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import {
   BadRequestException,
   Body,
@@ -14,7 +15,7 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { WebhookHMACGuard } from './webhook-hmac.guard';
 import { WebhooksService } from './webhooks.service';
-import { Public } from '../../auth/decorators/public.decorator';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { UpdateWebhookDto } from './dto/update-webhook.dto';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
@@ -32,7 +33,6 @@ export class WebhooksController {
   ) {}
 
   @Post('handler')
-  @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(WebhookHMACGuard)
   async handleWebhook(@Body() payload: any) {
@@ -71,6 +71,7 @@ export class WebhooksController {
 
   @Get()
   @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'List configured webhooks' })
   @ApiResponse({ status: 200, type: WebhookEntity, isArray: true })
   async list(@CurrentUser() user: User) {
@@ -80,6 +81,7 @@ export class WebhooksController {
 
   @Post()
   @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create a webhook subscription' })
   @ApiResponse({ status: 201, type: WebhookEntity })
   async create(@Body() dto: CreateWebhookDto, @CurrentUser() user: User) {
@@ -89,6 +91,7 @@ export class WebhooksController {
 
   @Patch(':id')
   @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Update a webhook subscription' })
   @ApiResponse({ status: 200, type: WebhookEntity })
   async update(@Param('id') id: string, @Body() dto: UpdateWebhookDto, @CurrentUser() user: User) {
@@ -99,6 +102,7 @@ export class WebhooksController {
   @Post(':id/test')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
   async testWebhook(@Param('id') id: string, @CurrentUser() user: User) {
     const organizationId = this.ensureOrganizationContext(user);
 

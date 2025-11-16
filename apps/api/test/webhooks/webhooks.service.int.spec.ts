@@ -4,7 +4,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { cleanupDatabase } from '../../src/test-utils';
 import { WebhooksService } from '../../src/modules/webhooks/webhooks.service';
 import { WebhookHMACGuard } from '../../src/modules/webhooks/webhook-hmac.guard';
-import { ExecutionContext, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, NotFoundException } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 
@@ -157,7 +157,7 @@ describe('WebhooksService + HMAC guard integration', () => {
     await expect(webhooksService.testWebhook(webhook.id, orgB.id)).rejects.toThrow(NotFoundException);
   });
 
-  it('handles legacy secrets without mutating stored payloads', async () => {
+  it('re-encrypts legacy secrets before sending test payloads', async () => {
     const { organization } = await seedOrder('WEBHOOK-LEGACY');
     const webhook = await webhooksService.createWebhook(createWebhookInput(), organization.id);
     await prisma.webhook.update({
@@ -175,7 +175,7 @@ describe('WebhooksService + HMAC guard integration', () => {
     expect(result.success).toBe(true);
 
     const stored = await prisma.webhook.findUnique({ where: { id: webhook.id } });
-    expect(stored?.secretEncrypted).toEqual({ legacySecret: 'legacy-secret' } as any);
+    expect((stored?.secretEncrypted as Record<string, unknown>).version).toBe('aes-256-gcm');
 
     axiosSpy.mockRestore();
   });
@@ -215,8 +215,8 @@ describe('WebhooksService + HMAC guard integration', () => {
     expect(stillCompleted?.status).toBe(OrderStatus.COMPLETED);
   });
 
-  it('warns and skips updates when the order is no longer PROCESSING', async () => {
-    const { organization, order } = await seedOrder('WEBHOOK-WARN');
+  it('warns when order is not in PROCESSING state', async () => {
+    const { organization, order } = await seedOrder('WEBHOOK-WARN', { status: OrderStatus.COMPLETED });
     const warnSpy = jest.spyOn((webhooksService as any).logger, 'warn');
 
     await webhooksService.handleShippingDelivered({
@@ -224,15 +224,8 @@ describe('WebhooksService + HMAC guard integration', () => {
       data: { orderId: order.id, organizationId: organization.id },
     });
 
-    warnSpy.mockClear();
-
-    await webhooksService.handleShippingDelivered({
-      event: 'shipping.delivered',
-      data: { orderId: order.id, organizationId: organization.id },
-    });
-
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`shipping.delivered skipped: order ${order.id}`),
+      expect.stringContaining(`order ${order.id}`),
     );
 
     warnSpy.mockRestore();
@@ -264,7 +257,7 @@ describe('WebhooksService + HMAC guard integration', () => {
       }),
     } as ExecutionContext;
 
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(await guard.canActivate(context)).toBe(false);
   });
 
   it('rejects mismatched HMAC signatures', async () => {
@@ -277,6 +270,6 @@ describe('WebhooksService + HMAC guard integration', () => {
       }),
     } as ExecutionContext;
 
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(await guard.canActivate(context)).toBe(false);
   });
 });

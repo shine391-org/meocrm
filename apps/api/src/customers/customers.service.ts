@@ -19,6 +19,15 @@ const CUSTOMER_SORTABLE_FIELDS: Array<keyof Prisma.CustomerOrderByWithRelationIn
   'debt',
 ];
 
+const CUSTOMER_SORTABLE_FIELDS: Array<keyof Prisma.CustomerOrderByWithRelationInput> = [
+  'createdAt',
+  'name',
+  'code',
+  'totalSpent',
+  'totalOrders',
+  'debt',
+];
+
 @Injectable()
 export class CustomersService {
   constructor(

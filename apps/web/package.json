@@ -10,6 +10,7 @@
     "test": "jest --config jest.config.js"
   },
   "dependencies": {
+    "@meocrm/api-client": "workspace:*",
     "@hookform/resolvers": "^3.3.4",
     "@meocrm/api-client": "workspace:*",
     "@radix-ui/react-avatar": "^1.0.4",

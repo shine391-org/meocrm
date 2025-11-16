@@ -77,13 +77,12 @@ export class AuditLogService {
   }
 
   private ensureKnownAuditEvent(event: string) {
-    if (!event) {
-      throw new BadRequestException('Invalid audit event');
-    }
-
-    const normalizedEvent = event.toLowerCase();
-    if (!AuditLogService.ALLOWED_EVENT_PREFIXES.some((prefix) => normalizedEvent.startsWith(prefix))) {
-      throw new BadRequestException(`Invalid audit event: ${event}`);
+    if (
+      !AuditLogService.ALLOWED_EVENT_PREFIXES.some((prefix) =>
+        event?.toLowerCase().startsWith(prefix),
+      )
+    ) {
+      throw new BadRequestException(`Invalid audit action: ${event}`);
     }
   }
 }

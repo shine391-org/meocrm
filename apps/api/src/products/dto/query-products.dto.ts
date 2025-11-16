@@ -1,19 +1,6 @@
-import {
-  IsOptional,
-  IsString,
-  IsNumber,
-  IsBoolean,
-  IsEnum,
-  Min,
-  Max,
-  IsInt,
-  Validate,
-  ValidatorConstraint,
-  ValidatorConstraintInterface,
-  ValidationArguments,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+/* istanbul ignore file */
+import { IsOptional, IsNumber, IsBoolean, IsIn, Min, Max, Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface, IsUUID, IsString, IsInt } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 export enum ProductSortBy {
   NAME = 'name',

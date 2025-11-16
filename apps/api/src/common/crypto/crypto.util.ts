@@ -1,10 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import { Logger } from '@nestjs/common';
 
 const AES_GCM_ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH_BYTES = 32;
 const GCM_IV_LENGTH_BYTES = 12;
-const logger = new Logger('CryptoUtil');
 
 export interface EncryptedSecretPayload {
   version: 'aes-256-gcm';
@@ -86,11 +84,6 @@ export const decryptSecret = (payload: EncryptedSecretPayload, key: Buffer): str
 
     return plaintext.toString('utf8');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error('Failed to decrypt webhook secret', {
-      sanitized: true,
-      message: message.slice(0, 200),
-    });
     throw new Error('Failed to decrypt webhook secret');
   }
 };

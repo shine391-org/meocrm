@@ -59,5 +59,5 @@ MeoCRM expose nhiều bề mặt tích hợp: REST, Webhook, MCP, WebSocket stre
 
 ## Operational Notes (VN Market)
 - **Telegram:** traffic bot qua HTTPS (TLS) – không phải MTProto end-to-end. Luôn rotate token nếu nghi rò rỉ.
-- **Zalo Cloud:** tuân thủ hạn mức API (xem <https://developers.zalo.me/docs/api>). Template approval thường 1-2 ngày làm việc. Tránh spam; dùng retry có exponential backoff tối đa 3 lần.
+- **Zalo Cloud:** tuân thủ hạn mức API (xem https://developers.zalo.me/docs/api). Template approval thường 1-2 ngày làm việc. Tránh spam; dùng retry có exponential backoff tối đa 3 lần.
 - **HMAC Secret Management:** lưu trong Secret Manager, retrieve qua env `WEBHOOK_SECRET`. Không embed vào code.

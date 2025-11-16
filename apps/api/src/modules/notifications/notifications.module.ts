@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { SettingsModule } from '../settings/settings.module';
 
+@Global()
 @Module({
   imports: [SettingsModule],
   providers: [NotificationsService],

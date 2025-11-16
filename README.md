@@ -356,7 +356,7 @@ docs/
 ## 26. Environment Configuration
 ```bash
 # Database
-DATABASE_URL="postgresql://meocrm_user:<YOUR_SECURE_DB_PASSWORD>@localhost:2001/meocrm_dev"
+DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev"
 REDIS_URL="redis://localhost:2002"
 
 # API
@@ -369,8 +369,8 @@ WEB_PORT=2004
 NEXT_PUBLIC_API_URL="http://localhost:2003"
 
 # Auth
-JWT_SECRET="<YOUR_SECURE_JWT_SECRET>"
-JWT_REFRESH_SECRET="<YOUR_SECURE_JWT_REFRESH_SECRET>"
+JWT_SECRET="your-jwt-secret-key"
+JWT_REFRESH_SECRET="your-jwt-refresh-secret"
 JWT_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 ```
@@ -693,31 +693,17 @@ For detailed roadmap with all 187 tasks, dependencies, and timeline, see **[ROAD
 
 ## 39. Appendix B: Sample `.env`
 ```bash
-# ── Database ────────────────────────────────────────────────────────────────
-DATABASE_URL=postgresql://meocrm_user:<YOUR_SECURE_DB_PASSWORD>@127.0.0.1:2001/meocrm_dev?schema=public
-DB_NAME=meocrm_dev
-DB_USER=meocrm_user
-DB_PASSWORD=<YOUR_SECURE_DB_PASSWORD>
-DB_PORT=2001
-
-# ── Redis / Cache ───────────────────────────────────────────────────────────
-REDIS_HOST=localhost
-REDIS_PORT=2002
-REDIS_URL=redis://localhost:2002
-
-# ── API / Web ───────────────────────────────────────────────────────────────
+DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev"
+REDIS_URL="redis://localhost:2002"
 PORT=2003
-NEXT_PUBLIC_API_URL=http://localhost:2003
-CORS_ORIGIN=http://localhost:2004
-API_PREFIX=api
-API_VERSION=v1
-PRISMA_HIDE_UPDATE_MESSAGE=true
-
-# ── Auth ────────────────────────────────────────────────────────────────────
-JWT_SECRET=<YOUR_SECURE_JWT_SECRET>
-JWT_REFRESH_SECRET=<YOUR_SECURE_JWT_REFRESH_SECRET>
-JWT_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
+API_URL="http://localhost:2003"
+CORS_ORIGIN="http://localhost:2004"
+WEB_PORT=2004
+NEXT_PUBLIC_API_URL="http://localhost:2003"
+JWT_SECRET="super-secret"
+JWT_REFRESH_SECRET="dev-refresh-secret"
+JWT_EXPIRES_IN="15m"
+JWT_REFRESH_EXPIRES_IN="7d"
 ```
 
 > ⚠️ **IMPORTANT SECURITY NOTICE**

@@ -16,6 +16,3 @@ apps/api/prisma/*.backup*
 
 # Prevent stray shadow source directory
 apps/api/srcs/
-
-# VSCode workspace settings (personal preferences)
-.vscode/settings.json

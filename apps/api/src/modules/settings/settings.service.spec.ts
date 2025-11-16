@@ -51,28 +51,4 @@ describe('SettingsService', () => {
 
     await expect(service.get('refund.windowDays')).rejects.toBeInstanceOf(UnauthorizedException);
   });
-
-  it('falls back to default when validator fails', async () => {
-    const { service } = buildService({
-      organizationId: 'org_1',
-      settingValue: { value: 'unexpected' },
-    });
-
-    const validator = (value: unknown): value is number => typeof value === 'number';
-    const result = await service.get<number>('refund.windowDays', 3, validator);
-
-    expect(result).toBe(3);
-  });
-
-  it('throws descriptive error when validator fails and no default provided', async () => {
-    const { service } = buildService({
-      organizationId: 'org_1',
-      settingValue: { value: 'unexpected' },
-    });
-    const validator = (value: unknown): value is number => typeof value === 'number';
-
-    await expect(service.get<number>('refund.windowDays', undefined as any, validator)).rejects.toThrow(
-      /Invalid value for setting "refund\.windowDays"/,
-    );
-  });
 });

@@ -5,24 +5,13 @@ This is the operations manual for Jules/Claude/Gemini when làm việc trên Meo
 > 🚀 **New to the project?** Start with [AGENTS-QUICKSTART.md](./AGENTS-QUICKSTART.md) (15-min onboarding) before reading this full manual.
 
 ## 1. Onboarding / Environment
-1. **Luôn dùng Jules VM snapshot đã chuẩn hóa.** Mọi package, Docker và env đã cấu hình sẵn từ Jules GUI → không tự chạy `setup-jules-vm.sh`.
-2. **Kiểm tra Docker services** (Postgres 17 @ 2001, Redis 8 @ 2002):
+1. `./setup-jules-vm.sh`
+2. Copy env:
    ```bash
-   sudo docker ps
-   sudo docker compose -f /tmp/meocrm-compose.yaml up -d db redis  # nếu thiếu container
+   cp apps/api/.env.example apps/api/.env
+   cp apps/web/.env.local.example apps/web/.env.local
    ```
-3. **Đồng bộ Prisma khi schema đổi:**
-   ```bash
-   pnpm db:generate
-   pnpm db:push
-   ```
-4. **Prebuild API client trước khi boot Next.js:**
-   ```bash
-   pnpm --filter @meocrm/api-client build
-   ```
-5. **Env**: Jules GUI profile phải chứa block chuẩn (xem README Appendix B hoặc `docs/ENVIRONMENT.md`). Không push `.env`.
-
-> ❗ **Never run `setup-jules-vm.sh` bên trong VM** – script đã được Jules chạy sẵn khi snapshot tạo ra.
+3. Refer `docs/ENVIRONMENT.md` để biết port, Postgres, Redis, Prisma workflow (reset chỉ local).
 
 ## 2. Knowledge Base & Project Status
 

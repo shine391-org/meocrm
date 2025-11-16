@@ -38,7 +38,10 @@ export class RequestContextService {
     return this.storage.getStore()?.organizationId;
   }
 
-  withOrganizationContext<T>(organizationId: string, callback: () => Promise<T>): Promise<T> {
+  withOrganizationContext<T>(
+    organizationId: string,
+    callback: () => Promise<T>,
+  ): Promise<T> {
     return this.run(async () => {
       this.setContext({ organizationId });
       return callback();

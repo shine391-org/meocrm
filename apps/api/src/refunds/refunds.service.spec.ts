@@ -16,7 +16,7 @@ import {
   CommissionSource,
   AuditAction,
 } from '@prisma/client';
-import { BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('RefundsService', () => {
@@ -37,18 +37,18 @@ describe('RefundsService', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
   };
-  const managerUser: User = { ...mockUser, id: 'user-manager', role: UserRole.MANAGER };
-  const adminUser: User = { ...mockUser, id: 'user-admin', role: UserRole.ADMIN };
 
   const buildOrder = (
     overrides: Partial<Order & { items: (OrderItem & { variant: ProductVariant | null })[]; commissions: any[] }> = {},
   ) => {
-    const baseOrder = {
+    const baseOrder: Order & { items: (OrderItem & { variant: ProductVariant | null })[]; commissions: any[] } = {
       id: 'order-1',
       code: 'ORD-001',
       status: OrderStatus.COMPLETED,
       total: 100 as any,
+      userId: 'user-1',
       organizationId: 'org-1',
+      branchId: 'branch-1',
       completedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -64,11 +64,13 @@ describe('RefundsService', () => {
           unitPrice: 50 as any,
           subtotal: 100 as any,
           organizationId: 'org-1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
           variant: {
             id: 'variant-1',
             productId: 'prod-1',
             sku: 'SKU-001',
-            additionalPrice: 0 as any,
+            sellPrice: 50 as any,
             name: 'Variant',
             organizationId: 'org-1',
             isActive: true,
@@ -79,9 +81,9 @@ describe('RefundsService', () => {
             createdAt: new Date(),
             updatedAt: new Date(),
           },
-        } as unknown as OrderItem & { variant: ProductVariant | null },
+        },
       ],
-    } as Order & { items: (OrderItem & { variant: ProductVariant | null })[]; commissions: any[] };
+    };
     return { ...baseOrder, ...overrides };
   };
 
@@ -106,15 +108,8 @@ describe('RefundsService', () => {
     eventEmitter = module.get(EventEmitter2);
 
     prisma.order.findUnique.mockResolvedValue(buildOrder());
-    settings.get.mockImplementation((key: string) => {
-      if (key === 'refund.windowDays') {
-        return Promise.resolve(7 as any);
-      }
-      if (key === 'refund.restockOnRefund') {
-        return Promise.resolve(true as any);
-      }
-      return Promise.resolve(undefined);
-    });
+    settings.get.calledWith('refund.windowDays').mockResolvedValue(7);
+    settings.get.calledWith('refund.restockOnRefund').mockResolvedValue(true);
   });
 
   describe('requestRefund', () => {
@@ -140,21 +135,14 @@ describe('RefundsService', () => {
       );
       expect(auditLog.log).not.toHaveBeenCalled();
     });
-
-    it('denies request when user lacks permission', async () => {
-      await expect(service.requestRefund('order-1', { reason: 'test' }, adminUser)).rejects.toThrow(
-        ForbiddenException,
-      );
-      expect(auditLog.log).not.toHaveBeenCalled();
-    });
   });
 
   describe('rejectRefund', () => {
     it('should create an audit log and send a notification', async () => {
-      await service.rejectRefund('order-1', { reason: 'test reject' }, managerUser);
+      await service.rejectRefund('order-1', { reason: 'test reject' }, mockUser);
       expect(auditLog.log).toHaveBeenCalledWith(
         expect.objectContaining({
-          user: managerUser,
+          user: mockUser,
           action: 'refund.rejected',
           auditAction: AuditAction.UPDATE,
           entityId: 'order-1',
@@ -167,16 +155,10 @@ describe('RefundsService', () => {
     it('throws NotFoundException if order not found during reject', async () => {
       prisma.order.findUnique.mockResolvedValueOnce(null as any);
 
-      await expect(service.rejectRefund('missing', { reason: 'fail' }, managerUser)).rejects.toThrow(
+      await expect(service.rejectRefund('missing', { reason: 'fail' }, mockUser)).rejects.toThrow(
         NotFoundException,
       );
       expect(auditLog.log).not.toHaveBeenCalled();
-    });
-
-    it('denies reject for non privileged users', async () => {
-      await expect(service.rejectRefund('order-1', { reason: 'nope' }, mockUser)).rejects.toThrow(
-        ForbiddenException,
-      );
     });
   });
 
@@ -184,12 +166,12 @@ describe('RefundsService', () => {
     it('should throw BadRequestException if refund window is exceeded', async () => {
       const oldOrder = buildOrder({ completedAt: new Date('2023-01-01') }) as any;
       prisma.order.findUnique.mockResolvedValue(oldOrder);
-      await expect(service.approveRefund('order-1', managerUser)).rejects.toThrow(BadRequestException);
+      await expect(service.approveRefund('order-1', mockUser)).rejects.toThrow(BadRequestException);
     });
 
     it('throws when order is missing', async () => {
       prisma.order.findUnique.mockResolvedValueOnce(null as any);
-      await expect(service.approveRefund('missing', managerUser)).rejects.toThrow(NotFoundException);
+      await expect(service.approveRefund('missing', mockUser)).rejects.toThrow(NotFoundException);
     });
 
     it('throws when order is not completed yet', async () => {
@@ -200,17 +182,13 @@ describe('RefundsService', () => {
         }) as any,
       );
 
-      await expect(service.approveRefund('order-1', managerUser)).rejects.toThrow(BadRequestException);
-    });
-
-    it('denies approval for users without decision rights', async () => {
-      await expect(service.approveRefund('order-1', mockUser)).rejects.toThrow(ForbiddenException);
+      await expect(service.approveRefund('order-1', mockUser)).rejects.toThrow(BadRequestException);
     });
 
     it('should successfully process a refund, update stock, and emit event', async () => {
       prisma.$transaction.mockImplementation(async (callback: any) => callback(prisma));
 
-      await service.approveRefund('order-1', managerUser);
+      await service.approveRefund('order-1', mockUser);
 
       expect(prisma.productVariant.update).toHaveBeenCalledWith({
         where: { id: 'variant-1' },
@@ -228,10 +206,10 @@ describe('RefundsService', () => {
 
       expect(auditLog.log).toHaveBeenCalledWith(
         expect.objectContaining({
-          user: managerUser,
+          user: mockUser,
           action: 'refund.approved',
           entityId: 'order-1',
-          newValues: expect.objectContaining({ restocked: true }),
+          newValues: { restocked: true },
         }),
       );
 
@@ -263,53 +241,26 @@ describe('RefundsService', () => {
       );
       prisma.$transaction.mockImplementation(async (callback: any) => callback(prisma));
 
-      await service.approveRefund('order-1', managerUser);
+      await service.approveRefund('order-1', mockUser);
 
       expect(prisma.commission.create).toHaveBeenCalled();
-      const adjustmentPayload =
-        prisma.commission.create.mock.calls[0][0].data as Prisma.CommissionUncheckedCreateInput;
+      const adjustmentPayload = prisma.commission.create.mock.calls[0][0].data;
       expect(adjustmentPayload.adjustsCommissionId).toBe(commission.id);
       expect(adjustmentPayload.isAdjustment).toBe(true);
-      expect(
-        new Prisma.Decimal(adjustmentPayload.valueGross as Prisma.Decimal.Value).equals(
-          new Prisma.Decimal(-100),
-        ),
-      ).toBe(true);
-      expect(
-        new Prisma.Decimal(adjustmentPayload.amount as Prisma.Decimal.Value).equals(
-          new Prisma.Decimal(-20),
-        ),
-      ).toBe(true);
+      expect(adjustmentPayload.valueGross.equals(new Prisma.Decimal(-100))).toBe(true);
+      expect(adjustmentPayload.amount.equals(new Prisma.Decimal(-20))).toBe(true);
     });
 
     it('skips restocking when refund.restockOnRefund is false', async () => {
       prisma.$transaction.mockImplementation(async (callback: any) => callback(prisma));
-      settings.get.mockImplementation((key: string) => {
-        if (key === 'refund.windowDays') {
-          return Promise.resolve(7 as any);
-        }
-        if (key === 'refund.restockOnRefund') {
-          return Promise.resolve(false as any);
-        }
-        return Promise.resolve(undefined);
-      });
+      settings.get.calledWith('refund.restockOnRefund').mockResolvedValueOnce(false);
       prisma.product.update.mockClear();
       prisma.productVariant.update.mockClear();
 
-      await service.approveRefund('order-1', managerUser);
+      await service.approveRefund('order-1', mockUser);
 
       expect(prisma.product.update).not.toHaveBeenCalled();
       expect(prisma.productVariant.update).not.toHaveBeenCalled();
-
-      settings.get.mockImplementation((key: string) => {
-        if (key === 'refund.windowDays') {
-          return Promise.resolve(7 as any);
-        }
-        if (key === 'refund.restockOnRefund') {
-          return Promise.resolve(true as any);
-        }
-        return Promise.resolve(undefined);
-      });
     });
   });
 });

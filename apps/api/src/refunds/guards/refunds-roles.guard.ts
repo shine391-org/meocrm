@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { User } from '@prisma/client';
-import { SettingsService, isStringArraySetting } from '../../modules/settings/settings.service';
+import { SettingsService } from '../../modules/settings/settings.service';
 
 @Injectable()
 export class RefundsRolesGuard implements CanActivate {
@@ -22,11 +22,8 @@ export class RefundsRolesGuard implements CanActivate {
       });
     }
 
-    const allowedRoles = await this.settingsService.get<string[]>(
-      'refund.approvals',
-      ['ADMIN', 'MANAGER'],
-      isStringArraySetting,
-    );
+    const allowedRoles =
+      (await this.settingsService.get<string[]>('refund.approvals', ['OWNER'])) ?? ['OWNER'];
 
     if (!Array.isArray(allowedRoles) || !allowedRoles.includes(user.role)) {
       throw new ForbiddenException({

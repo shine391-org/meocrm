@@ -27,34 +27,6 @@ export class OrdersService {
     private readonly pricingService: PricingService,
   ) {}
 
-  private mapOrderResponse<T extends { subtotal: any; tax: any; shipping: any; discount: any; total: any; paidAmount: any; items?: any[] }>(
-    order: T,
-  ): T {
-    if (!order) {
-      return order;
-    }
-
-    const normalize = (value: Prisma.Decimal | number) =>
-      typeof value === 'number' ? value : Number(value);
-
-    return {
-      ...order,
-      subtotal: normalize(order.subtotal),
-      tax: normalize(order.tax),
-      shipping: normalize(order.shipping),
-      discount: normalize(order.discount),
-      total: normalize(order.total),
-      paidAmount: normalize(order.paidAmount),
-      items: Array.isArray(order.items)
-        ? order.items.map((item) => ({
-            ...item,
-            unitPrice: normalize(item.unitPrice),
-            subtotal: normalize(item.subtotal),
-          }))
-        : order.items,
-    };
-  }
-
   async generateOrderCode(
     organizationId: string,
     prisma?: PrismaTransactionalClient,

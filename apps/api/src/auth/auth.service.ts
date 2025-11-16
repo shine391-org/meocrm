@@ -10,6 +10,8 @@ import { SignOptions } from 'jsonwebtoken';
 
 type JwtDuration = SignOptions['expiresIn'];
 
+type JwtDuration = `${number}d` | `${number}h` | `${number}m`;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -175,8 +177,8 @@ export class AuthService {
 
     const accessSecret = this.getSecretOrThrow('JWT_SECRET');
     const refreshSecret = this.getSecretOrThrow('JWT_REFRESH_SECRET');
-    const accessExpiresIn = (this.configService.get<string | number>('JWT_EXPIRES_IN') ?? '15m') as JwtDuration;
-    const refreshExpiresIn = (this.configService.get<string | number>('JWT_REFRESH_EXPIRES_IN') ?? '7d') as JwtDuration;
+    const accessExpiresIn = (this.configService.get<string>('JWT_EXPIRES_IN') ?? '15m') as JwtDuration;
+    const refreshExpiresIn = (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d') as JwtDuration;
 
     const accessToken = this.jwtService.sign(payload, {
       secret: accessSecret,

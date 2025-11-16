@@ -127,12 +127,17 @@ describe('DebtSnapshotService', () => {
 
     await service.handleCron();
 
-    expect(txMock.customerDebtSnapshot.createMany).toHaveBeenCalled();
+    expect(txMock.customerDebtSnapshot.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({
+            organizationId: orgId,
+            customerId: 'cust_positive',
+          }),
+        ],
+      }),
+    );
     const payload = txMock.customerDebtSnapshot.createMany.mock.calls[0][0];
-    expect(payload.data[0]).toMatchObject({
-      organizationId: orgId,
-      customerId: 'cust_positive',
-    });
     expect(payload.data[0].debtValue.toString()).toBe('200');
   });
 
@@ -192,7 +197,11 @@ describe('DebtSnapshotService', () => {
 
     const prisma = {
       organization: {
-        findMany: jest.fn().mockResolvedValueOnce(organizations).mockResolvedValue([]),
+        findMany: jest
+          .fn()
+          .mockResolvedValueOnce([organizations[0]])
+          .mockResolvedValueOnce([organizations[1]])
+          .mockResolvedValue([]),
       },
       $transaction: jest.fn().mockImplementation(async (callback: any) => {
         if (currentOrg === 'org_fail') {

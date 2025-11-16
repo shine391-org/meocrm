@@ -1,13 +1,11 @@
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
-import cookieParser from 'cookie-parser';
-import { ValidationPipe } from '@nestjs/common';
+import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { RequestContextService } from './common/context/request-context.service';
 import {
   createWebhookRawMiddleware,
   resolveApiPort,
@@ -15,18 +13,14 @@ import {
   WEBHOOK_RAW_BODY_DEFAULT,
 } from './config/server.config';
 
+const routeLogger = new Logger('RouteLogger');
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bodyParser: false,
   });
   const configService = app.get(ConfigService);
   const rawLimit = resolveWebhookRawLimit(configService, WEBHOOK_RAW_BODY_DEFAULT);
-
-  // Fail fast if COOKIE_SECRET is not configured
-  const cookieSecret = configService.get<string>('COOKIE_SECRET');
-  if (!cookieSecret) {
-    throw new Error('COOKIE_SECRET environment variable is required for signed cookies');
-  }
 
   const rawBodyBuffer = (
     req: express.Request & { rawBody?: string },
@@ -38,10 +32,10 @@ async function bootstrap() {
       req.rawBody = buf.toString(encoding || 'utf8');
     }
   };
+
   app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
   app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
   app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
-  app.use(cookieParser(cookieSecret));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -55,10 +49,7 @@ async function bootstrap() {
       },
     }),
   );
-  const requestContextService = app.get(RequestContextService);
-  app.useGlobalFilters(new HttpExceptionFilter(requestContextService));
-
-  app.setGlobalPrefix('api');
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   const port = resolveApiPort(configService);
 
@@ -69,26 +60,10 @@ async function bootstrap() {
         .map((origin) => origin.trim())
         .filter(Boolean)
     : [];
-  const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
-  if (!allowedOrigins.length) {
-    if (nodeEnv === 'production') {
-      throw new Error('CORS_ORIGIN must be configured in production environments');
-    }
-    app.enableCors({
-      origin: false,
-      credentials: false,
-    });
-  } else {
-    app.enableCors({
-      origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-          return callback(null, true);
-        }
-        return callback(new Error('Origin not allowed'), false);
-      },
-      credentials: true,
-    });
-  }
+  app.enableCors({
+    origin: allowedOrigins.length ? allowedOrigins : true,
+    credentials: true,
+  });
 
   const config = new DocumentBuilder()
     .setTitle('MeoCRM API')
@@ -135,5 +110,40 @@ async function bootstrap() {
 
   console.log(`🚀 API running on: http://localhost:${port}`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api`);
+  logRegisteredRoutes(app);
 }
 bootstrap();
+
+function logRegisteredRoutes(app: INestApplication) {
+  const env = (process.env.NODE_ENV ?? 'development').toLowerCase();
+  if (env !== 'development') {
+    return;
+  }
+
+  try {
+    const httpAdapter = app.getHttpAdapter?.();
+    const instance = httpAdapter?.getInstance?.();
+    const routerStack = instance?._router?.stack;
+    if (!Array.isArray(routerStack)) {
+      return;
+    }
+
+    const routes = routerStack
+      .filter((layer) => layer?.route?.path)
+      .map((layer) => {
+        const methods = Object.entries(layer.route.methods ?? {})
+          .filter(([, enabled]) => enabled)
+          .map(([method]) => method.toUpperCase())
+          .join('|');
+        return `${methods || 'ALL'} ${layer.route.path}`;
+      });
+
+    if (routes.length) {
+      routeLogger.debug(`Registered routes (${routes.length}):\n${routes.join('\n')}`);
+    }
+  } catch (error) {
+    routeLogger.warn(
+      `Route logging skipped: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}

@@ -2,7 +2,7 @@
 
 Nguồn sự thật cho hành vi hệ thống nằm trong bảng `settings` (PostgreSQL) + cache Redis. Quyết định #34–#48 được coi là **defaults** và có thể override theo thang:
 
-```text
+```
 Default → Plan → Tenant → Branch → Role → User → Object
 ```
 

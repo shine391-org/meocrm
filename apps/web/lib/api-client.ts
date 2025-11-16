@@ -1,25 +1,24 @@
 import { OpenAPI } from '@meocrm/api-client';
-import { getBrowserToken, getOrganizationId } from '@/lib/auth/token';
+import { getBrowserToken } from '@/lib/auth/token';
 
-// Delay validation until runtime to allow build-time SSG
-// The API URL will be validated when making actual API calls (see OpenAPI.HEADERS below)
-OpenAPI.BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+if (API_BASE_URL && OpenAPI.BASE !== API_BASE_URL) {
+  OpenAPI.BASE = API_BASE_URL;
+}
 
 OpenAPI.HEADERS = async () => {
-  // Validate at runtime when actually making API calls
-  if (!OpenAPI.BASE) {
-    throw new Error('NEXT_PUBLIC_API_URL is not defined. Please set it in your environment.');
-  }
-
   const headers: Record<string, string> = {};
   const token = getBrowserToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const organizationId = getOrganizationId();
-  if (organizationId) {
-    headers['x-organization-id'] = organizationId;
+  if (typeof window !== 'undefined') {
+    const organizationId = window.localStorage?.getItem('organizationId');
+    if (organizationId) {
+      headers['x-organization-id'] = organizationId;
+    }
   }
 
   return headers;
