@@ -62,7 +62,7 @@ export class ProductsService {
       this.assertVariantPrice(product.sellPrice, additionalPrice);
 
       const existingVariant = await tx.productVariant.findFirst({
-        where: { sku, organizationId },
+        where: { sku, organizationId, deletedAt: null },
         select: { id: true },
       });
 
@@ -91,7 +91,7 @@ export class ProductsService {
     sellPrice: Prisma.Decimal | number,
   ) {
     const variants = await tx.productVariant.findMany({
-      where: { productId, organizationId },
+      where: { productId, organizationId, deletedAt: null },
     });
 
     for (const variant of variants) {
@@ -274,7 +274,7 @@ export class ProductsService {
 
     // Check for duplicate SKU
     const existingVariant = await this.prisma.productVariant.findFirst({
-      where: { sku, organizationId },
+      where: { sku, organizationId, deletedAt: null },
       select: { id: true },
     });
 
@@ -298,14 +298,14 @@ export class ProductsService {
   async findVariants(productId: string, organizationId: string) {
     await this.findOne(productId, organizationId);
     return this.prisma.productVariant.findMany({
-      where: { productId, organizationId },
+      where: { productId, organizationId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async updateVariant(id: string, dto: UpdateVariantDto, organizationId: string) {
     const variant = await this.prisma.productVariant.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, deletedAt: null },
       include: { product: true },
     });
     if (!variant) throw new NotFoundException(`Variant ${id} not found`);
@@ -325,11 +325,12 @@ export class ProductsService {
 
   async removeVariant(id: string, organizationId: string) {
     const variant = await this.prisma.productVariant.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, deletedAt: null },
     });
     if (!variant) throw new NotFoundException(`Variant ${id} not found`);
-    await this.prisma.productVariant.delete({
+    await this.prisma.productVariant.update({
       where: { id },
+      data: { deletedAt: new Date() },
     });
     return { message: 'Variant deleted successfully' };
   }

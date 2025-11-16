@@ -19,6 +19,11 @@ describe('InventoryService', () => {
 
     service = module.get<InventoryService>(InventoryService);
     prisma = module.get(PrismaService);
+
+    // Mock $transaction to execute the callback with prisma
+    prisma.$transaction.mockImplementation(async (callback: any) => {
+      return callback(prisma);
+    });
   });
 
   afterEach(() => {
@@ -152,7 +157,7 @@ describe('InventoryService', () => {
     });
 
     it('should increase stock with positive quantity', async () => {
-      prisma.inventory.findFirst.mockResolvedValue(mockInventory as any);
+      prisma.inventory.findUnique.mockResolvedValue(mockInventory as any);
       prisma.inventory.update.mockResolvedValue({
         ...mockInventory,
         quantity: 60,
@@ -193,7 +198,7 @@ describe('InventoryService', () => {
     });
 
     it('should decrease stock with negative quantity', async () => {
-      prisma.inventory.findFirst.mockResolvedValue(mockInventory as any);
+      prisma.inventory.findUnique.mockResolvedValue(mockInventory as any);
       prisma.inventory.update.mockResolvedValue({
         ...mockInventory,
         quantity: 40,
@@ -215,7 +220,7 @@ describe('InventoryService', () => {
     });
 
     it('should throw BadRequestException when reducing stock below zero', async () => {
-      prisma.inventory.findFirst.mockResolvedValue(mockInventory as any);
+      prisma.inventory.findUnique.mockResolvedValue(mockInventory as any);
 
       await expect(
         service.adjustStock(
@@ -266,7 +271,7 @@ describe('InventoryService', () => {
     });
 
     it('should create inventory record if not exists', async () => {
-      prisma.inventory.findFirst.mockResolvedValue(null);
+      prisma.inventory.findUnique.mockResolvedValue(null);
       prisma.inventory.create.mockResolvedValue({
         id: 'inv-new',
         productId: 'prod-1',
@@ -379,7 +384,7 @@ describe('InventoryService', () => {
       prisma.branch.findFirst
         .mockResolvedValueOnce(mockFromBranch as any)
         .mockResolvedValueOnce(mockToBranch as any);
-      prisma.inventory.findFirst
+      prisma.inventory.findUnique
         .mockResolvedValueOnce(mockFromInventory as any)
         .mockResolvedValueOnce({ id: 'inv-2', quantity: 30 } as any);
       prisma.inventory.update
@@ -434,7 +439,7 @@ describe('InventoryService', () => {
       prisma.branch.findFirst
         .mockResolvedValueOnce(mockFromBranch as any)
         .mockResolvedValueOnce(mockToBranch as any);
-      prisma.inventory.findFirst.mockResolvedValue(mockFromInventory as any);
+      prisma.inventory.findUnique.mockResolvedValue(mockFromInventory as any);
 
       await expect(
         service.createTransfer(
@@ -490,7 +495,7 @@ describe('InventoryService', () => {
       prisma.branch.findFirst
         .mockResolvedValueOnce(mockFromBranch as any)
         .mockResolvedValueOnce(mockToBranch as any);
-      prisma.inventory.findFirst
+      prisma.inventory.findUnique
         .mockResolvedValueOnce(mockFromInventory as any)
         .mockResolvedValueOnce(null);
       prisma.inventory.update.mockResolvedValue({
@@ -529,6 +534,7 @@ describe('InventoryService', () => {
     const mockOrder = {
       id: 'order-1',
       organizationId: 'org-1',
+      branchId: 'branch-1',
       items: [
         {
           id: 'item-1',
@@ -572,6 +578,7 @@ describe('InventoryService', () => {
     const mockOrder = {
       id: 'order-1',
       organizationId: 'org-1',
+      branchId: 'branch-1',
       items: [
         {
           id: 'item-1',

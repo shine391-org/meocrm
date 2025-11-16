@@ -513,10 +513,11 @@ export class InventoryService {
 
       // Create transfer record
       const transferValue = Number(product.sellPrice) * quantity;
+      const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
 
       const transfer = await tx.transfer.create({
         data: {
-          code: `TRF-${Date.now()}`,
+          code: `TRF-${uniqueSuffix}`,
           fromBranchId,
           toBranchId,
           value: transferValue,
@@ -531,7 +532,6 @@ export class InventoryService {
       });
 
       // Log transactions for both branches using StockAdjustment
-      const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
 
       await Promise.all([
         // Source branch (OUT)

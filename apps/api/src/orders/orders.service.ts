@@ -499,10 +499,10 @@ export class OrdersService {
       paidAmount: Number(order.paidAmount),
       items: order.items?.map((item: any) => ({
         ...item,
-        price: Number(item.price),
+        price: Number(item.unitPrice),
         quantity: Number(item.quantity),
         discount: Number(item.discount),
-        total: Number(item.total),
+        total: Number(item.subtotal),
       })),
       customer: order.customer ? {
         ...order.customer,

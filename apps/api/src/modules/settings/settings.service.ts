@@ -41,7 +41,7 @@ export class SettingsService {
     key: string,
     defaultValue?: T,
     validator?: (value: unknown) => value is T,
-  ): Promise<T> {
+  ): Promise<T | undefined> {
     const setting = await this.prisma.setting.findUnique({
       where: {
         organizationId_key: {
@@ -52,15 +52,15 @@ export class SettingsService {
     });
 
     if (!setting) {
-      return defaultValue as T;
+      return defaultValue;
     }
 
     const value = setting.value;
 
     if (validator && !validator(value)) {
-      return defaultValue as T;
+      return defaultValue;
     }
 
-    return (value as T) ?? (defaultValue as T);
+    return value !== null && value !== undefined ? (value as T) : defaultValue;
   }
 }
