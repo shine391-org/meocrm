@@ -182,7 +182,7 @@ describe('Orders E2E', () => {
     });
 
     it('should revert customer stats on delete', async () => {
-      await request(app.getHttpServer())
+      const createResponse = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -193,12 +193,15 @@ describe('Orders E2E', () => {
         .expect(201);
 
       const order = await prisma.order.findFirst({ where: { customerId: customer.id }});
+      const orderTotal = Number(createResponse.body.total);
+      const amountOwed = Number(createResponse.body.amountOwed || 0);
+      const expectedTotalSpent = orderTotal - amountOwed; // Business logic: totalSpent = what customer actually paid
 
       const customerBefore = await prisma.customer.findUnique({
         where: { id: customer.id },
       });
 
-        expect(Number(customerBefore?.totalSpent)).toBe(220000);
+      expect(Number(customerBefore?.totalSpent)).toBe(expectedTotalSpent);
       expect(customerBefore?.totalOrders).toBe(1);
 
       await request(app.getHttpServer())

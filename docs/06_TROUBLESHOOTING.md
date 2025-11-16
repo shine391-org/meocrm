@@ -74,7 +74,7 @@ cat ~/projects/meocrm/apps/api/.env
 
 ---
 
-## ⚠️ ISSUE #2: Docker Network & Connection
+## ⚠️ ISSUE #2: Prisma cannot connect to DB in Jules VM
 
 ### Problem
 
@@ -87,19 +87,19 @@ Cannot connect to PostgreSQL at localhost:2001
 
 **Context:**
 
-- Docker containers are running and healthy ✅
-- DATABASE_URL in .env looks correct ✅
-- But Prisma/psql cannot connect ❌
+- Jules VM snapshot ships Postgres 17 inside Docker on port **2001**.
+- DATABASE_URL sometimes points to `localhost` or a stopped container.
+- Prisma/psql cannot connect ❌
 
 ### Root Causes
 
 1.  **`localhost` vs `127.0.0.1`**: `localhost` might not resolve correctly. Using `127.0.0.1` forces an IPv4 TCP connection.
 2.  **Firewall/Port blocking**: The port might be blocked by `ufw` or other firewalls.
-3.  **Unix Socket vs TCP**: `psql` can sometimes default to using a Unix socket when the host is `localhost`.
+3.  **Containers stopped**: Docker may not restart automatically after a crash; start it manually.
 
 ### Solution Workflow
 
-**Step 1: Use the Diagnostic Script**
+### Step 1: Use the Diagnostic Script
 
 A diagnostic script is available at `scripts/diagnose-db.sh` to automatically check for common connection issues.
 
@@ -107,7 +107,7 @@ A diagnostic script is available at `scripts/diagnose-db.sh` to automatically ch
 ./scripts/diagnose-db.sh
 ```
 
-**Step 2: Fix .env (Most Common Fix)**
+### Step 2: Fix .env (Most Common Fix)
 
 Update your `apps/api/.env` to use `127.0.0.1` instead of `localhost`.
 
@@ -116,7 +116,14 @@ Update your `apps/api/.env` to use `127.0.0.1` instead of `localhost`.
 DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev?schema=public"
 ```
 
-**Step 3: Verify Fix**
+### Step 3: Restart snapshot containers (if needed)
+
+```bash
+sudo docker ps --filter "name=db"
+sudo docker compose -f /tmp/meocrm-compose.yaml up -d db
+```
+
+### Step 4: Verify Fix
 
 ```bash
 # Test connection
@@ -126,6 +133,57 @@ psql "postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev" -c
 cd ~/projects/meocrm/apps/api
 pnpm prisma db pull
 ```
+
+---
+
+## ⚠️ ISSUE #3: Next.js cannot resolve `@meocrm/api-client`
+
+### Symptom
+```text
+Module not found: Can't resolve '@meocrm/api-client'
+```
+
+### Solution
+1. **Rebuild the generated SDK** every time the API schema/types change:
+   ```bash
+   pnpm --filter @meocrm/api-client build
+   ```
+2. **Confirm package entry points** in `packages/api-client/package.json`:
+   ```json
+   {
+     "main": "dist/index.js",
+     "types": "dist/index.d.ts"
+   }
+   ```
+3. Restart Next.js (`pnpm dev:web`) so the fresh build is loaded.
+
+---
+
+## ⚠️ ISSUE #4: Redis connection refused on port 2002
+
+### Symptom
+```text
+Error: connect ECONNREFUSED 127.0.0.1:2002
+```
+
+### Solution
+1. Check port: `nc -zv 127.0.0.1 2002`.
+2. Ensure container is running: `sudo docker ps --filter "name=redis"`.
+3. Restart if needed: `sudo docker compose -f /tmp/meocrm-compose.yaml up -d redis`.
+4. Validate env: `REDIS_HOST=localhost`, `REDIS_PORT=2002`, `REDIS_URL=redis://localhost:2002`.
+
+---
+
+## ⚠️ ISSUE #5: Mismatch between local dev & Jules snapshot
+
+### Symptom
+- System PostgreSQL/Redis installed manually conflict with Docker ports.
+- Snapshot reboot removes custom services; commands from README appear inconsistent.
+
+### Solution
+- **Inside Jules VM**: rely exclusively on the snapshot Docker stack (`/tmp/meocrm-compose.yaml`). Never run `setup-jules-vm.sh` or install extra services.
+- **On physical/local machines**: follow `docs/ENVIRONMENT.md → Local Setup` and manage your own services.
+- If ports are still blocked, stop host services (`sudo systemctl stop postgresql redis-server`) and restart the VM so the snapshot state is clean.
 
 ---
 
@@ -204,19 +262,24 @@ pnpm prisma studio --port 5556
 
 ```bash
 # Database
-DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev?schema=public"
+DATABASE_URL=postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev?schema=public
+DB_NAME=meocrm_dev
+DB_USER=meocrm_user
+DB_PASSWORD=meocrm_dev_password
+DB_PORT=2001
 
 # Redis
-REDIS_HOST=127.0.0.1
+REDIS_HOST=localhost
 REDIS_PORT=2002
+REDIS_URL=redis://localhost:2002
 
-# JWT
-JWT_SECRET=jules-vm-secret-key
-JWT_EXPIRES_IN=7d
-
-# API Server
+# API / Web
 PORT=2003
-NODE_ENV=development
+NEXT_PUBLIC_API_URL=http://localhost:2003
+CORS_ORIGIN=http://localhost:2004
+API_PREFIX=api
+API_VERSION=v1
+PRISMA_HIDE_UPDATE_MESSAGE=true
 
 # CORS
 CORS_ORIGIN=http://localhost:2004

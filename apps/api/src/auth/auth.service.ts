@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
@@ -6,11 +6,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { SignOptions } from 'jsonwebtoken';
+
+type JwtDuration = SignOptions['expiresIn'];
 
 type JwtDuration = `${number}d` | `${number}h` | `${number}m`;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -127,6 +132,7 @@ export class AuthService {
         refreshToken: newRefreshToken,
       };
     } catch (error) {
+      this.logger.error('Refresh token validation failed', error instanceof Error ? error.stack : error);
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -157,6 +163,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
+      organizationId: user.organizationId,
       organization: user.organization,
     };
   }

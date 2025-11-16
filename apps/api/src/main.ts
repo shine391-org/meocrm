@@ -75,6 +75,39 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.listen(port);
+
+  const env = (process.env.NODE_ENV ?? 'development').toLowerCase();
+  if (env !== 'production') {
+    const server = typeof app.getHttpServer === 'function' ? app.getHttpServer() : null;
+    const requestHandlers = server?._events?.request;
+    const primaryRouter = server?._events?.request?._router;
+    const arrayRouter =
+      Array.isArray(requestHandlers) && requestHandlers.length
+        ? requestHandlers.find((handler: any) => handler?._router)?._router
+        : undefined;
+    const httpAdapter = typeof app.getHttpAdapter === 'function' ? app.getHttpAdapter() : null;
+    const expressInstance = httpAdapter?.getInstance?.();
+    const adapterRouter = expressInstance?.router ?? expressInstance?._router;
+    const router = primaryRouter ?? arrayRouter ?? adapterRouter;
+    const stack = Array.isArray(router?.stack) ? router.stack : null;
+    if (stack?.length) {
+      console.log('\n📍 Registered Routes:');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      stack
+        .filter((layer: any) => layer?.route)
+        .forEach((layer: any) => {
+          const methods = Object.keys(layer.route.methods ?? {})
+            .map((method) => method.toUpperCase())
+            .join(', ');
+          const paddedMethods = (methods || 'ALL').padEnd(10);
+          console.log(`  ${paddedMethods} ${layer.route.path}`);
+        });
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    } else {
+      console.log('⚠️  Route logging skipped: router stack unavailable.');
+    }
+  }
+
   console.log(`🚀 API running on: http://localhost:${port}`);
   console.log(`📚 Swagger docs: http://localhost:${port}/api`);
   logRegisteredRoutes(app);

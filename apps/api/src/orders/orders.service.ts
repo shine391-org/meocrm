@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, CreateOrderItemDto } from './dto/create-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
-import { Prisma, Order, OrderStatus } from '@prisma/client';
+import { Prisma, OrderStatus } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { PricingService } from './pricing.service';
@@ -133,7 +133,7 @@ export class OrdersService {
         },
       });
 
-      return order;
+      return this.mapOrderResponse(order);
     });
   }
 
@@ -307,7 +307,8 @@ export class OrdersService {
         throw new NotFoundException(`Product ${item.productId} not found`);
       }
 
-      let unitPrice = Number(product.sellPrice);
+      const basePrice = Number(product.sellPrice);
+      let unitPrice = basePrice;
       let selectedVariant = null;
 
       if (item.variantId) {
@@ -315,7 +316,11 @@ export class OrdersService {
         if (!variant) {
           throw new NotFoundException(`Variant ${item.variantId} not found`);
         }
-        unitPrice = Number(variant.sellPrice);
+        const variantPrice = basePrice + Number(variant.additionalPrice ?? 0);
+        if (variantPrice <= 0) {
+          throw new BadRequestException('Variant price must be greater than zero');
+        }
+        unitPrice = variantPrice;
         selectedVariant = variant;
       }
 
@@ -390,8 +395,9 @@ export class OrdersService {
     return {
       data: orders.map((order) => {
         const { _count, ...rest } = order;
+        const normalized = this.mapOrderResponse(rest);
         return {
-          ...rest,
+          ...normalized,
           itemsCount: _count.items,
         };
       }),
@@ -422,7 +428,7 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${id} not found`);
     }
 
-    return order;
+    return this.mapOrderResponse(order);
   }
 
   async updateStatus(
@@ -459,7 +465,7 @@ export class OrdersService {
 
     // Customer stats are not adjusted for CANCELLED orders per clarification
 
-    return this.prisma.order.update({
+    const updated = await this.prisma.order.update({
       where: { id },
       data: {
         status: dto.status,
@@ -478,5 +484,7 @@ export class OrdersService {
         },
       },
     });
+
+    return this.mapOrderResponse(updated);
   }
 }

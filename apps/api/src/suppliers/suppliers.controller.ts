@@ -16,7 +16,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagg
 import { SuppliersService } from './suppliers.service';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
-import { ListSuppliersDto } from './dto/list-suppliers.dto';
+import { QuerySuppliersDto } from './dto/query-suppliers.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { SupplierEntity } from './entities/supplier.entity';
@@ -40,7 +40,7 @@ return this.suppliersService.create(user.organizationId, dto);
 @Get()
 @ApiOperation({ summary: 'List suppliers with pagination' })
 @ApiResponse({ status: 200, description: 'Supplier list' })
-findAll(@CurrentUser() user: User, @Query() query: ListSuppliersDto) {
+findAll(@CurrentUser() user: User, @Query() query: QuerySuppliersDto) {
 return this.suppliersService.findAll(user.organizationId, query);
 }
 

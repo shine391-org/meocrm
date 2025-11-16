@@ -1,10 +1,11 @@
-import { 
-  IsString, 
-  IsNotEmpty, 
-  IsOptional, 
-  IsEmail, 
-  MaxLength, 
-  Matches 
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEmail,
+  MaxLength,
+  Matches,
+  IsDateString,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -81,4 +82,12 @@ export class CreateCustomerDto {
   @IsOptional()
   @MaxLength(50)
   segment?: string;
+
+  @ApiPropertyOptional({
+    example: '1990-05-21',
+    description: 'Customer birthday (ISO 8601 format)',
+  })
+  @IsOptional()
+  @IsDateString()
+  birthday?: string;
 }

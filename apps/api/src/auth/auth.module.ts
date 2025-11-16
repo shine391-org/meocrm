@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { SignOptions } from 'jsonwebtoken';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -23,7 +24,7 @@ import { PrismaModule } from '../prisma/prisma.module';
         return {
           secret,
           signOptions: {
-            expiresIn: expiresIn as `${number}d` | `${number}h` | `${number}m`, // Type cast to valid StringValue
+            expiresIn,
           },
         };
       },

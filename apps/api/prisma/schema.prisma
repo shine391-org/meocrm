@@ -377,6 +377,7 @@ model Category {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
 
   @@index([organizationId])
   @@index([parentId])
@@ -427,29 +428,27 @@ model Product {
 }
 
 model ProductVariant {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
+  id        String  @id @default(uuid())
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  sku        String   @unique
-  name       String
-  sellPrice  Decimal  @db.Decimal(12, 2)
-  stock      Int      @default(0)
-  isActive   Boolean  @default(true)
-  images     String[]
-  attributes Json?
-  deletedAt  DateTime?
+  sku             String
+  name            String
+  additionalPrice Decimal  @default(0) @db.Decimal(12, 2)
+  stock           Int      @default(0)
+  images          String[]
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   orderItems OrderItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([organizationId])
+  @@unique([sku, organizationId])
   @@index([productId])
+  @@index([organizationId])
   @@map("product_variants")
 }
 
@@ -459,12 +458,12 @@ model Customer {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
 
-  code  String  @unique
-  name  String
-  phone String
-  email String?
+  code    String
+  name    String
+  phone   String
+  email   String?
+  address String?
 
-  address  String?
   province String?
   district String?
   ward     String?
@@ -474,6 +473,10 @@ model Customer {
   totalOrders Int       @default(0)
   debt        Decimal   @default(0) @db.Decimal(12, 2)
   lastOrderAt DateTime?
+  birthday    DateTime?
+
+  creatorId String?
+  creator   User? @relation("CustomerCreatedBy", fields: [creatorId], references: [id])
 
   groupId String?
   group   CustomerGroup? @relation(fields: [groupId], references: [id])
@@ -492,10 +495,12 @@ model Customer {
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
+  @@unique([organizationId, code])
   @@index([organizationId])
   @@index([code])
   @@index([phone])
   @@index([groupId])
+  @@index([creatorId])
   @@map("customers")
 }
 
@@ -575,6 +580,7 @@ model Order {
   updatedAt DateTime @updatedAt
   completedAt DateTime?
   deletedAt DateTime?
+  paidAt DateTime?
 
   @@index([organizationId])
   @@index([customerId])

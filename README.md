@@ -7,6 +7,7 @@
 2. Why MeoCRM
 3. Badges & Metrics
 4. Quick Facts
+   Jules VM Snapshot Environment (Recommended Setup)
 5. Version & Change Log
 6. Getting Started Checklist
 7. Environment Verification
@@ -70,6 +71,64 @@
 - **Soft Delete**: `deletedAt` enforced globally.
 - **Token Strategy**: 15 min access token + 7 day refresh.
 - **Ports**: API 2003, Web 2004, PostgreSQL 2001, Redis 2002 (dev).
+- **Toolchain**: Node.js 20.x + pnpm 10.x + Docker 27 (bundled in Jules snapshot).
+
+## Jules VM Snapshot Environment (Recommended Setup)
+This is the default workflow for Codex/Jules agents. The VM boot image already includes Dockerized infra, dependencies, and env values so you can ship features without re-provisioning anything.
+
+### Snapshot Overview
+- **Postgres 17** + **Redis 8** run inside Docker on ports **2001** and **2002**. The compose file lives in `/tmp/meocrm-compose.yaml` and is restored on every snapshot boot.
+- **Node 20** and **pnpm 10** are globally available; no need to install nvm or npm.
+- `@meocrm/api-client` is **prebuilt** once per snapshot. Re-run the build command when TypeScript types change to avoid Next.js resolution errors.
+- All sensitive **env vars are injected via the Jules GUI**. Do not commit `.env` files; just confirm the GUI profile is active for your VM session.
+
+### Daily Dev Loop (inside Jules VM)
+1. `pnpm install`
+2. `pnpm --filter @meocrm/api-client build` (ensures Next.js picks up generated client)
+3. `pnpm dev:api` (NestJS API on port 2003)
+4. `pnpm dev:web` (Next.js app on port 2004) — safe to run in parallel tab
+
+> 💡 **Check infra first**: `sudo docker ps` should show `meocrm-postgres` and `meocrm-redis`. If missing, run `sudo docker compose -f /tmp/meocrm-compose.yaml up -d db redis`.
+
+### Canonical Jules VM Env Values
+These are managed in the Jules GUI → Environment tab and must match for parity:
+
+```bash
+DATABASE_URL=postgresql://meocrm_user:<YOUR_SECURE_DB_PASSWORD>@127.0.0.1:2001/meocrm_dev?schema=public
+DB_NAME=meocrm_dev
+DB_USER=meocrm_user
+DB_PASSWORD=<YOUR_SECURE_DB_PASSWORD>
+DB_PORT=2001
+
+REDIS_HOST=localhost
+REDIS_PORT=2002
+REDIS_URL=redis://localhost:2002
+
+PORT=2003
+NEXT_PUBLIC_API_URL=http://localhost:2003
+CORS_ORIGIN=http://localhost:2004
+
+JWT_SECRET=<YOUR_SECURE_JWT_SECRET>
+JWT_REFRESH_SECRET=<YOUR_SECURE_JWT_REFRESH_SECRET>
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+API_PREFIX=api
+API_VERSION=v1
+PRISMA_HIDE_UPDATE_MESSAGE=true
+```
+
+> ⚠️ **Security Warning**: The placeholders above must be replaced with cryptographically secure values. Generate secrets using:
+> ```bash
+> # Generate a secure JWT secret (32+ characters)
+> openssl rand -base64 32
+>
+> # Or use Node.js
+> node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+> ```
+> **NEVER commit real secrets to version control!**
+
+> ❗ **Do NOT run `setup-jules-vm.sh`, install PostgreSQL/Redis manually, or change Docker networking inside Jules VM.** The snapshot is already configured; manual installs break parity. Use the legacy local instructions below only if you are on your own workstation outside Jules.
 
 ## 5. Version & Change Log
 | Version | Date | Notes |
@@ -80,19 +139,21 @@
 | v1.x | 2025-03 | Core auth + organization scaffolding |
 
 ## 6. Getting Started Checklist
-- [ ] Confirm Node.js ≥18 and pnpm ≥8.
-- [ ] Verify PostgreSQL service is running (no Docker for DB on Jules VM).
+- [ ] Confirm Node.js 20.x and pnpm 10.x (`node -v`, `pnpm -v`). Jules snapshot already satisfies this.
+- [ ] Verify Postgres/Redis are running: `sudo docker ps` → look for `db` + `redis` containers (Jules) or start your own services if on a personal machine.
 - [ ] Install workspace dependencies with `pnpm install`.
-- [ ] Configure `.env` using Appendix B template.
+- [ ] Configure env via Jules GUI profile (or Appendix B template for local machines). Never run `setup-jules-vm.sh` inside the VM.
+- [ ] Prebuild the API client with `pnpm --filter @meocrm/api-client build`.
 - [ ] Run `pnpm db:generate`, `pnpm db:push`, `pnpm db:seed`.
-- [ ] Start dev servers via `pnpm dev`.
+- [ ] Start dev servers via `pnpm dev` (or split into `pnpm dev:api` / `pnpm dev:web`).
 
 ## 7. Environment Verification
 ```bash
-node -v          # Expect v18+
-pnpm -v          # Expect v8+
-sudo service postgresql status  # Jules VM uses system PostgreSQL
-psql -U postgres -c "\\l"       # Confirm database access
+node -v                                   # Expect v20.x (Jules snapshot ships 20 LTS)
+pnpm -v                                   # Expect v10.x (workspace uses pnpm@10)
+sudo docker ps --filter "name=meocrm"     # Containers db + redis should be healthy
+sudo docker compose -f /tmp/meocrm-compose.yaml up -d db redis  # Restart infra if needed
+psql "postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev" -c "SELECT 1;"
 ```
 
 ## 8. Toolchain Auto-Setup
@@ -121,7 +182,7 @@ pnpm db:generate        # Generate Prisma client
 pnpm db:push            # Sync schema
 pnpm db:seed            # Seed development data
 ```
-> 🔔 Jules VM already runs PostgreSQL via service. Only start Docker if instructions explicitly allow.
+> 🔔 Jules VM snapshot already runs PostgreSQL + Redis inside Docker. Do **not** install system services or rerun `setup-jules-vm.sh`; restart the provided containers if they stop.
 
 ## 10. Quick Start Workflow
 ```bash
@@ -310,6 +371,8 @@ JWT_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 ```
 
+> ⚠️ **Security Warning**: Replace all `<YOUR_SECURE_*>` placeholders with cryptographically secure random values. See Appendix B for generation commands.
+
 ## 27. Available Commands (pnpm)
 | Command | Description |
 | --- | --- |
@@ -340,7 +403,169 @@ JWT_REFRESH_EXPIRES_IN="7d"
 | Data leak suspicion | Cross-tenant data appears | Verify Prisma middleware registered + RequestContext storing org |
 | Soft delete records visible | Deleted data still returned | Confirm `deletedAt: null` filter active |
 | Tests show low coverage | Coverage <80% | Ensure Jest ignores generated folders |
-| Docker DB conflict | `docker-compose up` fails on Jules VM | Use system PostgreSQL service per AGENTS instructions |
+| Docker DB conflict | `docker compose up` fails on Jules VM | Use snapshot stack: `sudo docker compose -f /tmp/meocrm-compose.yaml up -d db redis` |
+
+### Jules VM Troubleshooting Guide
+
+#### Check Docker Services Status
+```bash
+# List all running containers
+sudo docker ps
+
+# Expected output: meocrm-postgres and meocrm-redis should be running
+# If missing, start them:
+sudo docker compose -f /tmp/meocrm-compose.yaml up -d db redis
+
+# View container logs
+sudo docker logs meocrm-postgres
+sudo docker logs meocrm-redis
+
+# Restart a specific service
+sudo docker restart meocrm-postgres
+sudo docker restart meocrm-redis
+```
+
+#### Database Connection Issues
+```bash
+# Test PostgreSQL connection
+psql "postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev" -c "SELECT 1;"
+
+# If connection fails, check if container is running
+sudo docker ps --filter "name=meocrm-postgres"
+
+# Check PostgreSQL logs for errors
+sudo docker logs meocrm-postgres --tail 50
+
+# Verify port binding
+sudo netstat -tlnp | grep 2001
+```
+
+#### Redis Connection Issues
+```bash
+# Test Redis connection
+redis-cli -h localhost -p 2002 ping
+# Expected output: PONG
+
+# If redis-cli not available, use docker exec
+sudo docker exec -it meocrm-redis redis-cli ping
+
+# Check Redis logs
+sudo docker logs meocrm-redis --tail 50
+```
+
+#### Database Reset & Recovery
+```bash
+# Backup current database before reset
+sudo docker exec meocrm-postgres pg_dump -U meocrm_user meocrm_dev > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Option 1: Reset database schema (keeps container)
+pnpm --filter @meocrm/api run prisma:db:push --force-reset
+pnpm --filter @meocrm/api run db:seed
+
+# Option 2: Full container reset (nuclear option)
+sudo docker compose -f /tmp/meocrm-compose.yaml down -v
+sudo docker compose -f /tmp/meocrm-compose.yaml up -d db redis
+# Wait 10 seconds for DB to initialize
+pnpm --filter @meocrm/api run prisma:db:push
+pnpm --filter @meocrm/api run db:seed
+
+# Restore from backup
+cat backup_YYYYMMDD_HHMMSS.sql | sudo docker exec -i meocrm-postgres psql -U meocrm_user meocrm_dev
+```
+
+#### Verify Jules GUI Environment Profile
+```bash
+# Check if environment variables are loaded
+echo $DATABASE_URL
+echo $REDIS_HOST
+echo $JWT_SECRET
+
+# If empty, ensure Jules GUI Environment profile is active:
+# 1. Open Jules GUI
+# 2. Navigate to Environment tab
+# 3. Verify "MeoCRM Dev" profile is selected and active
+# 4. Restart your terminal/shell session
+```
+
+#### Prisma Client Generation Issues
+```bash
+# Clean and regenerate Prisma client
+rm -rf node_modules/.prisma
+rm -rf apps/api/node_modules/.prisma
+pnpm --filter @meocrm/api run prisma:generate
+
+# If schema changes aren't reflected
+pnpm --filter @meocrm/api run prisma:db:push
+
+# Verify generated client exists
+ls -la node_modules/.prisma/client/
+```
+
+#### Port Conflicts
+```bash
+# Check what's running on API port 2003
+sudo lsof -i :2003
+# Or
+sudo netstat -tlnp | grep 2003
+
+# Kill process if needed
+sudo kill -9 <PID>
+
+# Check web port 2004
+sudo lsof -i :2004
+
+# Check database port 2001
+sudo lsof -i :2001
+
+# Check Redis port 2002
+sudo lsof -i :2002
+```
+
+#### Common Jules VM Issues
+
+**Issue: Docker containers not starting**
+```bash
+# Check Docker daemon status
+sudo systemctl status docker
+
+# Restart Docker daemon if needed
+sudo systemctl restart docker
+
+# Verify compose file exists
+cat /tmp/meocrm-compose.yaml
+
+# Start services with verbose logging
+sudo docker compose -f /tmp/meocrm-compose.yaml up db redis
+```
+
+**Issue: API fails to connect to database**
+- Verify DATABASE_URL matches the container configuration
+- Ensure PostgreSQL container is healthy: `sudo docker ps`
+- Check if Prisma client is generated: `pnpm db:generate`
+- Verify schema is pushed: `pnpm db:push`
+
+**Issue: Next.js can't find API client**
+```bash
+# Rebuild API client package
+pnpm --filter @meocrm/api-client build
+
+# Verify package.json exports
+cat packages/api-client/package.json
+
+# Clear Next.js cache
+rm -rf apps/web/.next
+pnpm --filter @meocrm/web run build
+```
+
+**Issue: Tests fail with database errors**
+- Ensure TEST_DATABASE_URL is set in environment or .env.test
+- Run: `pnpm --filter @meocrm/api run prisma:generate`
+- Verify test database is accessible
+
+**Issue: Environment variables not loading**
+- Jules GUI profile must be active (check GUI Environment tab)
+- Restart terminal after changing environment profiles
+- For local development outside Jules, use .env files (never commit them)
 
 ## 30. Implementation Status (summary)
 - **Security**: RequestContext + Prisma middleware ✅
@@ -439,6 +664,30 @@ JWT_REFRESH_SECRET="dev-refresh-secret"
 JWT_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 ```
+
+> ⚠️ **IMPORTANT SECURITY NOTICE**
+>
+> The placeholders above (`<YOUR_SECURE_*>`) **MUST** be replaced with cryptographically secure random values before use.
+>
+> **Generate secure secrets:**
+> ```bash
+> # Method 1: Using OpenSSL (recommended)
+> openssl rand -base64 32
+>
+> # Method 2: Using Node.js
+> node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+>
+> # Method 3: Using Python
+> python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+> ```
+>
+> **NEVER:**
+> - Use the example values shown in documentation
+> - Commit `.env` files to version control (they are gitignored)
+> - Share secrets in plain text via email, chat, or screenshots
+> - Reuse secrets across different environments (dev/staging/prod)
+>
+> **For Jules VM users**: Secrets are managed in the Jules GUI Environment tab and injected at runtime. You don't need to create `.env` files.
 
 ## 40. Appendix C: ASCII Architecture Diagram
 ```

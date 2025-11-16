@@ -1,11 +1,19 @@
 /* istanbul ignore file */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthService } from './auth/auth.service';
-import { UserRole } from '@prisma/client';
+import { Organization, User, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import * as express from 'express';
+import * as bodyParser from 'body-parser';
+import {
+  createWebhookRawMiddleware,
+  resolveWebhookRawLimit,
+  WEBHOOK_RAW_BODY_DEFAULT,
+} from './config/server.config';
 
 export const DEFAULT_TEST_ORG_PREFIX = 'E2E_';
 
@@ -50,24 +58,51 @@ export async function cleanupTestOrganizations(
  * Sets up and returns a fully initialized NestJS application instance for E2E testing.
  * This includes creating a mock organization and user, and generating a valid JWT access token.
  */
-export async function setupTestApp(): Promise<{
+type SetupTestAppResult = {
   app: INestApplication;
   prisma: PrismaService;
   accessToken: string;
   organizationId: string;
   userId: string;
-}> {
+  createUserAndOrg: (codePrefix?: string) => Promise<{
+    token: string;
+    organization: Organization;
+    user: User;
+  }>;
+};
+
+export async function setupTestApp(options: { skipCleanup?: boolean } = {}): Promise<SetupTestAppResult> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
 
-  const app = moduleFixture.createNestApplication();
+  const app = moduleFixture.createNestApplication({
+    bodyParser: false,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  const configService = app.get<ConfigService>(ConfigService);
+  const rawLimit = resolveWebhookRawLimit(configService, WEBHOOK_RAW_BODY_DEFAULT);
+  const rawBodyBuffer = (
+    req: express.Request & { rawBody?: string },
+    _res: express.Response,
+    buf: Buffer,
+    encoding: BufferEncoding,
+  ) => {
+    if (buf && buf.length) {
+      req.rawBody = buf.toString(encoding || 'utf8');
+    }
+  };
+  app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
+  app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
+  app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
 
   const prisma = app.get<PrismaService>(PrismaService);
   const authService = app.get<AuthService>(AuthService);
 
-  await cleanupTestOrganizations(prisma);
+  if (!options.skipCleanup) {
+    await cleanupTestOrganizations(prisma);
+  }
 
   const organization = await prisma.organization.create({
     data: {
@@ -95,7 +130,158 @@ export async function setupTestApp(): Promise<{
     password: 'password',
   } as any);
 
-  return { app, prisma, accessToken, organizationId, userId };
+  const createUserAndOrg = async (codePrefix?: string) => {
+    const normalizedPrefix = (codePrefix ?? DEFAULT_TEST_ORG_PREFIX).toUpperCase();
+    const organization = await prisma.organization.create({
+      data: {
+        name: `Test Organization ${normalizedPrefix}`,
+        slug: `test-org-${normalizedPrefix.toLowerCase()}-${Date.now()}`,
+        code: `${normalizedPrefix}${Date.now()}`,
+      },
+    });
+
+    const email = `test-user-${Date.now()}@${normalizedPrefix.toLowerCase()}.com`;
+    const password = 'password';
+    const hashed = await bcrypt.hash(password, 10);
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        name: `E2E User ${normalizedPrefix}`,
+        password: hashed,
+        organizationId: organization.id,
+        role: UserRole.OWNER,
+      },
+    });
+
+    const { accessToken: token } = await authService.login({ email, password } as any);
+
+    return {
+      token,
+      organization,
+      user: newUser,
+    };
+  };
+
+  await app.init();
+
+  return { app, prisma, accessToken, organizationId, userId, createUserAndOrg };
+}
+
+export type TestContext = Awaited<ReturnType<typeof setupTestApp>>;
+
+export async function createOrganization(prisma: PrismaService) {
+  return prisma.organization.create({
+    data: {
+      name: 'Test Organization E2E',
+      slug: `test-org-${Date.now()}`,
+      code: `${DEFAULT_TEST_ORG_PREFIX}${Date.now()}`,
+    },
+  });
+}
+
+export async function cleanupDatabase(prisma: PrismaService) {
+  // Order matters due to foreign key constraints
+  await prisma.customerDebtSnapshot.deleteMany({});
+  await prisma.commission.deleteMany({});
+  await prisma.orderReturnItem.deleteMany({});
+  await prisma.orderReturn.deleteMany({});
+  await prisma.shippingOrder.deleteMany({});
+  await prisma.orderItem.deleteMany({});
+  await prisma.order.deleteMany({});
+  await prisma.inventory.deleteMany({});
+  await prisma.productVariant.deleteMany({});
+  await prisma.product.deleteMany({});
+  await prisma.category.deleteMany({});
+  await prisma.branch.deleteMany({});
+  await prisma.supplier.deleteMany({});
+  await prisma.webhook.deleteMany({});
+  await prisma.setting.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.customer.deleteMany({});
+  await prisma.refreshToken.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.organization.deleteMany({});
+}
+
+export async function getAdminAccessToken(app: INestApplication, organizationId: string): Promise<string> {
+  const prisma = app.get<PrismaService>(PrismaService);
+  const authService = app.get<AuthService>(AuthService);
+
+  const hashedPassword = await bcrypt.hash('password', 10);
+  const email = `test-admin-${Date.now()}@e2e.com`;
+
+  await prisma.user.create({
+    data: {
+      email,
+      name: 'E2E Test Admin',
+      password: hashedPassword,
+      organizationId,
+      role: UserRole.OWNER,
+    },
+  });
+
+  const { accessToken } = await authService.login({ email, password: 'password' } as any);
+  return accessToken;
+}
+
+export async function createOrder(
+  prisma: PrismaService,
+  organizationId: string,
+  customerId: string,
+  productId: string,
+  data: { total?: number; paidAmount?: number; isPaid?: boolean } = {},
+) {
+  const quantity = 2;
+  const unitPrice = data.total ? data.total / quantity : 150000;
+
+  return prisma.order.create({
+    data: {
+      organizationId,
+      customerId,
+      code: `ORD-TEST-${Date.now()}`,
+      subtotal: data.total || 300000,
+      total: data.total || 300000,
+      paidAmount: data.paidAmount || 0,
+      isPaid: data.isPaid || false,
+      paymentMethod: 'CASH',
+      items: {
+        create: {
+          organizationId,
+          productId,
+          quantity,
+          unitPrice,
+          subtotal: data.total || 300000,
+        },
+      },
+    },
+  });
+}
+
+export async function createProduct(
+  prisma: PrismaService,
+  organizationId: string,
+  data: { sellPrice?: number } = {},
+) {
+  return prisma.product.create({
+    data: {
+      organizationId,
+      name: `Test Product ${Date.now()}`,
+      sku: `SKU-${Date.now()}`,
+      sellPrice: data.sellPrice || 10000,
+      costPrice: 5000,
+    },
+  });
+}
+
+export async function createCustomer(prisma: PrismaService, organizationId: string) {
+  return prisma.customer.create({
+    data: {
+      organizationId,
+      name: `Test Customer ${Date.now()}`,
+      code: `CUST-${Date.now()}`,
+      phone: `+1${Date.now()}`,
+    },
+  });
 }
 
 export async function createOrganization(prisma: PrismaService) {

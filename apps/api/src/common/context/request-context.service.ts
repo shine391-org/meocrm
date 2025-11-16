@@ -13,9 +13,9 @@ export interface RequestContextStore {
 export class RequestContextService {
   private readonly storage = new AsyncLocalStorage<RequestContextStore>();
 
-  run<T>(callback: () => T): T {
+  run<T>(callback: () => T | Promise<T>): Promise<T> {
     const store: RequestContextStore = { requestId: randomUUID() };
-    return this.storage.run(store, callback);
+    return this.storage.run(store, () => Promise.resolve(callback()));
   }
 
   setContext(context: Partial<RequestContextStore>) {
@@ -28,6 +28,10 @@ export class RequestContextService {
 
   getContext(): RequestContextStore | undefined {
     return this.storage.getStore();
+  }
+
+  getTraceId(): string | undefined {
+    return this.storage.getStore()?.requestId;
   }
 
   get organizationId(): string | undefined {

@@ -50,7 +50,7 @@ const OrderHistoryMiniTable = ({ customerId }: OrderHistoryMiniTableProps) => {
   const router = useRouter();
   // As per our discussion, a separate API call is needed for orders.
   const { data: ordersResponse, error, isLoading } = useSWR(
-    `${API_BASE_URL}/api/orders?customerId=${customerId}&limit=10`,
+    `${API_BASE_URL}/orders?customerId=${customerId}&limit=10`,
     fetchOrders
   );
 

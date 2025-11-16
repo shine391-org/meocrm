@@ -10,20 +10,21 @@ import { toast } from 'sonner';
 const fetcher = (id: string) => getCustomer(id);
 
 export default function CustomerEditPage({ params }: { params: { id: string } }) {
+  const id = params.id;
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const {
     data: customerResponse,
     error,
     isLoading,
-  } = useSWR(params.id, fetcher);
+  } = useSWR(id, fetcher);
 
   const handleSubmit = async (data: CustomerFormData) => {
     try {
-      await updateCustomer(params.id, data);
+      await updateCustomer(id, data);
       toast.success('Cập nhật khách hàng thành công!');
       // Mutate both the customer detail cache and the list cache
-      mutate(params.id);
+      mutate(id);
       mutate(key => Array.isArray(key) && key[0] === 'customers');
       router.push('/customers');
     } catch (error) {

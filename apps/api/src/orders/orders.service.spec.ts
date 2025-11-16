@@ -45,6 +45,53 @@ describe('OrdersService', () => {
     );
   });
 
+  describe('calculateOrderTotals (variants)', () => {
+    it('adds additionalPrice to base product price for variants', async () => {
+      const items = [
+        { productId: 'product-1', quantity: 2, variantId: 'variant-1' },
+      ] as any;
+      const mockTx: any = {
+        product: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'product-1',
+            sellPrice: 100,
+            stock: 10,
+            variants: [{ id: 'variant-1', additionalPrice: 25, stock: 5 }],
+          }),
+        },
+      };
+
+      const result = await (service as any).calculateOrderTotals(
+        items,
+        'org-1',
+        mockTx,
+      );
+
+      expect(result.itemsData[0].unitPrice).toBe(125);
+      expect(result.subtotal).toBe(250);
+    });
+
+    it('throws when variant price would be non-positive', async () => {
+      const items = [
+        { productId: 'product-1', quantity: 1, variantId: 'variant-1' },
+      ] as any;
+      const mockTx: any = {
+        product: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'product-1',
+            sellPrice: 100,
+            stock: 10,
+            variants: [{ id: 'variant-1', additionalPrice: -200, stock: 5 }],
+          }),
+        },
+      };
+
+      await expect(
+        (service as any).calculateOrderTotals(items, 'org-1', mockTx),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   afterEach(() => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
@@ -365,11 +412,26 @@ describe('OrdersService', () => {
 
   describe('findOne', () => {
     it('should return an order if found', async () => {
-      const order = { id: 'order-1' } as any;
+      const order = {
+        id: 'order-1',
+        subtotal: new Prisma.Decimal(100),
+        tax: new Prisma.Decimal(10),
+        shipping: new Prisma.Decimal(5),
+        discount: new Prisma.Decimal(0),
+        total: new Prisma.Decimal(115),
+        paidAmount: new Prisma.Decimal(20),
+      } as any;
       prisma.order.findFirst.mockResolvedValue(order);
 
       const result = await service.findOne('order-1', 'org-id');
-      expect(result).toEqual(order);
+      expect(result).toMatchObject({
+        id: 'order-1',
+        subtotal: 100,
+        tax: 10,
+        shipping: 5,
+        total: 115,
+        paidAmount: 20,
+      });
     });
 
     it('should throw NotFoundException if order not found', async () => {
