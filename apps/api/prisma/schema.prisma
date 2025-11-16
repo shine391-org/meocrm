@@ -320,15 +320,16 @@ model User {
   name     String
   role     UserRole @default(STAFF)
 
-  auditLogs     AuditLog[]
-  cashRegisters CashRegister[]
-  appointments  Appointment[]
-  tasks         Task[]
-  activities    Activity[]
-  attendances   Attendance[]
-  timesheets    Timesheet[]
-  refreshTokens RefreshToken[]
-  leadsAssigned Lead[]        @relation("LeadAssignedUser")
+  auditLogs        AuditLog[]
+  cashRegisters    CashRegister[]
+  appointments     Appointment[]
+  tasks            Task[]
+  activities       Activity[]
+  attendances      Attendance[]
+  timesheets       Timesheet[]
+  refreshTokens    RefreshToken[]
+  leadsAssigned    Lead[]        @relation("LeadAssignedUser")
+  customersCreated Customer[]    @relation("CustomerCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

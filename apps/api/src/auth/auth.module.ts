@@ -24,8 +24,8 @@ import { PrismaModule } from '../prisma/prisma.module';
         return {
           secret,
           signOptions: {
-            expiresIn,
-          },
+            expiresIn: expiresIn as string | number,
+          } as SignOptions,
         };
       },
       inject: [ConfigService],

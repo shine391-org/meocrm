@@ -1,11 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductsDto, ProductSortBy, SortOrder } from './dto/query-products.dto';
-import { Prisma } from '@prisma/client';
 import { CreateVariantDto } from './variants/dto/create-variant.dto';
+import { UpdateVariantDto } from './variants/dto/update-variant.dto';
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -237,7 +237,7 @@ export class ProductsService {
     const updateData: any = {};
     if (dto.name) updateData.name = dto.name;
     if (dto.description !== undefined) updateData.description = dto.description;
-    if (dto.basePrice !== undefined) updateData.sellPrice = dto.basePrice;
+    if (dto.sellPrice !== undefined) updateData.sellPrice = dto.sellPrice;
     if (dto.costPrice !== undefined) updateData.costPrice = dto.costPrice;
     if (dto.minStock !== undefined) updateData.minStock = dto.minStock;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
@@ -264,17 +264,33 @@ export class ProductsService {
 
   async createVariant(productId: string, dto: CreateVariantDto, organizationId: string) {
     const product = await this.findOne(productId, organizationId);
-    const sku = await this.generateVariantSKU(product.sku, organizationId);
+
+    // Normalize SKU
+    const sku = this.normalizeVariantSku(product.sku, dto);
+
+    // Validate price: sellPrice + additionalPrice must be > 0
+    const additionalPrice = dto.additionalPrice ?? 0;
+    this.assertVariantPrice(product.sellPrice, additionalPrice);
+
+    // Check for duplicate SKU
+    const existingVariant = await this.prisma.productVariant.findFirst({
+      where: { sku, organizationId },
+      select: { id: true },
+    });
+
+    if (existingVariant) {
+      throw new ConflictException(`Variant SKU "${sku}" already exists`);
+    }
+
     return this.prisma.productVariant.create({
       data: {
         sku,
         productId,
         organizationId,
         name: dto.name,
-        sellPrice: dto.price,
-        stock: dto.inStock ?? 0,
-        isActive: dto.isActive ?? true,
-        attributes: (dto.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
+        additionalPrice,
+        stock: dto.stock ?? 0,
+        images: dto.images || [],
       },
     });
   }
@@ -282,35 +298,38 @@ export class ProductsService {
   async findVariants(productId: string, organizationId: string) {
     await this.findOne(productId, organizationId);
     return this.prisma.productVariant.findMany({
-      where: { productId, organizationId, deletedAt: null },
+      where: { productId, organizationId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async updateVariant(id: string, dto: UpdateVariantDto, organizationId: string) {
     const variant = await this.prisma.productVariant.findFirst({
-      where: { id, organizationId, deletedAt: null },
+      where: { id, organizationId },
+      include: { product: true },
     });
     if (!variant) throw new NotFoundException(`Variant ${id} not found`);
+
+    // Validate price if additionalPrice is being updated
+    if (dto.additionalPrice !== undefined) {
+      this.assertVariantPrice(variant.product.sellPrice, dto.additionalPrice);
+    }
+
     const updateData: any = {};
     if (dto.name) updateData.name = dto.name;
-    if (dto.price !== undefined) updateData.sellPrice = dto.price;
-    if (dto.inStock !== undefined) updateData.stock = dto.inStock;
-    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
-    if (dto.attributes !== undefined) {
-      updateData.attributes = dto.attributes as Prisma.InputJsonValue;
-    }
+    if (dto.additionalPrice !== undefined) updateData.additionalPrice = dto.additionalPrice;
+    if (dto.stock !== undefined) updateData.stock = dto.stock;
+    if (dto.images !== undefined) updateData.images = dto.images;
     return this.prisma.productVariant.update({ where: { id }, data: updateData });
   }
 
   async removeVariant(id: string, organizationId: string) {
     const variant = await this.prisma.productVariant.findFirst({
-      where: { id, organizationId, deletedAt: null },
+      where: { id, organizationId },
     });
     if (!variant) throw new NotFoundException(`Variant ${id} not found`);
-    await this.prisma.productVariant.update({
+    await this.prisma.productVariant.delete({
       where: { id },
-      data: { deletedAt: new Date(), isActive: false },
     });
     return { message: 'Variant deleted successfully' };
   }

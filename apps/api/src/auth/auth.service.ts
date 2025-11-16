@@ -8,8 +8,6 @@ import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { SignOptions } from 'jsonwebtoken';
 
-type JwtDuration = SignOptions['expiresIn'];
-
 type JwtDuration = `${number}d` | `${number}h` | `${number}m`;
 
 @Injectable()

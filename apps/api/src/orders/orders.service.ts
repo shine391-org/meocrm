@@ -487,4 +487,29 @@ export class OrdersService {
 
     return this.mapOrderResponse(updated);
   }
+
+  private mapOrderResponse(order: any) {
+    return {
+      ...order,
+      subtotal: Number(order.subtotal),
+      tax: Number(order.tax),
+      shipping: Number(order.shipping),
+      discount: Number(order.discount),
+      total: Number(order.total),
+      paidAmount: Number(order.paidAmount),
+      items: order.items?.map((item: any) => ({
+        ...item,
+        price: Number(item.price),
+        quantity: Number(item.quantity),
+        discount: Number(item.discount),
+        total: Number(item.total),
+      })),
+      customer: order.customer ? {
+        ...order.customer,
+        totalSpent: Number(order.customer.totalSpent),
+        debt: Number(order.customer.debt),
+        totalOrders: Number(order.customer.totalOrders),
+      } : undefined,
+    };
+  }
 }
