@@ -52,11 +52,22 @@
 - **Focus**: Vietnamese retail CRM with SKU-heavy catalogs and shipping integrations.
 - **Audience**: Organizations running 10-50 concurrent users per tenant.
 - **Architecture**: Monorepo (NestJS API + Next.js Web) with multi-tenant enforcement.
-- **Progress**: 56/187 tasks complete (30%) - See [ROADMAP.md](./ROADMAP.md)
+- **Progress**: 91/187 tasks complete (49%) - See [ROADMAP.md](./ROADMAP.md)
 
-> 🚀 **New Agent?** Start with [AGENTS-QUICKSTART.md](./AGENTS-QUICKSTART.md) (15-min onboarding)
+### 📚 Documentation Guide
 
-> 📋 **Current Tasks:** [ROADMAP.md](./ROADMAP.md) | **Workflow:** [AGENTS.md](./AGENTS.md) section 5
+**For Claude/AI Agents:**
+- **Start here:** [docs/00_START_HERE.md](docs/00_START_HERE.md) - Fast context loading guide
+- **Every session:** Read [WORKFLOW-SIMPLE.md](WORKFLOW-SIMPLE.md) + [ROADMAP.md](ROADMAP.md)
+- **Operations manual:** [AGENTS.md](AGENTS.md) - Complete workflow & coding rules
+- **Coding rules:** [DEVELOPMENT_LESSONS_LEARNED.md](DEVELOPMENT_LESSONS_LEARNED.md) - 10 essential lessons
+
+**For Humans:**
+- **Quick start:** This README → Setup → Run
+- **Business logic:** [docs/essential/01_BUSINESS_LOGIC.md](docs/essential/01_BUSINESS_LOGIC.md)
+- **Database schema:** [docs/essential/03_DATABASE_SCHEMA.md](docs/essential/03_DATABASE_SCHEMA.md)
+- **API reference:** [docs/reference/04_API_REFERENCE.md](docs/reference/04_API_REFERENCE.md)
+- **Troubleshooting:** [docs/reference/06_TROUBLESHOOTING.md](docs/reference/06_TROUBLESHOOTING.md)
 
 ## 2. Why MeoCRM
 - Built after studying KiotViet patterns and retail workflows in Vietnam.
