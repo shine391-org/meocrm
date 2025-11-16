@@ -5,6 +5,7 @@
 > Purpose: Document common mistakes and their solutions to maintain code quality and consistency
 
 ## Quick Reference
+
 - **Location**: Root directory (`/DEVELOPMENT_LESSONS_LEARNED.md`)
 - **Related Docs**:
   - [AGENTS.md](./AGENTS.md) - Agent operations manual
@@ -16,9 +17,11 @@
 ## 1. API Response Format Standards
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/api/src/customers/customers.service.ts`
 
 Backend `findOne()` method trả về trực tiếp object:
+
 ```typescript
 async findOne(id: string, organizationId: string) {
   const customer = await this.prisma.customer.findFirst({...});
@@ -27,13 +30,16 @@ async findOne(id: string, organizationId: string) {
 ```
 
 Frontend expect format có wrap `data`:
+
 ```typescript
 const { data: customerResponse } = useSWR(id, fetcher);
 const customer = customerResponse.data; // ✅ Expect { data: {...} }
 ```
 
 ### ✅ Cách sửa đúng
+
 Backend phải wrap response trong property `data`:
+
 ```typescript
 async findOne(id: string, organizationId: string) {
   const customer = await this.prisma.customer.findFirst({...});
@@ -42,6 +48,7 @@ async findOne(id: string, organizationId: string) {
 ```
 
 Và update các method gọi `findOne()` để unwrap:
+
 ```typescript
 async update(id: string, dto: UpdateCustomerDto, organizationId: string) {
   const { data: customer } = await this.findOne(id, organizationId); // ✅ Destructure
@@ -50,7 +57,9 @@ async update(id: string, dto: UpdateCustomerDto, organizationId: string) {
 ```
 
 ### 📋 Quy tắc
+
 **LUÔN LUÔN** sử dụng format response chuẩn cho tất cả API endpoints:
+
 - Single item: `{ data: {...} }`
 - List/Paginated: `{ data: [...], meta: { total, page, limit, totalPages } }`
 
@@ -59,15 +68,19 @@ async update(id: string, dto: UpdateCustomerDto, organizationId: string) {
 ## 2. API URL Prefix Configuration
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/api/src/main.ts`
 
 NestJS app không có global prefix `/api`, dẫn đến:
+
 - Routes là `/customers`, `/orders` thay vì `/api/customers`, `/api/orders`
 - Frontend phải hardcode `/api` vào mỗi request
 - Swagger docs không consistent với actual routes
 
 ### ✅ Cách sửa đúng
+
 Thêm global prefix trong `main.ts`:
+
 ```typescript
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -81,6 +94,7 @@ async function bootstrap() {
 ```
 
 ### 📋 Quy tắc
+
 - **LUÔN** set `app.setGlobalPrefix('api')` trong NestJS applications
 - Frontend config `NEXT_PUBLIC_API_URL` nên có suffix `/api` (vd: `http://localhost:2003/api`)
 - Không hardcode thêm `/api` trong từng API call
@@ -90,6 +104,7 @@ async function bootstrap() {
 ## 3. Double API Prefix Bug
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/web/components/customers/order-history-mini.tsx`
 
 ```typescript
@@ -104,6 +119,7 @@ const { data: ordersResponse } = useSWR(
 Kết quả: URL thành `http://localhost:2003/api/api/orders` → 404
 
 ### ✅ Cách sửa đúng
+
 ```typescript
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api';
 
@@ -114,6 +130,7 @@ const { data: ordersResponse } = useSWR(
 ```
 
 ### 📋 Quy tắc
+
 - `NEXT_PUBLIC_API_URL` phải bao gồm `/api` suffix
 - Các API calls chỉ cần append endpoint path (vd: `/customers`, `/orders`)
 - **KHÔNG BAO GIỜ** hardcode `/api/` trong API call URLs
@@ -123,6 +140,7 @@ const { data: ordersResponse } = useSWR(
 ## 4. Next.js 13+ App Router Params Handling
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/web/app/(dashboard)/customers/[id]/edit/page.tsx`
 
 ```typescript
@@ -137,6 +155,7 @@ export default function CustomerEditPage({ params }: { params: { id: string } })
 ```
 
 ### ✅ Cách sửa đúng
+
 ```typescript
 export default function CustomerEditPage({ params }: { params: { id: string } }) {
   const id = params.id; // ✅ Destructure một lần
@@ -151,6 +170,7 @@ export default function CustomerEditPage({ params }: { params: { id: string } })
 ```
 
 ### 📋 Quy tắc
+
 - **LUÔN** destructure `params` thành biến local ở đầu component
 - Dùng biến local thay vì access `params.xxx` nhiều lần
 - Dễ đọc, dễ maintain, và tránh bugs khi params thay đổi
@@ -160,6 +180,7 @@ export default function CustomerEditPage({ params }: { params: { id: string } })
 ## 5. Paginated API Response Handling
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/web/app/(dashboard)/orders/page.tsx`
 
 ```typescript
@@ -168,6 +189,7 @@ setOrders(latestOrders); // ❌ Expect array nhưng API trả về { data: [], m
 ```
 
 ### ✅ Cách sửa đúng
+
 ```typescript
 const response = await OrdersService.getOrders();
 // API returns { data: [...], meta: {...} }
@@ -175,6 +197,7 @@ setOrders(response.data || []); // ✅ Extract data property
 ```
 
 ### 📋 Quy tắc
+
 - Khi gọi paginated endpoints, **LUÔN** expect format `{ data: [], meta: {} }`
 - Extract `response.data` trước khi set vào state
 - Provide fallback `[]` để tránh undefined errors
@@ -184,6 +207,7 @@ setOrders(response.data || []); // ✅ Extract data property
 ## 6. SWR Data Structure Expectations
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/web/components/customers/order-history-mini.tsx`
 
 ```typescript
@@ -195,6 +219,7 @@ const orders = ordersResponse.data; // ❌ Có thể undefined
 ```
 
 ### ✅ Cách sửa đúng
+
 ```typescript
 const { data: ordersResponse, error, isLoading } = useSWR(...);
 
@@ -207,6 +232,7 @@ const orders = ordersResponse.data; // ✅ An toàn vì đã check
 ```
 
 ### 📋 Quy tắc
+
 - **LUÔN** check cả `response` và `response.data` trước khi dùng
 - Pattern: `if (error || !response || !response.data) return <Error />`
 - Tránh runtime errors khi API trả về unexpected format
@@ -216,16 +242,20 @@ const orders = ordersResponse.data; // ✅ An toàn vì đã check
 ## 7. TypeScript Configuration Files
 
 ### ⚠️ Lưu ý
+
 **Files**: `apps/web/next-env.d.ts`, `apps/web/tsconfig.json`
 
 Đây là các files auto-generated bởi Next.js/TypeScript:
+
 - `next-env.d.ts`: Type definitions cho Next.js
 - `tsconfig.json`: TS compiler config được update bởi Next.js
 
 ### 📋 Quy tắc
+
 - **KHÔNG** commit các thay đổi auto-generated trong `next-env.d.ts`
 - **KHÔNG** commit các thay đổi formatting trong `tsconfig.json` nếu chỉ là prettier/linter
 - Add vào `.gitignore` nếu cần:
+
   ```
   # Auto-generated TS files
   next-env.d.ts
@@ -236,19 +266,23 @@ const orders = ordersResponse.data; // ✅ An toàn vì đã check
 ## 8. Unused Configuration Files
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/web/tailwind.config.js`
 
 File `tailwind.config.js` tồn tại nhưng:
+
 - Project đã dùng `tailwind.config.ts` (TypeScript version)
 - File `.js` empty và không được dùng
 - Gây confusion về config nào đang active
 
 ### ✅ Cách sửa đúng
+
 ```bash
 git rm apps/web/tailwind.config.js
 ```
 
 ### 📋 Quy tắc
+
 - **LUÔN** xóa unused config files
 - Nếu có 2 config files cùng purpose (`.js` và `.ts`), chỉ giữ 1
 - Prefer TypeScript configs (`.ts`) over JavaScript (`.js`)
@@ -273,6 +307,7 @@ git rm apps/web/tailwind.config.js
 ```
 
 **Không dùng format:**
+
 ```typescript
 // ❌ Không dùng nested error object
 {
@@ -295,6 +330,7 @@ throw new BadRequestException('Invalid input data');
 ```
 
 ### 📋 Quy tắc
+
 - Follow OpenAPI `components.schemas.Error` definition
 - Error codes nên là SCREAMING_SNAKE_CASE
 - Luôn provide meaningful message
@@ -308,6 +344,7 @@ throw new BadRequestException('Invalid input data');
 ### 📋 Quy tắc (theo README.md & AGENTS.md)
 
 **Jules VM Environment (Recommended)**:
+
 - Environment variables được quản lý trong **Jules GUI → Environment tab**
 - Không cần tạo `.env` files trong Jules VM
 - Các giá trị đã được inject tự động khi snapshot boot
@@ -324,6 +361,7 @@ NEXT_PUBLIC_API_URL=http://localhost:2003/api
 - ✅ **KHÔNG BAO GIỜ** commit `.env` files vào Git (đã có trong `.gitignore`)
 
 ### 📋 Pattern sử dụng
+
 ```typescript
 // ✅ Environment variable nên include /api suffix
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api';
@@ -333,6 +371,7 @@ const url = `${API_BASE_URL}/customers`;
 ```
 
 ### 📋 Security Notes
+
 - Tất cả secrets (`JWT_SECRET`, `DB_PASSWORD`, etc.) phải được generate bằng crypto-secure random
 - Sử dụng `openssl rand -base64 32` hoặc `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
 - Xem README.md Appendix B cho full env template
@@ -342,9 +381,11 @@ const url = `${API_BASE_URL}/customers`;
 ## 11. Timestamp-Based Code Generation Collision
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/api/src/inventory/inventory.service.ts`
 
 Sử dụng `Date.now()` để generate mã adjustment codes:
+
 ```typescript
 // ❌ Có thể collision khi tạo nhiều adjustments cùng lúc
 code: `ADJ-${Date.now()}`
@@ -355,12 +396,15 @@ code: `ADJ-IN-${Date.now()}`  // Có thể trùng với OUT
 ```
 
 **Vấn đề**:
+
 - Khi tạo nhiều adjustments trong cùng millisecond → codes bị trùng
 - Trong database transaction, các codes được tạo gần như đồng thời
 - Đặc biệt nghiêm trọng với inter-branch transfers (OUT và IN cùng lúc)
 
 ### ✅ Cách sửa đúng
+
 Sử dụng UUID để đảm bảo uniqueness:
+
 ```typescript
 import { randomUUID } from 'crypto';
 
@@ -375,11 +419,13 @@ code: `ADJ-IN-${transfer.id}-${uniqueSuffix}`
 ```
 
 **Lợi ích**:
+
 - Collision-resistant với UUID
 - Transfer OUT và IN có chung suffix để dễ trace
 - Short format (8 ký tự) vẫn đủ unique trong practical use
 
 ### 📋 Quy tắc
+
 - **KHÔNG BAO GIỜ** dùng `Date.now()` một mình cho unique IDs/codes
 - **LUÔN** sử dụng UUID hoặc crypto-secure random generators
 - Với paired records (như transfer OUT/IN), dùng chung unique identifier
@@ -390,9 +436,11 @@ code: `ADJ-IN-${transfer.id}-${uniqueSuffix}`
 ## 12. Database Query Performance - In-Memory Filtering
 
 ### ❌ Lỗi đã mắc phải
+
 **File**: `apps/api/src/inventory/inventory.service.ts`
 
 Fetch toàn bộ data rồi filter trong memory:
+
 ```typescript
 // ❌ Fetch ALL items từ database
 let allItems = await this.prisma.inventory.findMany({
@@ -413,13 +461,16 @@ const items = allItems.slice(skip, skip + limit);
 ```
 
 **Vấn đề**:
+
 - Fetch 10,000 records để chỉ hiển thị 20 items
 - Filter quan hệ giữa 2 columns (`inventory.quantity <= product.minStock`) không thể dùng Prisma where
 - Total count sai vì tính trên tất cả items, không phải filtered items
 - Pagination không hoạt động đúng vì slice trên filtered array
 
 ### ✅ Cách sửa đúng
+
 Push filtering xuống database level bằng raw SQL:
+
 ```typescript
 if (lowStockOnly) {
   // ✅ Build dynamic WHERE với parameterized queries
@@ -451,12 +502,14 @@ if (lowStockOnly) {
 ```
 
 **Best Practices**:
+
 - Luôn filter tại database level, không fetch rồi filter
 - Sử dụng raw SQL khi Prisma không support (column comparison)
 - Count phải dùng cùng filter conditions với select query
 - Apply pagination (LIMIT/OFFSET) tại database level
 
 ### 📋 Quy tắc
+
 - **LUÔN** push filtering xuống database layer
 - **KHÔNG** fetch all rồi filter/paginate trong memory
 - Với Prisma limitations, sử dụng `$queryRawUnsafe` hoặc `$queryRaw` với Prisma.sql
@@ -470,11 +523,13 @@ if (lowStockOnly) {
 ### Trước khi code
 
 **Environment Setup** (theo AGENTS.md):
+
 - [ ] Jules VM đã có Docker services running? (`sudo docker ps`)
 - [ ] Prisma client đã được generate? (`pnpm db:generate`)
 - [ ] API client đã được prebuild? (`pnpm --filter @meocrm/api-client build`)
 
 **Architecture & Standards**:
+
 - [ ] API responses có wrap trong `{ data: ... }` format?
 - [ ] NestJS app có `app.setGlobalPrefix('api')`?
 - [ ] Frontend không hardcode `/api` trong API calls?
@@ -489,6 +544,7 @@ if (lowStockOnly) {
 - [ ] Count queries có cùng filter conditions với select queries?
 
 **Multi-Tenant & Security** (theo AGENTS.md):
+
 - [ ] Queries không thiếu `organizationId` filter?
 - [ ] Error responses follow `{code, message, details?, traceId}` format?
 - [ ] Không hardcode business rules (dùng Settings service)?
@@ -496,18 +552,21 @@ if (lowStockOnly) {
 ### Trước khi commit
 
 **Code Quality**:
+
 - [ ] Run `pnpm test` (và `-- --runInBand` nếu cần)
 - [ ] Run `pnpm lint`
 - [ ] Run `pnpm build`
 - [ ] Không có console.log debug statements
 
 **Git Standards** (theo README.md Section 34):
+
 - [ ] Không commit auto-generated files (`next-env.d.ts`, `.next/`, etc.)
 - [ ] Commit message follow format: `type(scope): description`
 - [ ] Branch naming: `feature/<module>-<feature>` hoặc `fix/<module>-<bug>`
 - [ ] Code đã được test locally
 
 **Documentation**:
+
 - [ ] Update docs nếu behavior thay đổi
 - [ ] Update README.md nếu thêm commands/env vars
 - [ ] Update DEVELOPMENT_LESSONS_LEARNED.md nếu phát hiện pattern mới
@@ -517,13 +576,16 @@ if (lowStockOnly) {
 ## References
 
 ### Internal Documentation
+
 - [AGENTS.md](./AGENTS.md) - How to work with agents on this project
 - [docs/01_BUSINESS_LOGIC.md](./docs/01_BUSINESS_LOGIC.md) - Business rules and requirements
 - [docs/03_DATABASE_SCHEMA.md](./docs/03_DATABASE_SCHEMA.md) - Database schema reference
 - [docs/testing/Strategy-&-Coverage.md](./docs/testing/Strategy-&-Coverage.md) - Testing strategy
 
 ### Commit Standards
+
 Follow the project's commit format:
+
 ```
 type(scope): description
 
@@ -538,6 +600,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 **Types**: `feat`, `fix`, `docs`, `test`, `chore`, `refactor`, `perf`, `ci`
 
 ### Branch Naming
+
 - `feature/<module>-<feature>` - New features
 - `fix/<module>-<bug>` - Bug fixes
 - `docs/<topic>` - Documentation updates
