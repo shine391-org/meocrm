@@ -25,6 +25,7 @@ export class QuerySuppliersDto {
   @ApiPropertyOptional({ enum: ['name', 'code', 'createdAt'] })
   @IsOptional()
   @IsString()
+  @IsIn(['name', 'code', 'createdAt'])
   sortBy?: string = 'createdAt';
 
   @ApiPropertyOptional({ enum: ['asc', 'desc'] })
