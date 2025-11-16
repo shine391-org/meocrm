@@ -199,7 +199,7 @@ describe('ProductsService', () => {
       prisma.product.updateMany.mockResolvedValue({ count: 1 });
       await service.remove('prod-1', 'org-1');
       expect(prisma.product.updateMany).toHaveBeenCalledWith({
-        where: { id: 'prod-1', organizationId: 'org-1', deletedAt: null },
+        where: { id: 'prod-1', organizationId: 'org-1' },
         data: { deletedAt: expect.any(Date) },
       });
     });

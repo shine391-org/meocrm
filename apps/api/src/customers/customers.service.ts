@@ -157,7 +157,7 @@ export class CustomersService {
 
     const { birthday, ...rest } = dto;
 
-    await this.prisma.customer.updateMany({
+    const result = await this.prisma.customer.updateMany({
       where: {
         id,
         organizationId,
@@ -196,7 +196,7 @@ export class CustomersService {
       );
     }
 
-    await this.prisma.customer.updateMany({
+    const result = await this.prisma.customer.updateMany({
       where: {
         id,
         organizationId,
@@ -204,6 +204,10 @@ export class CustomersService {
       },
       data: { deletedAt: new Date() },
     });
+
+    if (result.count === 0) {
+      throw new NotFoundException(`Customer ${id} not found`);
+    }
 
     return { message: 'Customer deleted successfully' };
   }

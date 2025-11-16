@@ -32,9 +32,11 @@ async function bootstrap() {
     }
   };
 
+import * as cookieParser from 'cookie-parser';
   app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
   app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
   app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
+  app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

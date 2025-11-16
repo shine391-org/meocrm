@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,6 +24,7 @@ import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
+import { User } from '@prisma/client';
 
 @ApiTags('Products')
 @ApiBearerAuth()
@@ -38,8 +40,11 @@ export class ProductsController {
   @ApiResponse({ status: 409, description: 'SKU already exists' })
   create(
     @Body() createProductDto: CreateProductDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: User,
   ) {
+    if (!user.organizationId) {
+      throw new BadRequestException('User is not associated with an organization.');
+    }
     return this.productsService.create(createProductDto, user.organizationId);
   }
 
@@ -48,8 +53,11 @@ export class ProductsController {
   @ApiResponse({ status: 200, description: 'Products retrieved successfully' })
   findAll(
     @Query() query: QueryProductsDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: User,
   ) {
+    if (!user.organizationId) {
+      throw new BadRequestException('User is not associated with an organization.');
+    }
     return this.productsService.findAll(query, user.organizationId);
   }
 
@@ -59,8 +67,11 @@ export class ProductsController {
   @ApiResponse({ status: 404, description: 'Product not found' })
   findOne(
     @Param('id') id: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: User,
   ) {
+    if (!user.organizationId) {
+      throw new BadRequestException('User is not associated with an organization.');
+    }
     return this.productsService.findOne(id, user.organizationId);
   }
 
@@ -71,8 +82,11 @@ export class ProductsController {
   update(
     @Param('id') id: string,
     @Body() updateProductDto: UpdateProductDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: User,
   ) {
+    if (!user.organizationId) {
+      throw new BadRequestException('User is not associated with an organization.');
+    }
     return this.productsService.update(id, updateProductDto, user.organizationId);
   }
 
@@ -81,10 +95,13 @@ export class ProductsController {
   @ApiOperation({ summary: 'Soft delete a product' })
   @ApiResponse({ status: 204, description: 'Product deleted successfully' })
   @ApiResponse({ status: 404, description: 'Product not found' })
-  remove(
+  async remove(
     @Param('id') id: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.productsService.remove(id, user.organizationId);
+    @CurrentUser() user: User,
+  ): Promise<void> {
+    if (!user.organizationId) {
+      throw new BadRequestException('User is not associated with an organization.');
+    }
+    await this.productsService.remove(id, user.organizationId);
   }
 }

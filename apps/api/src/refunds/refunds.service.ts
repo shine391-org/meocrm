@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { AuditAction, Commission, CommissionStatus, OrderStatus, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -10,6 +10,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class RefundsService {
+  private readonly logger = new Logger(RefundsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
@@ -109,6 +111,8 @@ export class RefundsService {
               where: { id: productId },
               data: { stock: { increment: item.quantity } },
             });
+          } else {
+            this.logger.warn(`Skipping restock for item ${item.id} in order ${order.id} because productId is missing.`);
           }
 
           if (item.variantId) {

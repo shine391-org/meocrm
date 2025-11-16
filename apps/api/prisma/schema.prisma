@@ -581,6 +581,7 @@ model Order {
   updatedAt DateTime @updatedAt
   completedAt DateTime?
   deletedAt DateTime?
+  paidAt DateTime?
 
   @@index([organizationId])
   @@index([customerId])

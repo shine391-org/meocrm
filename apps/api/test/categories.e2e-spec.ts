@@ -1,21 +1,17 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import * as request from 'supertest';
-import { AppModule } from '../../src/app.module';
-import { setupTestApp } from '../../src/test-utils';
+import request from 'supertest';
+import { AppModule } from '../src/app.module';
+import { setupTestApp } from '../src/test-utils';
 
 describe('Categories E2E', () => {
   let app: INestApplication;
   let authToken: string;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleRef.createNestApplication();
-    setupTestApp(app);
-    await app.init();
+    const { app: testApp, accessToken: token } = await setupTestApp();
+    app = testApp;
+    authToken = token;
   });
 
   afterAll(async () => {

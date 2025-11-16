@@ -98,7 +98,7 @@ export class CategoriesService {
 
   async update(id: string, dto: UpdateCategoryDto, organizationId: string) {
     const category = await this.prisma.category.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, deletedAt: null },
     });
 
     if (!category) {
@@ -111,7 +111,7 @@ export class CategoriesService {
 
     if (dto.parentId) {
       const parent = await this.prisma.category.findFirst({
-        where: { id: dto.parentId, organizationId, deletedAt: null },
+        where: { id: dto.parentId, organizationId },
       });
       if (!parent) {
         throw new BadRequestException('Parent category not found');
@@ -144,7 +144,10 @@ export class CategoriesService {
   async remove(id: string, organizationId: string) {
     const category = await this.prisma.category.findFirst({
       where: { id, organizationId, deletedAt: null },
-      include: { children: { where: { deletedAt: null } }, products: { where: { deletedAt: null } } },
+      include: {
+        children: { where: { deletedAt: null } },
+        products: { where: { deletedAt: null } }
+      },
     });
 
     if (!category) {
@@ -165,21 +168,30 @@ export class CategoriesService {
   }
 
   private async getCategoryLevel(categoryId: string): Promise<number> {
-    let level = 0;
-    let currentId = categoryId;
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        parent: {
+          include: {
+            parent: {
+              include: {
+                parent: true,
+              },
+            },
+          },
+        },
+      },
+    });
 
-    while (currentId) {
-      const category = await this.prisma.category.findUnique({
-        where: { id: currentId },
-        select: { parentId: true },
-      });
+    if (!category) {
+      return 0;
+    }
 
-      if (!category) {
-        break;
-      }
-
+    let level = 1;
+    let current: { parent: any } | null = category;
+    while (current?.parent) {
       level++;
-      currentId = category.parentId;
+      current = current.parent;
     }
 
     return level;
@@ -187,24 +199,38 @@ export class CategoriesService {
 
   private async isDescendant(categoryId: string, potentialDescendantId: string): Promise<boolean> {
     const category = await this.prisma.category.findUnique({
-      where: { id: potentialDescendantId },
-      include: { children: true },
+      where: { id: categoryId },
+      include: {
+        children: {
+          include: {
+            children: {
+              include: {
+                children: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!category) {
       return false;
     }
 
-    if (category.id === categoryId) {
-      return true;
-    }
-
-    for (const child of category.children) {
-      if (await this.isDescendant(categoryId, child.id)) {
+    const check = (cat: any): boolean => {
+      if (cat.id === potentialDescendantId) {
         return true;
       }
-    }
+      if (cat.children) {
+        for (const child of cat.children) {
+          if (check(child)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
 
-    return false;
+    return check(category);
   }
 }

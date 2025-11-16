@@ -93,7 +93,7 @@ This is the default workflow for Codex/Jules agents. The VM boot image already i
 ### Canonical Jules VM Env Values
 These are managed in the Jules GUI → Environment tab and must match for parity:
 
-```
+```bash
 DATABASE_URL=postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev?schema=public
 DB_NAME=meocrm_dev
 DB_USER=meocrm_user

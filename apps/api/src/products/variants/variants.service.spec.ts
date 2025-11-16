@@ -117,7 +117,7 @@ describe('VariantsService', () => {
 
       expect(prisma.productVariant.updateMany).toHaveBeenCalledWith({
         where: { id: 'variant-1', organizationId: 'org-1' },
-        data: expect.objectContaining({ additionalPrice: 5 }),
+        data: { additionalPrice: 5 },
       });
       expect(result).toEqual({ id: 'variant-1', sku: 'PROD-S' });
     });

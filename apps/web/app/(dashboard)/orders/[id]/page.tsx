@@ -140,7 +140,7 @@ export default function OrderDetailsPage() {
         return;
       }
 
-      if (latestOrder.organizationId && latestOrder.organizationId !== tenantId) {
+      if (latestOrder.organizationId == null || latestOrder.organizationId !== tenantId) {
         setOrder(null);
         setErrorMessage('Bạn không được phép xem đơn hàng này.');
         return;

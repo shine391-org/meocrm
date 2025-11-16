@@ -1,26 +1,7 @@
 // apps/web/lib/api/customers.ts
-import { getBrowserToken, getOrganizationId } from '@/lib/auth/token';
+import { getAuthHeaders } from './shared';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api').replace(/\/$/, '');
-
-export const getAuthHeaders = (options: { includeJson?: boolean } = {}) => {
-  const headers: Record<string, string> = {};
-  if (options.includeJson ?? true) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  const token = getBrowserToken();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const organizationId = getOrganizationId();
-  if (organizationId) {
-    headers['x-organization-id'] = organizationId;
-  }
-
-  return headers;
-};
 
 export async function getCustomers(page: number = 1, limit: number = 20, search: string = '') {
   const response = await fetch(

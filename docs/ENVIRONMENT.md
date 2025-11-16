@@ -19,7 +19,7 @@
 ### Canonical Jules VM ENV Block
 Được cấu hình trong GUI, nhưng ghi lại ở đây để tham chiếu nhanh:
 
-```
+```env
 DATABASE_URL=postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev?schema=public
 DB_NAME=meocrm_dev
 DB_USER=meocrm_user

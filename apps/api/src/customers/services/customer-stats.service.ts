@@ -1,6 +1,4 @@
-// customers/services/customer-stats.service.ts
-
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CustomerSegmentationService } from './customer-segmentation.service';
 import { Prisma } from '@prisma/client';
@@ -12,10 +10,6 @@ export class CustomerStatsService {
     private segmentationService: CustomerSegmentationService,
   ) {}
 
-  /**
-   * Update customer stats after order completion
-   * Called by OrdersService in transaction
-   */
   async updateStatsOnOrderComplete(
     customerId: string,
     orderTotal: number,
@@ -29,7 +23,7 @@ export class CustomerStatsService {
     });
 
     if (!customer) {
-      return;
+      throw new NotFoundException(`Customer ${customerId} not found or deleted`);
     }
 
     await prisma.customer.updateMany({
@@ -45,16 +39,11 @@ export class CustomerStatsService {
       },
     });
 
-    // Update segment (outside transaction to avoid deadlock)
     if (!tx) {
       await this.segmentationService.updateSegment(customerId, customer.organizationId);
     }
   }
 
-  /**
-   * Revert customer stats after order cancellation
-   * Called by OrdersService in transaction
-   */
   async revertStatsOnOrderCancel(
     customerId: string,
     orderTotal: number,
@@ -64,40 +53,32 @@ export class CustomerStatsService {
 
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, deletedAt: null },
-      select: {
-        totalSpent: true,
-        totalOrders: true,
-        organizationId: true,
-      },
+      select: { organizationId: true },
     });
 
-    if (!customer) return;
-
-    // Decrement (but not below 0)
-    const newTotalSpent = Math.max(0, Number(customer.totalSpent) - orderTotal);
-    const newTotalOrders = Math.max(0, customer.totalOrders - 1);
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} not found for revert stats`);
+    }
 
     await prisma.customer.updateMany({
       where: {
         id: customerId,
         organizationId: customer.organizationId,
         deletedAt: null,
+        totalSpent: { gte: orderTotal },
+        totalOrders: { gte: 1 },
       },
       data: {
-        totalSpent: newTotalSpent,
-        totalOrders: newTotalOrders,
+        totalSpent: { decrement: orderTotal },
+        totalOrders: { decrement: 1 },
       },
     });
 
-    // Update segment
     if (!tx) {
       await this.segmentationService.updateSegment(customerId, customer.organizationId);
     }
   }
 
-  /**
-   * Update debt balance
-   */
   async updateDebt(
     customerId: string,
     amount: number,
@@ -111,7 +92,7 @@ export class CustomerStatsService {
     });
 
     if (!customer) {
-      return;
+      throw new NotFoundException(`Customer not found for updateDebt`);
     }
 
     await prisma.customer.updateMany({

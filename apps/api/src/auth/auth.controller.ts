@@ -1,4 +1,3 @@
-/* istanbul ignore file */
 import { Controller, Post, Get, Body, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -98,23 +97,7 @@ export class AuthController {
   }
 
   private extractRefreshToken(req: Request): string | null {
-    const cookieHeader = req.headers?.cookie;
-    if (!cookieHeader) {
-      return null;
-    }
-    const cookies = cookieHeader.split(';');
-    for (const cookie of cookies) {
-      const separatorIndex = cookie.indexOf('=');
-      if (separatorIndex === -1) {
-        continue;
-      }
-      const name = cookie.slice(0, separatorIndex).trim();
-      const value = cookie.slice(separatorIndex + 1);
-      if (name === REFRESH_TOKEN_COOKIE) {
-        return decodeURIComponent(value);
-      }
-    }
-    return null;
+    return req.cookies?.[REFRESH_TOKEN_COOKIE] || null;
   }
 
   private isSecureCookie(): boolean {

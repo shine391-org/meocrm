@@ -1,4 +1,4 @@
-import { getAuthHeaders } from '@/lib/api/customers';
+import { getAuthHeaders } from './shared';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api').replace(/\/$/, '');
 
@@ -21,7 +21,17 @@ interface AuthResponse {
 }
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
-  const data = await response.json().catch(() => ({}));
+  let data;
+  try {
+    data = await response.json();
+  } catch (e) {
+    const text = await response.text();
+    const error = new Error(`Failed to parse JSON response: ${text}`) as Error & { body?: unknown; status?: number };
+    error.body = text;
+    error.status = response.status;
+    throw error;
+  }
+
   if (!response.ok) {
     const message = (data as { message?: string })?.message ?? 'Có lỗi xảy ra';
     const error = new Error(message) as Error & { body?: unknown; status?: number };

@@ -96,7 +96,6 @@ export class ProductsService {
   ) {
     const variants = await tx.productVariant.findMany({
       where: { productId, organizationId },
-      select: { additionalPrice: true },
     });
 
     for (const variant of variants) {
@@ -111,7 +110,6 @@ export class ProductsService {
       where: {
         sku: createProductDto.sku,
         organizationId,
-        deletedAt: null,
       },
     });
 
@@ -167,7 +165,6 @@ export class ProductsService {
 
     const where: Prisma.ProductWhereInput = {
       organizationId,
-      deletedAt: null,
     };
 
     if (search) {
@@ -225,7 +222,6 @@ export class ProductsService {
       where: {
         id,
         organizationId,
-        deletedAt: null,
       },
       include: {
         category: true,
@@ -291,7 +287,7 @@ export class ProductsService {
 
   async remove(id: string, organizationId: string) {
     const { count } = await this.prisma.product.updateMany({
-      where: { id, organizationId, deletedAt: null },
+      where: { id, organizationId },
       data: { deletedAt: new Date() },
     });
 

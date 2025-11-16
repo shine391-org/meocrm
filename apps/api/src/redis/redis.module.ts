@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
@@ -8,14 +8,24 @@ import Redis from 'ioredis';
     {
       provide: 'REDIS_CLIENT',
       useFactory: async (configService: ConfigService) => {
-        if (configService.get<string>('NODE_ENV') === 'test') {
+        const logger = new Logger('RedisModule');
+        const nodeEnv = configService.get<string>('NODE_ENV');
+
+        if (nodeEnv === 'test') {
           const { default: RedisMock } = await import('ioredis-mock');
           return new RedisMock();
         }
-        return new Redis({
-          host: configService.get<string>('REDIS_HOST'),
-          port: configService.get<number>('REDIS_PORT'),
-        });
+
+        const host = configService.get<string>('REDIS_HOST');
+        const port = configService.get<number>('REDIS_PORT');
+
+        if (!host || !port) {
+          logger.error(`REDIS_HOST or REDIS_PORT not set. NODE_ENV=${nodeEnv}. Bypassing Redis connection.`);
+          return null;
+        }
+
+        logger.log(`Connecting to Redis at ${host}:${port}`);
+        return new Redis({ host, port });
       },
       inject: [ConfigService],
     },

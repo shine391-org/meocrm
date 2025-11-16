@@ -22,3 +22,6 @@ WHERE
 GROUP BY
   "o"."organizationId",
   "o"."customerId";
+
+-- AlterTable
+ALTER TABLE "orders" ADD COLUMN "paidAt" TIMESTAMP(3);

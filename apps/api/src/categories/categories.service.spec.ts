@@ -62,7 +62,7 @@ describe('CategoriesService', () => {
 
       prisma.category.findFirst.mockResolvedValue(parent as any);
       // Mock getCategoryLevel to return 3
-      jest.spyOn(service as any, 'getCategoryLevel').mockResolvedValue(2);
+      jest.spyOn(service as any, 'getCategoryLevel').mockResolvedValue(3);
 
 
       await expect(service.create(dto, organizationId)).rejects.toThrow('Maximum 3 levels allowed');

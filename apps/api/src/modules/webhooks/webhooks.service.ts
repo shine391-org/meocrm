@@ -3,10 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as crypto from 'crypto';
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { OrdersService } from '../../orders/orders.service';
-import { OrderStatus, Prisma, Webhook } from '@prisma/client';
+import { OrderStatus, Prisma, Webhook, PaymentMethod } from '@prisma/client';
 import {
   decryptSecret,
   encryptSecret,
@@ -19,6 +19,10 @@ import {
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { UpdateWebhookDto } from './dto/update-webhook.dto';
 
+const MAX_BACKOFF = 10000;
+const JITTER = 1000;
+const TOTAL_RETRY_TIMEOUT = 30000;
+
 export interface WebhookResponse {
   id: string;
   url: string;
@@ -27,6 +31,11 @@ export interface WebhookResponse {
   hasSecret: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+interface RetryConfig extends AxiosRequestConfig {
+  retryCount?: number;
+  retryStart?: number;
 }
 
 @Injectable()
@@ -44,20 +53,28 @@ export class WebhooksService implements OnModuleInit {
     this.axiosInstance.interceptors.response.use(
       (response: any) => response,
       async (error: any) => {
-        const config = error.config || {};
+        const config: RetryConfig = error.config || {};
         const status = error?.response?.status;
+
+        if (!config.retryStart) {
+          config.retryStart = Date.now();
+        }
+
         const shouldRetry =
           (!status || status >= 500) &&
-          (config.retryCount ?? 0) < 5;
+          (config.retryCount ?? 0) < 5 &&
+          Date.now() - config.retryStart < TOTAL_RETRY_TIMEOUT;
 
         if (!shouldRetry) {
           return Promise.reject(error);
         }
 
         config.retryCount = (config.retryCount || 0) + 1;
-        const backoff = Math.pow(2, config.retryCount) * 1000;
-        this.logger.warn(`Retrying webhook to ${config.url} in ${backoff}ms (attempt ${config.retryCount})...`);
-        await new Promise((resolve) => setTimeout(resolve, backoff));
+        const backoff = Math.min(MAX_BACKOFF, Math.pow(2, config.retryCount) * 1000);
+        const jitter = Math.floor(Math.random() * JITTER);
+        const delay = backoff + jitter;
+        this.logger.warn(`Retrying webhook to ${config.url} in ${delay}ms (attempt ${config.retryCount})...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
         return this.axiosInstance(config);
       },
     );
@@ -73,22 +90,36 @@ export class WebhooksService implements OnModuleInit {
   async handleShippingDelivered(payload: any) {
     this.logger.log('Handling shipping.delivered event', payload);
     const { orderId, organizationId } = payload.data;
-    if (orderId && organizationId) {
-      const result = await this.prisma.order.updateMany({
-        where: { id: orderId, organizationId, status: OrderStatus.PROCESSING },
-        data: {
-          status: OrderStatus.COMPLETED,
-          completedAt: new Date(),
-        },
-      });
-      if (result.count === 0) {
-        this.logger.warn(
-          `shipping.delivered skipped: order ${orderId} in org ${organizationId} is not in PROCESSING state`,
-        );
-      }
-    } else {
+    if (!orderId || !organizationId) {
       this.logger.warn('shipping.delivered payload missing orderId or organizationId');
+      return;
     }
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, organizationId, status: OrderStatus.PROCESSING },
+      select: { id: true, status: true, paymentMethod: true, total: true },
+    });
+    if (!order) {
+      this.logger.warn(
+        `shipping.delivered skipped: order ${orderId} in org ${organizationId} is not in PROCESSING state`,
+      );
+      return;
+    }
+
+    const updateData: Prisma.OrderUpdateInput = {
+      status: OrderStatus.COMPLETED,
+      completedAt: new Date(),
+    };
+
+    if (order.paymentMethod === PaymentMethod.COD) {
+      updateData.isPaid = true;
+      updateData.paidAmount = order.total;
+      updateData.paidAt = new Date();
+    }
+    const result = await this.prisma.order.update({
+      where: { id: orderId, organizationId },
+      data: updateData,
+    });
+    this.logger.log(`Order ${result.id} status updated to COMPLETED`);
   }
 
   async listWebhooks(organizationId: string): Promise<WebhookResponse[]> {
@@ -190,16 +221,26 @@ export class WebhooksService implements OnModuleInit {
       return;
     }
 
-    await Promise.all(
+    const results = await Promise.allSettled(
       legacyWebhooks.map(async (webhook) => {
-        const payload = this.toSecretPayload(webhook.secretEncrypted) as LegacySecretPayload;
-        const encrypted = encryptSecret(payload.legacySecret, this.webhookSecretKey);
-        await this.prisma.webhook.update({
-          where: { id: webhook.id },
-          data: { secretEncrypted: encrypted as unknown as Prisma.InputJsonValue },
-        });
+        try {
+          const payload = this.toSecretPayload(webhook.secretEncrypted) as LegacySecretPayload;
+          const encrypted = encryptSecret(payload.legacySecret, this.webhookSecretKey);
+          await this.prisma.webhook.update({
+            where: { id: webhook.id },
+            data: { secretEncrypted: encrypted as unknown as Prisma.InputJsonValue },
+          });
+          return { status: 'fulfilled', value: webhook.id };
+        } catch (error) {
+          this.logger.error(`Failed to backfill secret for webhook ${webhook.id}`, error);
+          return { status: 'rejected', reason: error, webhookId: webhook.id };
+        }
       }),
     );
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length > 0) {
+      this.logger.warn(`${failed.length} webhooks failed to backfill encrypted secrets.`);
+    }
   }
 
   private async resolveWebhookSecret(webhook: Webhook): Promise<string | null> {

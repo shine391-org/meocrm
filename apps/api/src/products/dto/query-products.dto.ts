@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsEnum,
   Min,
+  Max,
   IsInt,
   Validate,
   ValidatorConstraint,
@@ -55,6 +56,7 @@ export class QueryProductsDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 20;
 
   // Search

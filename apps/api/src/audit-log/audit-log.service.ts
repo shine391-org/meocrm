@@ -83,7 +83,7 @@ export class AuditLogService {
 
     const normalizedEvent = event.toLowerCase();
     if (!AuditLogService.ALLOWED_EVENT_PREFIXES.some((prefix) => normalizedEvent.startsWith(prefix))) {
-      throw new BadRequestException(`Invalid audit action: ${event}`);
+      throw new BadRequestException(`Invalid audit event: ${event}`);
     }
   }
 }

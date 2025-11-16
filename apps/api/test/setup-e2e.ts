@@ -1,2 +1,3 @@
 import * as dotenv from 'dotenv';
-dotenv.config({ path: '.env.test' });
+import * as path from 'path';
+dotenv.config({ path: path.join(__dirname, '.env.test') });
