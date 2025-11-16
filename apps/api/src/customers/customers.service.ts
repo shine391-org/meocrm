@@ -1,19 +1,41 @@
-import { 
-  Injectable, 
-  NotFoundException, 
+import {
+  Injectable,
+  NotFoundException,
   BadRequestException,
-  ConflictException 
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { Prisma } from '@prisma/client';
+import { CustomerSegmentationService } from './services/customer-segmentation.service';
+
+const CUSTOMER_SORTABLE_FIELDS: Array<keyof Prisma.CustomerOrderByWithRelationInput> = [
+  'createdAt',
+  'name',
+  'code',
+  'totalSpent',
+  'totalOrders',
+  'debt',
+];
+
+const CUSTOMER_SORTABLE_FIELDS: Array<keyof Prisma.CustomerOrderByWithRelationInput> = [
+  'createdAt',
+  'name',
+  'code',
+  'totalSpent',
+  'totalOrders',
+  'debt',
+];
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly segmentationService: CustomerSegmentationService,
+  ) {}
 
-  async create(dto: CreateCustomerDto, organizationId: string) {
+  async create(dto: CreateCustomerDto, organizationId: string, userId: string) {
     const code = await this.generateCode(organizationId);
 
     const existingPhone = await this.prisma.customer.findFirst({
@@ -28,14 +50,35 @@ export class CustomersService {
       throw new ConflictException('Phone number already exists for this organization');
     }
 
-    return this.prisma.customer.create({
-      data: {
-        ...dto,
-        code,
-        organization: {
-          connect: { id: organizationId },
+    const { birthday, ...rest } = dto;
+
+    // Validate birthday if provided
+    if (birthday) {
+      this.validateBirthday(birthday);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.create({
+        data: {
+          ...rest,
+          code,
+          organization: {
+            connect: { id: organizationId },
+          },
+          birthday: birthday ? new Date(birthday) : undefined,
+          creator: {
+            connect: { id: userId },
+          },
         },
-      },
+        include: {
+          group: true,
+          creator: { select: { id: true, name: true, email: true } },
+        },
+      });
+
+      const segment = await this.segmentationService.updateSegment(customer.id, organizationId, tx);
+
+      return segment ? { ...customer, segment } : customer;
     });
   }
 
@@ -67,12 +110,16 @@ export class CustomersService {
 
     const skip = (page - 1) * limit;
 
+    const normalizedOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+    const sortField = CUSTOMER_SORTABLE_FIELDS.includes(sortBy as any) ? (sortBy as keyof Prisma.CustomerOrderByWithRelationInput) : 'createdAt';
+    const orderBy = { [sortField]: normalizedOrder } as Prisma.CustomerOrderByWithRelationInput;
+
     const [data, total] = await Promise.all([
       this.prisma.customer.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy,
       }),
       this.prisma.customer.count({ where }),
     ]);
@@ -90,10 +137,10 @@ export class CustomersService {
 
   async findOne(id: string, organizationId: string) {
     const customer = await this.prisma.customer.findFirst({
-      where: { 
-        id, 
-        organizationId, 
-        deletedAt: null 
+      where: {
+        id,
+        organizationId,
+        deletedAt: null
       },
     });
 
@@ -101,11 +148,11 @@ export class CustomersService {
       throw new NotFoundException(`Customer ${id} not found`);
     }
 
-    return customer;
+    return { data: customer };
   }
 
   async update(id: string, dto: UpdateCustomerDto, organizationId: string) {
-    const customer = await this.findOne(id, organizationId);
+    const { data: customer } = await this.findOne(id, organizationId);
 
     if (dto.phone && dto.phone !== customer.phone) {
       const existingPhone = await this.prisma.customer.findFirst({
@@ -122,10 +169,26 @@ export class CustomersService {
       }
     }
 
-    return this.prisma.customer.update({
-      where: { id },
-      data: dto,
+    const { birthday, ...rest } = dto;
+
+    // Validate birthday if provided
+    if (birthday) {
+      this.validateBirthday(birthday);
+    }
+
+    await this.prisma.customer.updateMany({
+      where: {
+        id,
+        organizationId,
+        deletedAt: null,
+      },
+      data: {
+        ...rest,
+        birthday: birthday ? new Date(birthday) : undefined,
+      },
     });
+
+    return this.findOne(id, organizationId);
   }
 
   async remove(id: string, organizationId: string) {
@@ -152,17 +215,50 @@ export class CustomersService {
       );
     }
 
-    await this.prisma.customer.update({
-      where: { id },
+    const result = await this.prisma.customer.updateMany({
+      where: {
+        id,
+        organizationId,
+        deletedAt: null,
+      },
       data: { deletedAt: new Date() },
     });
+
+    if (result.count === 0) {
+      throw new NotFoundException(`Customer ${id} not found`);
+    }
 
     return { message: 'Customer deleted successfully' };
   }
 
+  private validateBirthday(birthday: string): void {
+    const birthdayDate = new Date(birthday);
+
+    // Check if date is valid
+    if (isNaN(birthdayDate.getTime())) {
+      throw new BadRequestException('Invalid birthday format');
+    }
+
+    const now = new Date();
+
+    // Check if birthday is in the future
+    if (birthdayDate > now) {
+      throw new BadRequestException('Birthday cannot be in the future');
+    }
+
+    // Check if birthday is more than 150 years ago
+    const maxAge = 150;
+    const minDate = new Date();
+    minDate.setFullYear(now.getFullYear() - maxAge);
+
+    if (birthdayDate < minDate) {
+      throw new BadRequestException('Birthday cannot be more than 150 years ago');
+    }
+  }
+
   private async generateCode(organizationId: string): Promise<string> {
     const lastCustomer = await this.prisma.customer.findFirst({
-      where: { 
+      where: {
         organizationId,
         deletedAt: null,
       },
@@ -176,7 +272,7 @@ export class CustomersService {
 
     const codeNumber = lastCustomer.code.substring(2);
     const lastNumber = parseInt(codeNumber, 10);
-    
+
     if (isNaN(lastNumber)) {
       throw new Error(`Invalid customer code format: ${lastCustomer.code}`);
     }

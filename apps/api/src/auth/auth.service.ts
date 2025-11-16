@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
@@ -6,9 +6,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { SignOptions } from 'jsonwebtoken';
+
+type JwtDuration = SignOptions['expiresIn'];
+
+type JwtDuration = `${number}d` | `${number}h` | `${number}m`;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -95,8 +102,9 @@ export class AuthService {
 
   async refreshAccessToken(refreshToken: string) {
     try {
+      const refreshSecret = this.getSecretOrThrow('JWT_REFRESH_SECRET');
       this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        secret: refreshSecret,
       });
 
       const storedToken = await this.prisma.refreshToken.findUnique({
@@ -124,6 +132,7 @@ export class AuthService {
         refreshToken: newRefreshToken,
       };
     } catch (error) {
+      this.logger.error('Refresh token validation failed', error instanceof Error ? error.stack : error);
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -154,6 +163,7 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
+      organizationId: user.organizationId,
       organization: user.organization,
     };
   }
@@ -165,14 +175,19 @@ export class AuthService {
       organizationId,
     };
 
+    const accessSecret = this.getSecretOrThrow('JWT_SECRET');
+    const refreshSecret = this.getSecretOrThrow('JWT_REFRESH_SECRET');
+    const accessExpiresIn = (this.configService.get<string>('JWT_EXPIRES_IN') ?? '15m') as JwtDuration;
+    const refreshExpiresIn = (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d') as JwtDuration;
+
     const accessToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_SECRET'),
-      expiresIn: '15m', // Short-lived access token
+      secret: accessSecret,
+      expiresIn: accessExpiresIn,
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: '7d', // Long-lived refresh token
+      secret: refreshSecret,
+      expiresIn: refreshExpiresIn,
     });
 
     // Store refresh token in database
@@ -188,5 +203,13 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken };
+  }
+
+  private getSecretOrThrow(key: 'JWT_SECRET' | 'JWT_REFRESH_SECRET') {
+    const value = this.configService.get<string>(key);
+    if (!value) {
+      throw new Error(`${key} is not configured`);
+    }
+    return value;
   }
 }

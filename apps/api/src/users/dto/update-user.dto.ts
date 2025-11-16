@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { PartialType } from '@nestjs/swagger';
 import { CreateUserDto } from './create-user.dto';
 

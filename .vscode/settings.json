@@ -1,0 +1,6 @@
+{
+    "coderabbit.agentType": "Claude Code",
+    "coderabbit.autoReviewMode": "auto",
+    "chatgpt.openOnStartup": true,
+    "chatgpt.runCodexInWindowsSubsystemForLinux": true
+}

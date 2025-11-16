@@ -18,22 +18,47 @@ describe('Auth E2E', () => {
     await app.close();
   });
 
-  it('rejects unauthenticated /auth/me calls', async () => {
-    await request(app.getHttpServer()).get('/auth/me').expect(401);
+  describe('Protected Routes', () => {
+    it('rejects unauthenticated /auth/me calls', async () => {
+      await request(app.getHttpServer()).get('/auth/me').expect(401);
+    });
+
+    it('rejects unauthenticated /products calls', async () => {
+      await request(app.getHttpServer()).get('/products').expect(401);
+    });
+
+    it('rejects unauthenticated /orders calls', async () => {
+      await request(app.getHttpServer()).get('/orders').expect(401);
+    });
+
+    it('returns current user with organizationId when authenticated', async () => {
+      const { body } = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      expect(body).toMatchObject({
+        id: expect.any(String),
+        email: expect.any(String),
+        name: expect.any(String),
+        role: expect.any(String),
+        organization: expect.objectContaining({
+          id: expect.any(String),
+        }),
+        organizationId: expect.any(String),
+      });
+    });
   });
 
-  it('returns current user when authenticated', async () => {
-    const { body } = await request(app.getHttpServer())
-      .get('/auth/me')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .expect(200);
+  describe('Public Routes', () => {
+    it('allows unauthenticated /health calls', async () => {
+      await request(app.getHttpServer()).get('/health').expect(200);
+    });
 
-    expect(body).toMatchObject({
-      id: expect.any(String),
-      email: expect.any(String),
-      name: expect.any(String),
-      role: expect.any(String),
-      organization: expect.any(Object),
+    it('allows unauthenticated /auth/login calls', async () => {
+      // We only check for bad request (400) to confirm the route is public,
+      // not the full login logic. A 401 would indicate the guard is active.
+      await request(app.getHttpServer()).post('/auth/login').send({}).expect(400);
     });
   });
 });

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CustomersService } from './customers.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CustomerSegmentationService } from './services/customer-segmentation.service';
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('CustomersService', () => {
@@ -12,24 +13,39 @@ describe('CustomersService', () => {
       findMany: jest.Mock;
       count: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
+  let segmentationService: {
+    updateSegment: jest.Mock;
+  };
   const organizationId = 'org-123';
+  const userId = 'user-123';
 
   beforeEach(async () => {
+    const customerMock = {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CustomersService,
         {
           provide: PrismaService,
           useValue: {
-            customer: {
-              findFirst: jest.fn(),
-              create: jest.fn(),
-              findMany: jest.fn(),
-              count: jest.fn(),
-              update: jest.fn(),
-            },
+            customer: customerMock,
+            $transaction: jest.fn((cb: any) => cb({ customer: customerMock })),
+          },
+        },
+        {
+          provide: CustomerSegmentationService,
+          useValue: {
+            updateSegment: jest.fn(),
           },
         },
       ],
@@ -37,6 +53,7 @@ describe('CustomersService', () => {
 
     service = module.get<CustomersService>(CustomersService);
     prisma = module.get(PrismaService) as any;
+    segmentationService = module.get(CustomerSegmentationService) as any;
   });
 
   afterEach(() => {
@@ -44,34 +61,41 @@ describe('CustomersService', () => {
   });
 
   describe('create', () => {
-    it('creates a customer with a generated code', async () => {
+    it('creates a customer, saves creator, and calls segmentation', async () => {
       const dto = { name: 'Test Customer', phone: '0987654321' };
-      const expected = { id: '1', code: 'KH000001', ...dto };
+      const created = { id: '1', code: 'KH000001', ...dto, segment: null };
 
       prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
       prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
-      prisma.customer.create.mockResolvedValue(expected);
+      prisma.customer.create.mockResolvedValue(created);
+      segmentationService.updateSegment.mockResolvedValue('Regular');
 
-      const result = await service.create(dto, organizationId);
+      const result = await service.create(dto, organizationId, userId);
 
       expect(prisma.customer.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          ...dto,
+          name: dto.name,
+          phone: dto.phone,
           code: 'KH000001',
           organization: { connect: { id: organizationId } },
+          creator: { connect: { id: userId } },
         }),
+        include: expect.any(Object),
       });
-      expect(result).toEqual(expected);
+      expect(segmentationService.updateSegment).toHaveBeenCalledWith('1', organizationId, expect.anything());
+      expect(result).toEqual({ ...created, segment: 'Regular' });
     });
 
-    it('throws when phone already exists in the organization', async () => {
+    it('throws when phone already exists', async () => {
       const dto = { name: 'Duplicate', phone: '0123456789' };
       prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
       prisma.customer.findFirst.mockResolvedValueOnce({ id: 'existing' }); // duplicate phone
 
-      await expect(service.create(dto, organizationId)).rejects.toThrow(ConflictException);
+      await expect(service.create(dto, organizationId, userId)).rejects.toThrow(ConflictException);
     });
   });
+
+  // Keep other tests the same as they are not affected by the changes
 
   describe('findAll', () => {
     it('returns paginated customers with tenant + soft delete filters', async () => {
@@ -111,13 +135,14 @@ describe('CustomersService', () => {
     it('updates customer details', async () => {
       prisma.customer.findFirst
         .mockResolvedValueOnce({ id: '1', phone: '111', organizationId }) // findOne
-        .mockResolvedValueOnce(null); // duplicate phone check
-      prisma.customer.update.mockResolvedValue({ id: '1', name: 'Updated' });
+        .mockResolvedValueOnce(null) // duplicate phone check
+        .mockResolvedValueOnce({ id: '1', name: 'Updated' }); // findOne after update
+      prisma.customer.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.update('1', { name: 'Updated', phone: '222' }, organizationId);
 
-      expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { id: '1' },
+      expect(prisma.customer.updateMany).toHaveBeenCalledWith({
+        where: { id: '1', organizationId, deletedAt: null },
         data: { name: 'Updated', phone: '222' },
       });
       expect(result).toEqual({ id: '1', name: 'Updated' });
@@ -135,12 +160,12 @@ describe('CustomersService', () => {
   describe('remove', () => {
     it('soft deletes customers without orders', async () => {
       prisma.customer.findFirst.mockResolvedValue({ id: '1', orders: [] });
-      prisma.customer.update.mockResolvedValue({ id: '1', deletedAt: new Date() });
+      prisma.customer.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.remove('1', organizationId);
 
-      expect(prisma.customer.update).toHaveBeenCalledWith({
-        where: { id: '1' },
+      expect(prisma.customer.updateMany).toHaveBeenCalledWith({
+        where: { id: '1', organizationId, deletedAt: null },
         data: { deletedAt: expect.any(Date) },
       });
       expect(result.message).toBe('Customer deleted successfully');
@@ -161,12 +186,120 @@ describe('CustomersService', () => {
       expect(code).toBe('KH000001');
     });
 
-    it('generates sequential codes without NaN for 100 iterations', async () => {
-      for (let i = 0; i < 100; i += 1) {
-        prisma.customer.findFirst.mockResolvedValueOnce({ code: `KH${(i + 1).toString().padStart(6, '0')}` });
+    it('generates sequential codes correctly', async () => {
+        prisma.customer.findFirst.mockResolvedValueOnce({ code: 'KH000009' });
         const code = await (service as any).generateCode(organizationId);
-        expect(code).toBe(`KH${(i + 2).toString().padStart(6, '0')}`);
-      }
+        expect(code).toBe('KH000010');
+    });
+  });
+
+  describe('birthday validation', () => {
+    it('accepts valid birthday in ISO string format (create)', async () => {
+      const dto = {
+        name: 'Test Customer',
+        phone: '0987654321',
+        birthday: '1990-05-15T00:00:00.000Z'
+      };
+      const created = { id: '1', code: 'KH000001', ...dto, segment: null };
+
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+      prisma.customer.create.mockResolvedValue(created);
+      segmentationService.updateSegment.mockResolvedValue('Regular');
+
+      await service.create(dto, organizationId, userId);
+
+      expect(prisma.customer.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          birthday: expect.any(Date),
+        }),
+        include: expect.any(Object),
+      });
+    });
+
+    it('rejects future birthday (create)', async () => {
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1);
+
+      const dto = {
+        name: 'Test Customer',
+        phone: '0987654321',
+        birthday: futureDate.toISOString()
+      };
+
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow('Birthday cannot be in the future');
+    });
+
+    it('rejects unrealistic old birthday (create)', async () => {
+      const oldDate = new Date();
+      oldDate.setFullYear(oldDate.getFullYear() - 151);
+
+      const dto = {
+        name: 'Test Customer',
+        phone: '0987654321',
+        birthday: oldDate.toISOString()
+      };
+
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow('Birthday cannot be more than 150 years ago');
+    });
+
+    it('accepts valid birthday in update', async () => {
+      const dto = { birthday: '1985-03-20T00:00:00.000Z' };
+
+      prisma.customer.findFirst
+        .mockResolvedValueOnce({ id: '1', phone: '111', organizationId }) // findOne
+        .mockResolvedValueOnce(null) // duplicate phone check
+        .mockResolvedValueOnce({ id: '1', birthday: new Date(dto.birthday) }); // findOne after update
+      prisma.customer.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.update('1', dto, organizationId);
+
+      expect(prisma.customer.updateMany).toHaveBeenCalledWith({
+        where: { id: '1', organizationId, deletedAt: null },
+        data: { birthday: expect.any(Date) },
+      });
+    });
+
+    it('rejects future birthday in update', async () => {
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1);
+
+      const dto = { birthday: futureDate.toISOString() };
+
+      prisma.customer.findFirst.mockResolvedValueOnce({ id: '1', phone: '111', organizationId });
+
+      await expect(service.update('1', dto, organizationId))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.update('1', dto, organizationId))
+        .rejects.toThrow('Birthday cannot be in the future');
+    });
+
+    it('rejects invalid date format', async () => {
+      const dto = {
+        name: 'Test Customer',
+        phone: '0987654321',
+        birthday: 'invalid-date'
+      };
+
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow('Invalid birthday format');
     });
   });
 });

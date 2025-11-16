@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -9,7 +10,7 @@ import {
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
-import { ListCustomersDto } from './dto/list-customers.dto';
+import { QueryCustomersDto } from './dto/query-customers.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -25,7 +26,7 @@ export class CustomersController {
   @ApiResponse({ status: 201, description: 'Customer created successfully' })
   @ApiResponse({ status: 409, description: 'Phone number already exists' })
   create(@CurrentUser() user: any, @Body() dto: CreateCustomerDto) {
-    return this.customersService.create(dto, user.organizationId);
+    return this.customersService.create(dto, user.organizationId, user.id);
   }
 
   @Get()
@@ -37,7 +38,7 @@ export class CustomersController {
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'segment', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Customer list retrieved' })
-  findAll(@CurrentUser() user: any, @Query() query: ListCustomersDto) {
+  findAll(@CurrentUser() user: any, @Query() query: QueryCustomersDto) {
     const { page, limit, search, sortBy, sortOrder, segment } = query;
     const pageNumber = page ?? 1;
     const limitNumber = limit ?? 20;

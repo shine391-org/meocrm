@@ -1,6 +1,6 @@
 # MeoCRM API Reference
 
-> **Base URL:** `http://localhost:2040/api` (development)
+> **Base URL:** `http://localhost:2003/api` (development)
 > 
 
 > **Authentication:** JWT Bearer token
@@ -89,6 +89,36 @@ Refresh access token
   "data": {
     "accessToken": "new.jwt.token"
   }
+}
+```
+
+### GET /reports/debt
+
+Customer debt report from snapshots.
+
+**Query Parameters:**
+
+- `groupBy` (string, required: `day` or `month`)
+- `fromDate`, `toDate` (ISO date strings, optional)
+- `customerId` (uuid, optional)
+
+**Response:** `200 OK`
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "period": "2025-11-10T00:00:00.000Z",
+      "customerId": "uuid-customer-1",
+      "closingDebt": "200000.00"
+    },
+    {
+      "period": "2025-11-09T00:00:00.000Z",
+      "customerId": "uuid-customer-1",
+      "closingDebt": "150000.00"
+    }
+  ]
 }
 ```
 

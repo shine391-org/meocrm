@@ -1,0 +1,71 @@
+name: CI (staging)
+
+on:
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [staging]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: staging
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      WEBHOOK_SECRET_KEY: ${{ secrets.STAGING_WEBHOOK_SECRET_KEY }}
+      PNPM_IGNORE_NODE_ENV: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.20.0
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-workspace.yaml
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Ensure pnpm path
+        run: |
+          corepack disable pnpm
+          echo "$PNPM_HOME" >> "$GITHUB_PATH"
+
+      - name: Install deps
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --recursive --frozen-lockfile
+          else
+            pnpm install --recursive --no-frozen-lockfile
+          fi
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @meocrm/api run prisma:generate
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Build
+        run: pnpm -w build
+
+      - name: Test (fail if missing tests)
+        run: pnpm -w test -- --runInBand --coverage
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-staging
+          path: |
+            coverage
+            **/coverage

@@ -10,10 +10,14 @@ export class CategoriesService {
   async create(dto: CreateCategoryDto, organizationId: string) {
     if (dto.parentId) {
       const parent = await this.prisma.category.findFirst({
-        where: { id: dto.parentId, organizationId },
+        where: { id: dto.parentId, organizationId, deletedAt: null },
       });
       if (!parent) {
         throw new BadRequestException('Parent category not found');
+      }
+      const parentLevel = await this.getCategoryLevel(dto.parentId);
+      if (parentLevel >= 3) {
+        throw new BadRequestException('Maximum 3 levels allowed');
       }
     }
 
@@ -34,11 +38,11 @@ export class CategoriesService {
 
   async findAll(organizationId: string) {
     return this.prisma.category.findMany({
-      where: { organizationId },
+      where: { organizationId, deletedAt: null },
       include: {
         parent: true,
-        children: true,
-        _count: { select: { products: true } },
+        children: { where: { deletedAt: null } },
+        _count: { select: { products: { where: { deletedAt: null } } } },
       },
       orderBy: { name: 'asc' },
     });
@@ -46,9 +50,27 @@ export class CategoriesService {
 
   async findTree(organizationId: string) {
     return this.prisma.category.findMany({
-      where: { organizationId, parentId: null },
+      where: { organizationId, parentId: null, deletedAt: null },
       include: {
-        children: { include: { children: true } },
+        _count: {
+          select: { products: { where: { deletedAt: null } } },
+        },
+        children: {
+          where: { deletedAt: null },
+          include: {
+            _count: {
+              select: { products: { where: { deletedAt: null } } },
+            },
+            children: {
+              where: { deletedAt: null },
+              include: {
+                _count: {
+                  select: { products: { where: { deletedAt: null } } },
+                },
+              },
+            },
+          },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -56,11 +78,12 @@ export class CategoriesService {
 
   async findOne(id: string, organizationId: string) {
     const category = await this.prisma.category.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, deletedAt: null },
       include: {
         parent: true,
-        children: true,
+        children: { where: { deletedAt: null } },
         products: {
+          where: { deletedAt: null },
           take: 10,
           select: { id: true, sku: true, name: true, sellPrice: true, stock: true },
         },
@@ -75,7 +98,7 @@ export class CategoriesService {
 
   async update(id: string, dto: UpdateCategoryDto, organizationId: string) {
     const category = await this.prisma.category.findFirst({
-      where: { id, organizationId },
+      where: { id, organizationId, deletedAt: null },
     });
 
     if (!category) {
@@ -88,10 +111,18 @@ export class CategoriesService {
 
     if (dto.parentId) {
       const parent = await this.prisma.category.findFirst({
-        where: { id: dto.parentId, organizationId },
+        where: { id: dto.parentId, organizationId, deletedAt: null },
       });
       if (!parent) {
         throw new BadRequestException('Parent category not found');
+      }
+      const parentLevel = await this.getCategoryLevel(dto.parentId);
+      if (parentLevel >= 3) {
+        throw new BadRequestException('Maximum 3 levels allowed');
+      }
+      const isDescendant = await this.isDescendant(id, dto.parentId);
+      if (isDescendant) {
+        throw new BadRequestException('Cannot move category under its own descendant');
       }
     }
 
@@ -112,8 +143,11 @@ export class CategoriesService {
 
   async remove(id: string, organizationId: string) {
     const category = await this.prisma.category.findFirst({
-      where: { id, organizationId },
-      include: { children: true, products: true },
+      where: { id, organizationId, deletedAt: null },
+      include: {
+        children: { where: { deletedAt: null } },
+        products: { where: { deletedAt: null } }
+      },
     });
 
     if (!category) {
@@ -126,7 +160,91 @@ export class CategoriesService {
       throw new BadRequestException('Cannot delete category with products');
     }
 
-    await this.prisma.category.delete({ where: { id } });
+    await this.prisma.category.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
     return { message: 'Category deleted successfully' };
+  }
+
+  private async getCategoryLevel(categoryId: string): Promise<number> {
+    let level = 1;
+    let currentId: string | null = categoryId;
+    const visited = new Set<string>();
+    const MAX_DEPTH = 10; // Prevent infinite loops on corrupted data
+
+    // Iteratively traverse up the hierarchy with individual queries
+    // More efficient than eager loading entire parent chain
+    while (currentId) {
+      // Cycle detection: check if we've seen this ID before
+      if (visited.has(currentId)) {
+        throw new Error(`Category hierarchy cycle detected at category ${currentId}`);
+      }
+      visited.add(currentId);
+
+      // Depth limit check
+      if (level > MAX_DEPTH) {
+        throw new Error(`Category hierarchy depth exceeds maximum allowed depth of ${MAX_DEPTH}`);
+      }
+
+      const category = await this.prisma.category.findUnique({
+        where: { id: currentId },
+        select: { parentId: true },
+      });
+
+      if (!category) {
+        return 0;
+      }
+
+      if (category.parentId) {
+        level++;
+        currentId = category.parentId;
+      } else {
+        currentId = null;
+      }
+    }
+
+    return level;
+  }
+
+  private async isDescendant(categoryId: string, potentialDescendantId: string): Promise<boolean> {
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+      include: {
+        children: {
+          where: { deletedAt: null },
+          include: {
+            children: {
+              where: { deletedAt: null },
+              include: {
+                children: {
+                  where: { deletedAt: null },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!category) {
+      return false;
+    }
+
+    const check = (cat: any): boolean => {
+      if (cat.id === potentialDescendantId) {
+        return true;
+      }
+      if (cat.children) {
+        for (const child of cat.children) {
+          if (check(child)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    return check(category);
   }
 }

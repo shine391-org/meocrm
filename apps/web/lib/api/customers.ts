@@ -1,24 +1,13 @@
 // apps/web/lib/api/customers.ts
-import { getBrowserToken } from '@/lib/auth/token';
+import { getAuthHeaders } from './shared';
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api';
-
-export const getAuthHeaders = () => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  const token = getBrowserToken();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return headers;
-};
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api').replace(/\/$/, '');
 
 export async function getCustomers(page: number = 1, limit: number = 20, search: string = '') {
-  const response = await fetch(`${API_BASE_URL}/customers?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`, { headers: getAuthHeaders() });
+  const response = await fetch(
+    `${API_BASE_URL}/customers?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`,
+    { headers: getAuthHeaders() },
+  );
   if (!response.ok) {
     throw new Error('Failed to fetch customers');
   }

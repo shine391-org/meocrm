@@ -1,0 +1,70 @@
+name: CI/CD (main)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+      PNPM_IGNORE_NODE_ENV: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.20.0
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-workspace.yaml
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Ensure pnpm path
+        run: |
+          corepack disable pnpm
+          echo "$PNPM_HOME" >> "$GITHUB_PATH"
+
+      - name: Install deps
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --recursive --frozen-lockfile
+          else
+            pnpm install --recursive --no-frozen-lockfile
+          fi
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @meocrm/api run prisma:generate
+
+      - name: Build
+        run: pnpm -w build
+
+      - name: Test (strict)
+        run: pnpm -w test -- --runInBand --coverage
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.app_url || '' }}
+    steps:
+      - name: Deployment placeholder
+        id: deploy
+        run: |
+          echo "Do real deployment here (Docker/K8s/VPS)."
+          # Example outputs:
+          printf 'app_url=%s\n' "https://app.meocrm.example" >> "$GITHUB_OUTPUT"

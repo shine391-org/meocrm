@@ -3,6 +3,8 @@ import { OrdersService } from './orders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { Prisma, PrismaClient, OrderStatus } from '@prisma/client';
+import { PricingService } from './pricing.service';
+import { SettingsService } from '../modules/settings/settings.service';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 
@@ -18,6 +20,19 @@ describe('OrdersService', () => {
           provide: PrismaService,
           useValue: mockDeep<PrismaClient>(),
         },
+        {
+          provide: PricingService,
+          useValue: {
+            calculateTotals: jest.fn().mockResolvedValue({
+              shippingFee: 10, // Default mock shipping fee
+              freeShipApplied: false,
+            }),
+          },
+        },
+        {
+          provide: SettingsService,
+          useValue: mockDeep<SettingsService>(),
+        },
       ],
     }).compile();
 
@@ -28,6 +43,53 @@ describe('OrdersService', () => {
       async (callback: (tx: PrismaTransactionalClient) => Promise<any>) =>
         callback(prisma as unknown as PrismaTransactionalClient),
     );
+  });
+
+  describe('calculateOrderTotals (variants)', () => {
+    it('adds additionalPrice to base product price for variants', async () => {
+      const items = [
+        { productId: 'product-1', quantity: 2, variantId: 'variant-1' },
+      ] as any;
+      const mockTx: any = {
+        product: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'product-1',
+            sellPrice: 100,
+            stock: 10,
+            variants: [{ id: 'variant-1', additionalPrice: 25, stock: 5 }],
+          }),
+        },
+      };
+
+      const result = await (service as any).calculateOrderTotals(
+        items,
+        'org-1',
+        mockTx,
+      );
+
+      expect(result.itemsData[0].unitPrice).toBe(125);
+      expect(result.subtotal).toBe(250);
+    });
+
+    it('throws when variant price would be non-positive', async () => {
+      const items = [
+        { productId: 'product-1', quantity: 1, variantId: 'variant-1' },
+      ] as any;
+      const mockTx: any = {
+        product: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'product-1',
+            sellPrice: 100,
+            stock: 10,
+            variants: [{ id: 'variant-1', additionalPrice: -200, stock: 5 }],
+          }),
+        },
+      };
+
+      await expect(
+        (service as any).calculateOrderTotals(items, 'org-1', mockTx),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   afterEach(() => {
@@ -139,7 +201,8 @@ describe('OrdersService', () => {
     });
 
     it('should NOT increase customer debt when isPaid=true', async () => {
-      const paidDto = { ...mockCreateDto, isPaid: true, paidAmount: 220 };
+      // subtotal 200 + tax 20 + shipping 10 = 230
+      const paidDto = { ...mockCreateDto, isPaid: true, paidAmount: 230 };
 
       (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
         const txClient = {
@@ -186,11 +249,12 @@ describe('OrdersService', () => {
           customer: {
             findFirst: jest.fn().mockResolvedValue({ id: 'customer-1' }),
             update: jest.fn().mockImplementation((args) => {
+              // total 230 - paid 50 = 180
               // Verify debt increment is correct
-              expect(args.data.debt).toEqual({ increment: 170 });
+              expect(args.data.debt).toEqual({ increment: 180 });
               return Promise.resolve({
                 ...mockCustomer,
-                debt: 170,
+                debt: 180,
               });
             }),
           },
@@ -348,11 +412,26 @@ describe('OrdersService', () => {
 
   describe('findOne', () => {
     it('should return an order if found', async () => {
-      const order = { id: 'order-1' } as any;
+      const order = {
+        id: 'order-1',
+        subtotal: new Prisma.Decimal(100),
+        tax: new Prisma.Decimal(10),
+        shipping: new Prisma.Decimal(5),
+        discount: new Prisma.Decimal(0),
+        total: new Prisma.Decimal(115),
+        paidAmount: new Prisma.Decimal(20),
+      } as any;
       prisma.order.findFirst.mockResolvedValue(order);
 
       const result = await service.findOne('order-1', 'org-id');
-      expect(result).toEqual(order);
+      expect(result).toMatchObject({
+        id: 'order-1',
+        subtotal: 100,
+        tax: 10,
+        shipping: 5,
+        total: 115,
+        paidAmount: 20,
+      });
     });
 
     it('should throw NotFoundException if order not found', async () => {

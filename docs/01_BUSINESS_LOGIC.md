@@ -201,29 +201,155 @@ async onShippingDelivered(shippingOrder) {
     - [x]  ✅ Xử lý shipping order: Hủy shipping order nếu có
     - [x]  ✅ Cập nhật customer debt: Trừ lại debt đã tăng
 
-### 1.2 Refund Policy
+### 1.2 Refund Policy (Decision #34 – Option A)
 
-- [ ]  TODO: Có cho phép refund không?
-- [ ]  TODO: Refund trong bao nhiêu ngày?
-- [ ]  TODO: Refund 100% hay trừ phí?
-- [ ]  TODO: Xử lý stock khi refund?
+> **Nguồn dữ liệu:** `settings.refund` (mặc định Decision #34). Đừng hard-code, luôn đọc từ config vì tenant/branch có thể override.
+
+- `windowDays` (default **7**) → chỉ cho phép refund nếu `now - order.completedAt <= windowDays`.
+- `refundShippingFee` (default **false**) → phí ship không hoàn cho khách trừ khi flag bật.
+- `restockOnRefund` (default **true**) → nếu sản phẩm còn dùng được → trả hàng vào inventory của branch tạo order.
+- `approvals` (default `['manager']`) → workflow yêu cầu tối thiểu 1 approver role trong danh sách (có thể thêm `finance`, `owner`, … theo tenant).
+- Cron `refund-window-audit` chạy hằng đêm, phát cảnh báo nếu có yêu cầu refund quá hạn nhưng chưa xử lý.
+
+**Luồng chuẩn:**
+1. Customer yêu cầu refund (UI/API) → hệ thống kiểm tra windowDays.
+2. Nếu hợp lệ → tạo `RefundRequest` trạng thái `PENDING_APPROVAL`, chờ roles trong `approvals`.
+3. Sau khi duyệt → tạo `OrderRefund`:
+   - `refundAmount = order.total - (refundShippingFee ? 0 : order.shipping)`
+   - `inventory.restock()` được gọi khi `restockOnRefund = true`.
+4. Debt/customer stats điều chỉnh tương ứng.
+
+**Ví dụ I/O**
+
+```http
+POST /orders/ord_pos_100/refund
+{
+  "items": [{ "orderItemId": "oi_1", "quantity": 1 }],
+  "reason": "Khách đổi size"
+}
+
+→ 202 Accepted
+{
+  "refundId": "rf_01",
+  "status": "PENDING_APPROVAL",
+  "windowDays": 7,
+  "restockOnRefund": true,
+  "approvalsRequired": ["manager"],
+  "traceId": "refund-rf_01"
+}
+```
+
+```http
+POST /orders/ord_pos_100/refund/approve
+{ "decision": "APPROVE" }
+
+→ 200 OK
+{
+  "refundId": "rf_01",
+  "status": "APPROVED",
+  "amount": "150000.00",
+  "shippingRefunded": false,
+  "stockMovement": "RESTOCKED",
+  "traceId": "refund-rf_01"
+}
+```
+
+### 1.3 Example I/O (Order/POS/COD/Refund/Cancel/Stock)
+
+```http
+POST /orders
+{
+  "channel": "POS",
+  "customerId": "cus_01",
+  "items": [{ "productId": "prd_01", "quantity": 2 }],
+  "paymentMethod": "CASH"
+}
+
+→ 201 Created
+{
+  "orderId": "ord_pos_100",
+  "status": "COMPLETED",
+  "stockDeducted": true,
+  "traceId": "pos-ord-100"
+}
+```
+
+```http
+POST /orders
+{
+  "channel": "ONLINE",
+  "shippingMethod": "COD",
+  "customerId": "cus_02",
+  "items": [{ "productId": "prd_02", "quantity": 1 }]
+}
+
+→ 201 Created
+{
+  "orderId": "ord_cod_200",
+  "status": "PENDING",
+  "shippingFee": "25000.00",
+  "freeShipApplied": false,
+  "traceId": "cod-ord-200"
+}
+```
+
+```http
+POST /orders/ord_cod_200/cancel
+{ "reason": "Customer request" }
+
+→ 200 OK
+{
+  "orderId": "ord_cod_200",
+  "status": "CANCELLED",
+  "inventoryRolledBack": false,
+  "traceId": "cancel-200"
+}
+```
+
+```http
+POST /orders/ord_cod_200/stock-adjust
+{
+  "type": "RESTOCK",
+  "items": [{ "orderItemId": "oi_200", "quantity": 1 }]
+}
+
+→ 200 OK
+{
+  "adjustmentId": "adj_01",
+  "stockImpact": { "branchId": "br_01", "quantity": 1 },
+  "traceId": "stock-ord-200"
+}
+```
 
 ---
 
 ## 2️⃣ Payment & Debt Rules
 
-### 2.1 Customer Debt Calculation
+### 2.1 Customer Debt Calculation (Decision #35)
 
-**Formula hiện tại (cần confirm):**
+> **Nguồn dữ liệu:** runtime query + nightly snapshot. Không lưu con số cố định trong bảng `customers`.
 
-```jsx
-customer.debt = order.total - order.paidAmount
+**Runtime công thức:**
+
 ```
+customer.debtRuntime = Σ (order.total - order.paidAmount)
+  where order.organizationId = currentOrg
+    and order.customerId = customer.id
+    and order.status ∉ {CANCELLED}
+```
+
+- Tổng hợp trên mỗi request để phản ánh trạng thái mới nhất (bao gồm POS, COD chưa giao).
+- Dùng view `vw_customer_debt_runtime` (Prisma gọi qua raw SQL) để tránh copy/paste logic.
+
+**Nightly snapshot (báo cáo tài chính):**
+
+- Cron `debt-snapshot-nightly` chạy 23:55 ICT → ghi `CustomerDebtSnapshot` gồm `{ organizationId, customerId, debtValue, capturedAt }`.
+- Báo cáo ngày/tháng lấy từ snapshot (không ảnh hưởng runtime UI).
 
 **Boss Decisions:**
 
-- [x]  ✅ **Debt được cộng dồn khi nào?** → Khi tạo order (PENDING) - debt tăng ngay
-- [x]  ✅ **Khi order CANCELLED, có trừ debt không?** → Có, trừ lại debt
+- [x]  ✅ **Debt được cộng dồn khi nào?** → Khi order PENDING tạo ra balance > 0.
+- [x]  ✅ **Order CANCELLED** → trừ lại debt runtime + ghi snapshot mới.
 
 **Boss Decision (Câu 30):** ✅ **Option A - CHO PHÉP debt âm (overpayment)**
 
@@ -794,7 +920,27 @@ async calculateShippingFee(order) {
 - [ ]  TODO: Tính theo weight? (formula?)
 - [ ]  TODO: Tính theo distance? (tích hợp API tính khoảng cách?)
 - [x]  ✅ Tính theo địa chỉ: API GHN/GHTK tự xử lý
-- [ ]  TODO: Free ship khi đơn hàng > X VNĐ?
+- [x]  ✅ **Free-ship (Decision #37):**\
+  Giá trị mặc định `settings.shipping.freeShipThreshold = 500000` VND **chỉ áp dụng cho channel = "ONLINE"**.\
+  Các channel khác (POS, wholesale, partner) luôn tính phí thực.\
+  `settings.shipping.applyChannels` xác định danh sách override → đừng hard-code.
+
+```http
+POST /orders/quote-shipping
+{
+  "channel": "ONLINE",
+  "subtotal": 650000,
+  "shippingAddress": { "...": "..." }
+}
+
+→ 200 OK
+{
+  "shippingFee": 0,
+  "freeShipThreshold": 500000,
+  "channelEligible": true,
+  "traceId": "ship-quote-01"
+}
+```
 
 ### 5.2 COD Collection Rules
 
@@ -1213,3 +1359,141 @@ async autoHardDelete() {
 - [ ]  TODO: SMS (integration với Twilio, SMSVN?)
 - [ ]  TODO: In-app notifications (WebSocket?)
 - [ ]  TODO: Push notifications (mobile app future)
+
+---
+
+## 🔟 Lead Management — Settings-driven Priority System
+
+> **Settings key:** `leadPriority` (xem `docs/settings/README.md`).\
+> Precedence: Default → Plan → Tenant → Branch → Role → User → Object. Không hard-code 7/30/60, luôn đọc `settings.leadPriority.thresholds`.
+
+- Enum: `LeadPriority = { HIGH, MEDIUM, LOW, INACTIVE }`
+- Defaults: `enabled=true`, `thresholds = { auto_to_medium: 7, auto_to_low: 30, auto_to_inactive: 60 }`
+- Cron `lead-priority-decay` chạy mỗi giờ:
+  - Nếu `now - lastActivityAt > thresholds.auto_to_medium` → `priorityAuto = MEDIUM`
+  - > `auto_to_low` → `LOW`
+  - > `auto_to_inactive` → `INACTIVE`
+- Manual override:
+  - Chỉ bật khi `settings.leadPriority.allowManualOverride = true`
+  - `priorityEffective = priorityManual ?? priorityAuto`
+- Auto assignment:
+  - `settings.leadPriority.autoAssignment.rules` map priority → queue (vd `HIGH -> senior_sales`)
+  - Khi priorityEffective tăng lên HIGH → enqueue job assign user theo strategy
+- Audit: mọi thay đổi priority phải log `{ leadId, oldPriority, newPriority, source, traceId }`
+- Guardrails đa-tenant: cron phải iterate theo tenant (không quét cả bảng), Prisma middleware phụ trách filter `organizationId`.
+
+### Definition of Done
+
+- [x] Cron và API đều đọc config qua `SettingsService`.
+- [x] Activity reset event (call, meeting, order) cập nhật `lastActivityAt`.
+- [x] Manual override ghi nhận `priorityUpdatedAt` + traceId.
+- [x] API lỗi luôn `{code,message,details?,traceId}`.
+
+### Ví dụ I/O
+
+```http
+GET /leads/ld_123
+→ 200 OK
+{
+  "priorityAuto": "MEDIUM",
+  "priorityManual": "HIGH",
+  "priorityEffective": "HIGH",
+  "thresholds": { "auto_to_medium": 7, "auto_to_low": 30, "auto_to_inactive": 60 },
+  "traceId": "lead-ld_123"
+}
+```
+
+```http
+POST /leads/ld_123/priority:override
+{ "priority": "LOW" }
+
+→ 200 OK
+{
+  "priorityEffective": "LOW",
+  "allowManualOverride": true,
+  "traceId": "lead-override-ld_123"
+}
+```
+
+---
+
+## 1️⃣1 Commission & Revenue Tracking (Config-driven)
+
+> **Settings key:** `commission`.\
+> Defaults: `{ enabled: true, plan: "TIERED", split: { self: 0.7, support: 0.2, teamPool: 0.1 }, payoutDayOfMonth: 5 }`.\
+> Refund behavior đọc từ `settings.refund`. Không cố định 70/20/10 – tenant có thể đổi.
+
+- CommissionRule:
+  - `plan` quyết định engine: `FLAT`, `TIERED`, `BONUS`.
+  - `config` lưu tiers (vd `[ { min: 0, rate: 0.05 }, ... ]`), bonus triggers, split profile.
+  - `@@unique([code, organizationId])`
+- Commission entry:
+  - `valueGross`, `valueNet`, `ratePercent`, `amount`, `currency`
+  - `split` JSON (danh sách { role/userId, pct, amount })
+  - `status` workflow: `PENDING → APPROVED → PAID`
+  - `isAdjustment = true` cho refund/cancel → amount âm, `adjustsCommissionId` tham chiếu bản gốc
+  - `periodMonth = YYYY-MM` giúp payout batch
+- Triggers:
+  - `order.completed` (POS ngay lập tức; COD chờ webhook `DELIVERED`)
+  - `order.refunded` hoặc `order.cancelled` sau khi trả tiền → tạo adjustment (âm)
+- Payout chain:
+  1. Scheduler mở kỳ → lọc commission `status=APPROVED` + `periodMonth=payload.period`.
+  2. Gộp theo người nhận, tạo payout batch, mark `status=PAID`, ghi `traceId`.
+  3. Gửi notification + webhook `commission.payout.completed`.
+- Error contract: mọi API/cron log `{code,message,traceId}` và gắn `settings.version` để audit.
+
+### Ví dụ I/O
+
+```http
+POST /admin/commission-rules
+{
+  "code": "DEFAULT_TIERED",
+  "plan": "TIERED",
+  "config": {
+    "tiers": [
+      { "min": 0, "rate": 0.05 },
+      { "min": 20000000, "rate": 0.07 }
+    ],
+    "split": { "self": 0.7, "support": 0.2, "teamPool": 0.1 }
+  }
+}
+
+→ 201 Created
+{
+  "ruleId": "cmr_01",
+  "split": { "self": 0.7, "support": 0.2, "teamPool": 0.1 },
+  "traceId": "rule-cmr_01"
+}
+```
+
+```http
+POST /commissions/payouts:run
+{ "period": "2025-12", "payOn": "2026-01-05" }
+
+→ 200 OK
+{
+  "period": "2025-12",
+  "totalAmount": "15500000.00",
+  "records": 42,
+  "status": "PAID",
+  "payoutDayOfMonth": 5,
+  "traceId": "payout-202512"
+}
+```
+
+```http
+POST /commissions/refunds
+{
+  "commissionId": "cms_001",
+  "refundPercent": 30
+}
+
+→ 201 Created
+{
+  "adjustmentId": "cms_adj_09",
+  "amount": "-450000.00",
+  "isAdjustment": true,
+  "adjustsCommissionId": "cms_001",
+  "traceId": "refund-cms-001"
+}
+```

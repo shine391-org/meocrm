@@ -1,52 +1,89 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { RequestContextService } from '../common/context/request-context.service';
+import { Prisma, PrismaClient } from '@prisma/client';
 
-const MULTI_TENANT_MODELS = new Map<string, string>([
-  ['Branch', 'organizationId'],
-  ['Category', 'organizationId'],
-  ['Customer', 'organizationId'],
-  ['CustomerGroup', 'organizationId'],
-  ['Order', 'organizationId'],
-  ['Product', 'organizationId'],
-  ['ProductVariant', 'organizationId'],
-  ['ShippingOrder', 'organizationId'],
-  ['Supplier', 'organizationId'],
-  ['User', 'organizationId'],
-]);
+const SOFT_DELETE_MODELS = [
+  'product',
+  'productVariant',
+  'customer',
+  'order',
+  'supplier',
+] as const;
 
-const SOFT_DELETE_FIELDS = new Map<string, string>([
-  ['Customer', 'deletedAt'],
-  ['CustomerGroup', 'deletedAt'],
-  ['Product', 'deletedAt'],
-  ['Supplier', 'deletedAt'],
-]);
+type SoftDeleteQueryableModel = (typeof SOFT_DELETE_MODELS)[number];
 
-const ACTIONS_ENFORCING_TENANT = new Set([
-  'findMany',
+const SOFT_DELETE_ACTIONS = [
   'findFirst',
-  'findUnique',
-  'update',
-  'updateMany',
-  'delete',
-  'deleteMany',
+  'findFirstOrThrow',
+  'findMany',
   'count',
   'aggregate',
-  'upsert',
-]);
+  'groupBy',
+] as const;
 
-const ACTIONS_ENFORCING_SOFT_DELETE = new Set(['findMany', 'findFirst', 'count', 'aggregate']);
+type SoftDeleteAction = (typeof SOFT_DELETE_ACTIONS)[number];
+
+const createSoftDeleteHandlers = () => {
+  const handlers: Record<SoftDeleteAction, ({ args, query }: any) => Promise<any>> = {} as any;
+
+  SOFT_DELETE_ACTIONS.forEach((action) => {
+    handlers[action] = ({ args, query }) => {
+      const normalizedArgs: Record<string, any> = args ?? {};
+      const includeDeleted = normalizedArgs.withDeleted;
+
+      if (!includeDeleted) {
+        normalizedArgs.where = normalizedArgs.where ?? {};
+        if (normalizedArgs.where.deletedAt === undefined) {
+          normalizedArgs.where.deletedAt = null;
+        }
+      }
+
+      if (normalizedArgs.withDeleted !== undefined) {
+        delete normalizedArgs.withDeleted;
+      }
+
+      return query(normalizedArgs);
+    };
+  });
+
+  return handlers;
+};
+
+const softDeleteExtension = Prisma.defineExtension({
+  name: 'softDelete',
+  query: SOFT_DELETE_MODELS.reduce<Record<SoftDeleteQueryableModel, Record<SoftDeleteAction, any>>>(
+    (acc, model) => {
+      acc[model] = createSoftDeleteHandlers();
+      return acc;
+    },
+    {} as any,
+  ),
+});
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  constructor() {
+  private static instance: PrismaService | null = null;
+
+  private constructor() {
     super({
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     });
+  }
 
-    // Prisma 6: Use client extensions (no auto-filter for now)
-    // Individual services will handle soft delete filtering
-    return this.$extends({}) as PrismaService;
+  static getInstance(): PrismaService {
+    if (!PrismaService.instance) {
+      const baseClient = new PrismaService();
+      PrismaService.instance = PrismaService.extendWithSoftDelete(baseClient);
+    }
+
+    return PrismaService.instance;
+  }
+
+  private static extendWithSoftDelete(baseClient: PrismaService): PrismaService {
+    const extendedClient = baseClient.$extends(softDeleteExtension) as PrismaService;
+    extendedClient.onModuleInit = PrismaService.prototype.onModuleInit;
+    extendedClient.onModuleDestroy = PrismaService.prototype.onModuleDestroy;
+    extendedClient.cleanDatabase = PrismaService.prototype.cleanDatabase;
+    return extendedClient;
   }
 
   async onModuleInit() {
@@ -78,45 +115,4 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     );
   }
 
-  private combineWhere(where: Record<string, any> | undefined, constraint: Record<string, any>) {
-    if (!where || Object.keys(where).length === 0) {
-      return constraint;
-    }
-
-    if (where.AND) {
-      const existing = Array.isArray(where.AND) ? where.AND : [where.AND];
-      return {
-        ...where,
-        AND: [...existing, constraint],
-      };
-    }
-
-    return {
-      AND: [where, constraint],
-    };
-  }
-
-  private applyOrganizationToData(data: any, field: string, organizationId: string): any {
-    if (!data) {
-      return { [field]: organizationId };
-    }
-
-    if (Array.isArray(data)) {
-      return data.map((entry) => this.applyOrganizationToData(entry, field, organizationId));
-    }
-
-    if (data[field] && data[field] !== organizationId) {
-      throw new Error('Cross-tenant mutation detected');
-    }
-
-    if (data.organization?.connect?.id && data.organization.connect.id !== organizationId) {
-      throw new Error('Cross-tenant mutation detected');
-    }
-
-    if (data[field] || data.organization) {
-      return data;
-    }
-
-    return { ...data, [field]: organizationId };
-  }
 }

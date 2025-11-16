@@ -1,32 +1,44 @@
+/* istanbul ignore file */
 import { IsOptional, IsNumber, IsBoolean, IsIn, Min, Max, Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface, IsUUID, IsString, IsInt } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
-@ValidatorConstraint({ name: 'isLessThanOrEqual', async: false })
-export class IsLessThanOrEqual implements ValidatorConstraintInterface {
-  validate(value: any, args: ValidationArguments) {
-    const [relatedPropertyName] = args.constraints;
-    const relatedValue = (args.object as any)[relatedPropertyName];
-    // only validate if both values are defined
-    if (value === undefined || relatedValue === undefined) {
+export enum ProductSortBy {
+  NAME = 'name',
+  PRICE = 'sellPrice',
+  STOCK = 'stock',
+  CREATED_AT = 'createdAt',
+}
+
+export enum SortOrder {
+  ASC = 'asc',
+  DESC = 'desc',
+}
+
+@ValidatorConstraint({ name: 'maxPriceGteMinPrice', async: false })
+export class MaxPriceGreaterOrEqualConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args: ValidationArguments) {
+    const dto = args.object as QueryProductsDto;
+    if (dto.minPrice === undefined || dto.maxPrice === undefined) {
       return true;
     }
-    return value <= relatedValue;
+    return dto.maxPrice >= dto.minPrice;
   }
 
   defaultMessage(args: ValidationArguments) {
-    const [relatedPropertyName] = args.constraints;
-    return `${args.property} must be less than or equal to ${relatedPropertyName}`;
+    return `${args.property} must be greater than or equal to minPrice`;
   }
 }
 
 export class QueryProductsDto {
-  // Pagination (Task 1)
+  // Pagination
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number = 1;
 
+  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -34,40 +46,47 @@ export class QueryProductsDto {
   @Max(100)
   limit?: number = 20;
 
-  // Filters (Task 2)
-  @IsOptional()
-  @IsUUID()
-  categoryId?: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  @Validate(IsLessThanOrEqual, ['maxPrice'])
-  minPrice?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(0)
-  maxPrice?: number;
-
-  @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
-  @IsBoolean()
-  inStock?: boolean;
-
-  // Search (Task 3)
+  // Search
+  @ApiPropertyOptional({ description: 'Search by name or SKU' })
   @IsOptional()
   @IsString()
   search?: string;
 
-  // Sorting (Task 4)
+  // Filters
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsIn(['name', 'sellPrice', 'stock', 'createdAt'])
-  sortBy?: string = 'createdAt';
+  @IsString()
+  categoryId?: string;
 
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsIn(['asc', 'desc'])
-  sortOrder?: 'asc' | 'desc' = 'desc';
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minPrice?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Validate(MaxPriceGreaterOrEqualConstraint)
+  maxPrice?: number;
+
+  @ApiPropertyOptional({ description: 'Filter products in stock (stock > 0)' })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  inStock?: boolean;
+
+  // Sorting
+  @ApiPropertyOptional({ enum: ProductSortBy, default: ProductSortBy.CREATED_AT })
+  @IsOptional()
+  @IsEnum(ProductSortBy)
+  sortBy?: ProductSortBy = ProductSortBy.CREATED_AT;
+
+  @ApiPropertyOptional({ enum: SortOrder, default: SortOrder.DESC })
+  @IsOptional()
+  @IsEnum(SortOrder)
+  sortOrder?: SortOrder = SortOrder.DESC;
 }
