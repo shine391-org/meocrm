@@ -43,8 +43,8 @@ describe('Categories E2E', () => {
         })
         .expect(200);
 
-      authToken = res.body.accessToken;
-      expect(authToken).toBeDefined();
+      const newToken = res.body.accessToken;
+      expect(newToken).toBeDefined();
     });
   });
 

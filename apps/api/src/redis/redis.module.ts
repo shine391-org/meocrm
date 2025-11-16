@@ -25,7 +25,44 @@ import Redis from 'ioredis';
         }
 
         logger.log(`Connecting to Redis at ${host}:${port}`);
-        return new Redis({ host, port });
+        const redis = new Redis({
+          host,
+          port,
+          retryStrategy: (times: number) => {
+            if (times > 3) {
+              logger.error('Redis connection failed after 3 retries');
+              return null;
+            }
+            const delay = Math.min(times * 1000, 3000);
+            logger.warn(`Redis connection attempt ${times}, retrying in ${delay}ms`);
+            return delay;
+          },
+          enableOfflineQueue: false,
+          maxRetriesPerRequest: 3,
+          lazyConnect: true,
+        });
+
+        redis.on('error', (err) => {
+          logger.error(`Redis error: ${err.message}`);
+        });
+
+        redis.on('connect', () => {
+          logger.log('Redis connected successfully');
+        });
+
+        redis.on('reconnecting', () => {
+          logger.warn('Redis reconnecting...');
+        });
+
+        try {
+          await redis.connect();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          logger.error(`Failed to connect to Redis: ${message}`);
+          return null;
+        }
+
+        return redis;
       },
       inject: [ConfigService],
     },

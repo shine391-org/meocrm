@@ -73,10 +73,7 @@ async function bootstrap() {
   } else {
     app.enableCors({
       origin: (origin, callback) => {
-        if (!origin) {
-          return callback(null, false);
-        }
-        if (allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.includes(origin)) {
           return callback(null, true);
         }
         return callback(new Error('Origin not allowed'), false);
@@ -103,7 +100,7 @@ async function bootstrap() {
     const primaryRouter = server?._events?.request?._router;
     const arrayRouter =
       Array.isArray(requestHandlers) && requestHandlers.length
-        ? requestHandlers.find((handler: any) => handler?._router)?. _router
+        ? requestHandlers.find((handler: any) => handler?._router)?._router
         : undefined;
     const httpAdapter = typeof app.getHttpAdapter === 'function' ? app.getHttpAdapter() : null;
     const expressInstance = httpAdapter?.getInstance?.();

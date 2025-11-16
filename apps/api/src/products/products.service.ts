@@ -106,22 +106,22 @@ export class ProductsService {
   async create(createProductDto: CreateProductDto, organizationId: string) {
     const { variants, ...productData } = createProductDto;
 
-    const existing = await this.prisma.product.findFirst({
-      where: {
-        sku: createProductDto.sku,
-        organizationId,
-      },
-    });
-
-    if (existing) {
-      throw new ConflictException(`SKU "${createProductDto.sku}" already exists`);
-    }
-
     if (createProductDto.categoryId) {
       await this.ensureCategoryBelongsToOrganization(createProductDto.categoryId, organizationId);
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.product.findFirst({
+        where: {
+          sku: createProductDto.sku,
+          organizationId,
+        },
+      });
+
+      if (existing) {
+        throw new ConflictException(`SKU "${createProductDto.sku}" already exists`);
+      }
+
       const product = await tx.product.create({
         data: {
           ...productData,

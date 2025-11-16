@@ -103,15 +103,20 @@ export class CustomerStatsService {
       throw new NotFoundException(`Customer not found for updateDebt`);
     }
 
-    await prisma.customer.updateMany({
-      where: {
-        id: customerId,
-        organizationId: customer.organizationId,
-        deletedAt: null,
-      },
-      data: {
-        debt: { increment: amount },
-      },
-    });
+    try {
+      await prisma.customer.updateMany({
+        where: {
+          id: customerId,
+          organizationId: customer.organizationId,
+          deletedAt: null,
+        },
+        data: {
+          debt: { increment: amount },
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to update customer debt: ${message}`);
+    }
   }
 }

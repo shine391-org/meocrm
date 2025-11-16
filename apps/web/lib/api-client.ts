@@ -1,20 +1,21 @@
 import { OpenAPI } from '@meocrm/api-client';
 import { getBrowserToken, getOrganizationId } from '@/lib/auth/token';
 
-const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '');
-if (!rawBaseUrl) {
-  throw new Error('NEXT_PUBLIC_API_URL is not defined. Please set it in your environment.');
-}
-try {
-  // Validate that the URL is well-formed.
-  new URL(rawBaseUrl);
-} catch (error) {
-  throw new Error(`NEXT_PUBLIC_API_URL is invalid: ${(error as Error).message}`);
+function getValidatedApiUrl(): string {
+  const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '');
+  if (!rawBaseUrl) {
+    throw new Error('NEXT_PUBLIC_API_URL is not defined. Please set it in your environment.');
+  }
+  try {
+    // Validate that the URL is well-formed.
+    new URL(rawBaseUrl);
+  } catch (error) {
+    throw new Error(`NEXT_PUBLIC_API_URL is invalid: ${(error as Error).message}`);
+  }
+  return rawBaseUrl;
 }
 
-if (OpenAPI.BASE !== rawBaseUrl) {
-  OpenAPI.BASE = rawBaseUrl;
-}
+OpenAPI.BASE = getValidatedApiUrl();
 
 OpenAPI.HEADERS = async () => {
   const headers: Record<string, string> = {};

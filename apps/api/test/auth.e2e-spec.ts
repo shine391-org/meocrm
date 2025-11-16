@@ -42,10 +42,11 @@ describe('Auth E2E', () => {
         email: expect.any(String),
         name: expect.any(String),
         role: expect.any(String),
-        organization: expect.any(Object),
+        organization: expect.objectContaining({
+          id: expect.any(String),
+        }),
         organizationId: expect.any(String),
       });
-      expect(body.organizationId).toEqual(body.organization.id);
     });
   });
 

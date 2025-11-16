@@ -29,6 +29,7 @@ module.exports = {
   moduleNameMapper: {
     '^apps/api/(.*)$': '<rootDir>/apps/api/$1',
     '^src/(.*)$': '<rootDir>/apps/api/src/$1',
+    '^@meocrm/api-client$': '<rootDir>/packages/api-client/src/index.ts',
   },
   globals: {
     'ts-jest': {

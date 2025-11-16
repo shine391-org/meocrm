@@ -157,7 +157,7 @@ export class CustomersService {
 
     const { birthday, ...rest } = dto;
 
-    const result = await this.prisma.customer.updateMany({
+    await this.prisma.customer.updateMany({
       where: {
         id,
         organizationId,

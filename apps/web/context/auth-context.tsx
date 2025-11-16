@@ -123,8 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           void refreshToken();
         }
       } catch (error) {
-        console.error('Failed to decode access token', error);
-        void refreshToken();
+        console.error('Failed to decode access token, logging out', error);
+        void logout();
       }
     }, 60 * 1000);
 

@@ -79,7 +79,7 @@ export class AuthController {
   private setRefreshTokenCookie(res: Response, token: string) {
     res.cookie(REFRESH_TOKEN_COOKIE, token, {
       httpOnly: true,
-      sameSite: 'strict',
+      sameSite: 'lax',
       secure: this.isSecureCookie(),
       maxAge: REFRESH_TOKEN_MAX_AGE,
       path: '/',
@@ -89,7 +89,7 @@ export class AuthController {
   private clearRefreshTokenCookie(res: Response) {
     res.cookie(REFRESH_TOKEN_COOKIE, '', {
       httpOnly: true,
-      sameSite: 'strict',
+      sameSite: 'lax',
       secure: this.isSecureCookie(),
       expires: new Date(0),
       path: '/',
