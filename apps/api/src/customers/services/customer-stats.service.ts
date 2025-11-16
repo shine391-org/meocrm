@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CustomerSegmentationService } from './customer-segmentation.service';
 import { Prisma } from '@prisma/client';
@@ -26,7 +26,7 @@ export class CustomerStatsService {
       throw new NotFoundException(`Customer ${customerId} not found or deleted`);
     }
 
-    await prisma.customer.updateMany({
+    const result = await prisma.customer.updateMany({
       where: {
         id: customerId,
         organizationId: customer.organizationId,
@@ -38,6 +38,10 @@ export class CustomerStatsService {
         lastOrderAt: new Date(),
       },
     });
+
+    if (result.count === 0) {
+      throw new BadRequestException('Customer stats not updated due to guard conditions');
+    }
 
     if (!tx) {
       await this.segmentationService.updateSegment(customerId, customer.organizationId);
@@ -60,7 +64,7 @@ export class CustomerStatsService {
       throw new NotFoundException(`Customer ${customerId} not found for revert stats`);
     }
 
-    await prisma.customer.updateMany({
+    const result = await prisma.customer.updateMany({
       where: {
         id: customerId,
         organizationId: customer.organizationId,
@@ -73,6 +77,10 @@ export class CustomerStatsService {
         totalOrders: { decrement: 1 },
       },
     });
+
+    if (result.count === 0) {
+      throw new BadRequestException('Customer stats not updated due to guard conditions');
+    }
 
     if (!tx) {
       await this.segmentationService.updateSegment(customerId, customer.organizationId);

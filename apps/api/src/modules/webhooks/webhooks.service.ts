@@ -232,8 +232,11 @@ export class WebhooksService implements OnModuleInit {
           });
           return { status: 'fulfilled', value: webhook.id };
         } catch (error) {
-          this.logger.error(`Failed to backfill secret for webhook ${webhook.id}`, error);
-          return { status: 'rejected', reason: error, webhookId: webhook.id };
+          this.logger.error(
+            `Failed to backfill secret for webhook ${webhook.id}`,
+            error instanceof Error ? error.message : String(error),
+          );
+          throw error;
         }
       }),
     );
@@ -261,7 +264,10 @@ export class WebhooksService implements OnModuleInit {
     try {
       return decryptSecret(payload, this.webhookSecretKey);
     } catch (error) {
-      this.logger.error(`Failed to decrypt secret for webhook ${webhook.id}`, error instanceof Error ? error.stack : error);
+      this.logger.error(
+        `Failed to decrypt secret for webhook ${webhook.id}`,
+        error instanceof Error ? error.message : String(error),
+      );
       return null;
     }
   }

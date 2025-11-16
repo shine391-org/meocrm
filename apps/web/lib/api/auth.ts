@@ -21,12 +21,13 @@ interface AuthResponse {
 }
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
-  let data;
+  const text = await response.text();
+
+  let data: unknown;
   try {
-    data = await response.json();
-  } catch (e) {
-    const text = await response.text();
-    const error = new Error(`Failed to parse JSON response: ${text}`) as Error & { body?: unknown; status?: number };
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    const error = new Error(`Failed to parse JSON response`) as Error & { body?: unknown; status?: number };
     error.body = text;
     error.status = response.status;
     throw error;
@@ -39,6 +40,7 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
     error.status = response.status;
     throw error;
   }
+
   return data as T;
 };
 

@@ -111,7 +111,7 @@ export class CategoriesService {
 
     if (dto.parentId) {
       const parent = await this.prisma.category.findFirst({
-        where: { id: dto.parentId, organizationId },
+        where: { id: dto.parentId, organizationId, deletedAt: null },
       });
       if (!parent) {
         throw new BadRequestException('Parent category not found');
@@ -172,10 +172,14 @@ export class CategoriesService {
       where: { id: categoryId },
       include: {
         parent: {
+          where: { deletedAt: null },
           include: {
             parent: {
+              where: { deletedAt: null },
               include: {
-                parent: true,
+                parent: {
+                  where: { deletedAt: null },
+                },
               },
             },
           },
@@ -202,10 +206,14 @@ export class CategoriesService {
       where: { id: categoryId },
       include: {
         children: {
+          where: { deletedAt: null },
           include: {
             children: {
+              where: { deletedAt: null },
               include: {
-                children: true,
+                children: {
+                  where: { deletedAt: null },
+                },
               },
             },
           },
