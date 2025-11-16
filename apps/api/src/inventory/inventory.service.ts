@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { GetInventoryDto } from './dto/get-inventory.dto';
 import { AdjustStockDto, StockAdjustmentReason } from './dto/adjust-stock.dto';
@@ -39,7 +40,146 @@ export class InventoryService {
     const normalizedLimit = Math.max(1, Math.min(limit, 100));
     const skip = (page - 1) * normalizedLimit;
 
-    // Build product filter
+    // If lowStockOnly is enabled, use raw SQL for filtering and counting
+    if (lowStockOnly) {
+      // Build WHERE conditions for raw SQL
+      const conditions: string[] = [
+        'i."branchId" = $1',
+        'p."organizationId" = $2',
+        'p."deletedAt" IS NULL',
+        'p."minStock" > 0',
+        'i.quantity <= p."minStock"',
+      ];
+      const params: any[] = [branchId, organizationId];
+      let paramIndex = 3;
+
+      if (search) {
+        conditions.push(
+          `(p.name ILIKE $${paramIndex} OR p.sku ILIKE $${paramIndex})`,
+        );
+        params.push(`%${search}%`);
+        paramIndex++;
+      }
+
+      if (categoryId) {
+        conditions.push(`p."categoryId" = $${paramIndex}`);
+        params.push(categoryId);
+        paramIndex++;
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // Get total count
+      const countResult = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(
+        `SELECT COUNT(*)::bigint as count
+         FROM "Inventory" i
+         INNER JOIN "Product" p ON i."productId" = p.id
+         WHERE ${whereClause}`,
+        ...params,
+      );
+      const total = Number(countResult[0]?.count || 0);
+
+      // Get paginated items
+      const items = await this.prisma.$queryRawUnsafe<any[]>(
+        `SELECT
+          i.id as "inventoryId",
+          i."productId",
+          i."branchId",
+          i.quantity,
+          i."createdAt" as "inventoryCreatedAt",
+          i."updatedAt" as "inventoryUpdatedAt",
+          p.id as "productId",
+          p.name as "productName",
+          p.sku,
+          p.description as "productDescription",
+          p."categoryId",
+          p."sellPrice",
+          p."costPrice",
+          p."minStock",
+          p."organizationId",
+          p."createdAt" as "productCreatedAt",
+          p."updatedAt" as "productUpdatedAt",
+          p."deletedAt" as "productDeletedAt",
+          c.id as "categoryId",
+          c.name as "categoryName",
+          c.description as "categoryDescription",
+          c."parentId" as "categoryParentId",
+          c."organizationId" as "categoryOrganizationId",
+          c."createdAt" as "categoryCreatedAt",
+          c."updatedAt" as "categoryUpdatedAt",
+          b.id as "branchId",
+          b.name as "branchName",
+          b.address as "branchAddress",
+          b."organizationId" as "branchOrganizationId",
+          b."createdAt" as "branchCreatedAt",
+          b."updatedAt" as "branchUpdatedAt"
+         FROM "Inventory" i
+         INNER JOIN "Product" p ON i."productId" = p.id
+         LEFT JOIN "Category" c ON p."categoryId" = c.id
+         INNER JOIN "Branch" b ON i."branchId" = b.id
+         WHERE ${whereClause}
+         ORDER BY p.name ASC
+         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        ...params,
+        normalizedLimit,
+        skip,
+      );
+
+      // Transform raw results into the expected format
+      const transformedItems = items.map((item) => ({
+        id: item.inventoryId,
+        productId: item.productId,
+        branchId: item.branchId,
+        quantity: item.quantity,
+        createdAt: item.inventoryCreatedAt,
+        updatedAt: item.inventoryUpdatedAt,
+        product: {
+          id: item.productId,
+          name: item.productName,
+          sku: item.sku,
+          description: item.productDescription,
+          categoryId: item.categoryId,
+          sellPrice: item.sellPrice,
+          costPrice: item.costPrice,
+          minStock: item.minStock,
+          organizationId: item.organizationId,
+          createdAt: item.productCreatedAt,
+          updatedAt: item.productUpdatedAt,
+          deletedAt: item.productDeletedAt,
+          category: item.categoryId
+            ? {
+                id: item.categoryId,
+                name: item.categoryName,
+                description: item.categoryDescription,
+                parentId: item.categoryParentId,
+                organizationId: item.categoryOrganizationId,
+                createdAt: item.categoryCreatedAt,
+                updatedAt: item.categoryUpdatedAt,
+              }
+            : null,
+        },
+        branch: {
+          id: item.branchId,
+          name: item.branchName,
+          address: item.branchAddress,
+          organizationId: item.branchOrganizationId,
+          createdAt: item.branchCreatedAt,
+          updatedAt: item.branchUpdatedAt,
+        },
+      }));
+
+      return {
+        data: transformedItems,
+        meta: {
+          total,
+          page,
+          limit: normalizedLimit,
+          totalPages: Math.ceil(total / normalizedLimit),
+        },
+      };
+    }
+
+    // Standard Prisma query when lowStockOnly is false
     const productWhere: Prisma.ProductWhereInput = {
       organizationId,
       deletedAt: null,
@@ -58,38 +198,28 @@ export class InventoryService {
       productWhere.categoryId = categoryId;
     }
 
-    // Filter low stock items
-    if (lowStockOnly) {
-      productWhere.minStock = { gt: 0 };
-    }
-
     const where: Prisma.InventoryWhereInput = {
       branchId,
       product: productWhere,
     };
 
-    let allItems = await this.prisma.inventory.findMany({
-      where,
-      include: {
-        product: {
-          include: {
-            category: true,
+    const [items, total] = await Promise.all([
+      this.prisma.inventory.findMany({
+        where,
+        include: {
+          product: {
+            include: {
+              category: true,
+            },
           },
+          branch: true,
         },
-        branch: true,
-      },
-      orderBy: { product: { name: 'asc' } },
-    });
-
-    // For low stock filter, filter items where quantity <= minStock
-    if (lowStockOnly) {
-      allItems = allItems.filter(
-        (item) => item.product.minStock > 0 && item.quantity <= item.product.minStock,
-      );
-    }
-
-    const total = allItems.length;
-    const items = allItems.slice(skip, skip + normalizedLimit);
+        orderBy: { product: { name: 'asc' } },
+        skip,
+        take: normalizedLimit,
+      }),
+      this.prisma.inventory.count({ where }),
+    ]);
 
     return {
       data: items,
@@ -179,11 +309,12 @@ export class InventoryService {
 
       // INV-008: Log inventory transaction using StockAdjustment
       const adjustmentType = quantity > 0 ? 'INCREASE' : 'DECREASE';
+      const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
 
       const adjustment = await tx.stockAdjustment.create({
         data: {
           organizationId,
-          code: `ADJ-${Date.now()}`,
+          code: `ADJ-${uniqueSuffix}`,
           branchId,
           type: adjustmentType,
           reason: this.mapReasonToAdjustmentReason(reason),
@@ -400,12 +531,14 @@ export class InventoryService {
       });
 
       // Log transactions for both branches using StockAdjustment
+      const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
+
       await Promise.all([
         // Source branch (OUT)
         tx.stockAdjustment.create({
           data: {
             organizationId,
-            code: `ADJ-OUT-${Date.now()}`,
+            code: `ADJ-OUT-${transfer.id}-${uniqueSuffix}`,
             branchId: fromBranchId,
             type: 'DECREASE',
             reason: `Transfer to ${toBranch.name}${notes ? `: ${notes}` : ''}`,
@@ -429,7 +562,7 @@ export class InventoryService {
         tx.stockAdjustment.create({
           data: {
             organizationId,
-            code: `ADJ-IN-${Date.now()}`,
+            code: `ADJ-IN-${transfer.id}-${uniqueSuffix}`,
             branchId: toBranchId,
             type: 'INCREASE',
             reason: `Transfer from ${fromBranch.name}${notes ? `: ${notes}` : ''}`,

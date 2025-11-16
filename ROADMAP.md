@@ -240,7 +240,7 @@
 
 ---
 
-### Inventory Module (10 tasks - 100% complete) ✅
+### Inventory Module (10 tasks - 85% complete)
 
 #### Batch 2D - ✅ COMPLETED:
 - [x] INV-001 - Setup InventoryModule ⭐ High (1 pt) ✅
@@ -249,15 +249,15 @@
 - [x] INV-004 - Low stock alerts ⭐ Medium (1 pt) ✅
 - [x] INV-005 - Inter-branch transfers ⭐ Medium (2 pts) ✅
 
-#### Advanced Features - ✅ COMPLETED:
-- [x] INV-006 - Stock Return on Order Cancel 🔴 Critical (3 pts) ✅ (Placeholder - pending Order.branchId)
+#### Advanced Features - IN PROGRESS:
+- [ ] INV-006 - Stock Return on Order Cancel 🔴 Critical (3 pts) ⏳ Pending: Order.branchId integration
 - [x] INV-007 - Negative Stock Prevention ⭐ High (2 pts) ✅
 - [x] INV-008 - Inventory Transaction Logging ⭐ Medium (3 pts) ✅
 - [x] INV-009 - Unit Tests for InventoryService ⭐ High (2 pts) ✅
 - [x] INV-010 - Integration Tests for InventoryController ⭐ High (2 pts) ✅
 
 **Branch:** `feature/inventory-module`
-**Test Results:** Controller tests: 24/24 passing ✅ | Service tests: 24/34 passing (10 failures due to Prisma transaction mocking)
+**Test Results:** Controller tests: 24/24 passing ✅ | Service tests: 24/34 passing (10 failures: Prisma transaction mocking issues)
 **Note:** INV-006 (returnStockOnOrderCancel) is implemented as placeholder until Order model includes branchId field
 
 ---
