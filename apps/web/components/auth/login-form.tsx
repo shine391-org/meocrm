@@ -75,7 +75,7 @@ export function LoginForm() {
       {/* Username Input */}
       <div className="space-y-2">
         <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-          Tên đăng nhập
+          Email
         </Label>
         <Input
           id="email"
@@ -91,7 +91,7 @@ export function LoginForm() {
       {/* Password Input */}
       <div className="space-y-2">
         <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-          Mật khẩu
+          Password
         </Label>
         <div className="relative">
           <Input
@@ -108,6 +108,7 @@ export function LoginForm() {
             onClick={() => setShowPassword(!showPassword)}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
             disabled={isLoading}
+            aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
           >
             {showPassword ? (
               <EyeOff className="h-5 w-5" />
@@ -150,6 +151,7 @@ export function LoginForm() {
           onClick={() => handleLogin('/dashboard')}
           disabled={isLoading}
           className="h-12 bg-slate-700 hover:bg-slate-800 text-white font-medium text-base transition-all duration-200 hover:scale-105"
+          aria-label="Đăng nhập vào quản lý"
         >
           <BarChart3 className="mr-2 h-5 w-5" />
           Quản lý

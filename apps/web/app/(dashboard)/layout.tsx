@@ -1,8 +1,9 @@
 'use client';
 import { Header } from '@/components/layout/header';
 import { Sidebar } from '@/components/layout/sidebar';
+import { TopNav } from '@/components/layout/top-nav';
 import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function DashboardLayout({
@@ -12,6 +13,8 @@ export default function DashboardLayout({
 }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const isPOS = pathname === '/pos';
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -34,6 +37,7 @@ export default function DashboardLayout({
       </div>
       <div className="flex flex-1 flex-col">
         <Header />
+        {!isPOS && <TopNav />}
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>

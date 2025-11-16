@@ -1,5 +1,6 @@
 'use client';
 import { UserMenu } from './user-menu';
+import { ModeSwitcher } from './mode-switcher';
 import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -27,7 +28,10 @@ export function Header() {
           {user?.organization?.name ?? 'MeoCRM'}
         </h1>
       </div>
-      <UserMenu />
+      <div className="flex items-center gap-4">
+        <ModeSwitcher />
+        <UserMenu />
+      </div>
     </header>
   );
 }

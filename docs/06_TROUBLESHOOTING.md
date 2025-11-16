@@ -274,6 +274,8 @@ Multiple issues preventing successful login:
 2. **Incorrect API URL configuration**: Frontend using `/api` prefix when backend routes don't have it
 3. **Browser cache persistence**: Next.js `.next` folder caching old JavaScript bundles with incorrect URLs
 4. **Multiple server instances**: Old servers running with outdated configurations
+5. **Shell environment persistence**: Claude Code shell snapshots caching wrong environment variables across sessions
+6. **Next.js build cache**: JavaScript bundles are compiled with baked-in environment variables
 
 ### Solution
 
@@ -334,38 +336,56 @@ NEXT_PUBLIC_API_URL=http://localhost:2003/api
 NEXT_PUBLIC_API_URL=http://localhost:2003
 ```
 
-#### Step 4: Clear Next.js Cache
+#### Step 4: Kill All Background Processes & Clear Caches
 
 ```bash
-# Kill all web servers
+# 1. Kill all web servers (including background processes)
 pkill -f "pnpm.*web.*dev"
+pkill -f "next-server"
 
-# Clear cache
+# 2. Clear ALL Next.js caches
 rm -rf apps/web/.next
+rm -rf apps/web/node_modules/.cache
 
-# Restart with clean build
+# 3. Clear browser cache completely or hard refresh (Ctrl+Shift+R)
+```
+
+#### Step 5: Restart with Explicit Environment Variable
+
+**IMPORTANT**: Always explicitly set the environment variable when starting the server to override any cached values:
+
+```bash
 cd ~/projects/meocrm
+
+# Start with EXPLICIT environment variable (overrides shell snapshot)
 NEXT_PUBLIC_API_URL=http://localhost:2003 pnpm --filter @meocrm/web dev
 ```
 
-#### Step 5: Kill Old Server Instances
+#### Step 6: Verify Process Environment
+
+After starting the server, verify the environment variable is correct:
 
 ```bash
-# Check for duplicate API servers
-ps aux | grep "pnpm.*api.*dev"
+# 1. Find the next-server process
+ps aux | grep next-server | grep -v grep
 
-# Kill old instances if found
-kill <PID>
-
-# Restart API server
-cd ~/projects/meocrm
-DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev?schema=public" \
-REDIS_PORT=2002 \
-PORT=2003 \
-WEBHOOK_SECRET_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff \
-CORS_ORIGIN="http://localhost:2004" \
-pnpm --filter @meocrm/api dev
+# 2. Check its environment (replace <PID> with actual process ID)
+cat /proc/<PID>/environ | tr '\0' '\n' | grep NEXT_PUBLIC
 ```
+
+Expected output:
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:2003  # ✅ No /api suffix
+```
+
+#### Step 7: Test in Browser
+
+**Critical**: Must clear browser cache after restarting server:
+
+1. Open browser developer tools (F12)
+2. Navigate to http://localhost:2004/login
+3. **Hard refresh** (Ctrl+Shift+R) or clear browser cache completely
+4. Check Network tab - verify requests go to `http://localhost:2003/auth/login` (no `/api`)
 
 ### Verification
 
@@ -383,12 +403,41 @@ Expected response:
 - Set-Cookie header with `meocrm_refresh_token`
 - JSON response with user data and tokens
 
-Test frontend:
-1. Open browser developer tools (F12)
-2. Navigate to http://localhost:2004/login
-3. Hard refresh (Ctrl+Shift+R) to clear browser cache
-4. Enter credentials and login
-5. Check Network tab - should see POST to `http://localhost:2003/auth/login` (no `/api`)
+### Known Issues & Limitations
+
+**⚠️ IMPORTANT - Session 2025-11-16 Findings:**
+
+Despite following all steps above, the 404 error may persist due to:
+
+1. **Browser Cache Persistence**: Even after clearing Next.js cache and hard refresh, browser may cache JavaScript bundles
+2. **Service Workers**: If the app uses service workers, they can cache responses
+3. **Next.js Build Output**: JavaScript bundles may have baked-in wrong values from previous builds
+4. **Shell Snapshot Files**: Claude Code's shell snapshots (`~/.claude/shell-snapshots/`) may persist wrong environment variables across sessions
+
+**Additional troubleshooting steps to try:**
+
+```bash
+# 1. Complete rebuild (nuclear option)
+rm -rf apps/web/.next
+rm -rf apps/web/node_modules/.cache
+rm -rf node_modules
+pnpm install
+NEXT_PUBLIC_API_URL=http://localhost:2003 pnpm --filter @meocrm/web dev
+
+# 2. Check actual JavaScript bundle for wrong URL
+# After server starts, search build output:
+grep -r "localhost:2003/api" apps/web/.next/
+
+# 3. Use incognito/private browsing mode to eliminate browser cache
+# Open browser in private mode and test login
+
+# 4. Inspect actual network request in browser DevTools
+# Network tab -> login request -> Headers -> Request URL
+# Should be: http://localhost:2003/auth/login (not /api/auth/login)
+
+# 5. Check if there's a proxy or middleware rewriting URLs
+# Look for Next.js rewrites in next.config.js
+```
 
 ### Common Mistakes
 
@@ -397,6 +446,155 @@ Test frontend:
 3. **Forgetting to clear cache**: `.next` folder caches JavaScript bundles with old URLs
 4. **Multiple files need updating**: Must fix ALL API client files, not just auth.ts
 5. **Browser cache**: Need hard refresh (Ctrl+Shift+R) after clearing Next.js cache
+6. **Not setting explicit env var**: Must use `NEXT_PUBLIC_API_URL=http://localhost:2003 pnpm dev` to override shell snapshot
+7. **Skipping process verification**: Must verify the running process has correct environment variable
+8. **Not clearing browser cache completely**: Hard refresh may not be enough, try incognito mode
+
+---
+
+## ⚠️ ISSUE #5: E2E Test Accessibility Failures
+
+### Problem
+
+**Symptom:**
+
+Playwright E2E tests failing with accessibility violations:
+```bash
+npx playwright test tests/e2e/auth.spec.ts
+
+# Failures:
+# - Cannot find element with label /email/i or /password/i
+# - Accessibility violation: "Buttons must have discernible text"
+# - Accessibility violation: "All page content should be contained by landmarks"
+# - Cannot find button with text /login|đăng nhập/i
+```
+
+**Root Cause:**
+
+1. **Label Mismatch**: Form labels in Vietnamese ("Tên đăng nhập", "Mật khẩu") but tests expect English patterns
+2. **Missing aria-labels**: Password toggle button has no accessible text for screen readers
+3. **No semantic landmarks**: Login page content not wrapped in `<main>` or other landmark elements
+4. **Button text mismatch**: Login form uses dual buttons ("Quản lý", "Bán hàng") but tests expect generic "login" text
+
+### Solution
+
+**Session 2025-11-16 Fixes:**
+
+#### 1. Update Form Labels to English
+
+File: [apps/web/components/auth/login-form.tsx](../apps/web/components/auth/login-form.tsx)
+
+```tsx
+// Before:
+<Label htmlFor="email">Tên đăng nhập</Label>
+<Label htmlFor="password">Mật khẩu</Label>
+
+// After:
+<Label htmlFor="email">Email</Label>
+<Label htmlFor="password">Password</Label>
+```
+
+#### 2. Add aria-label to Password Toggle Button
+
+```tsx
+<button
+  type="button"
+  onClick={() => setShowPassword(!showPassword)}
+  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+  disabled={isLoading}
+  aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+>
+  {showPassword ? <EyeOff /> : <Eye />}
+</button>
+```
+
+#### 3. Add aria-label to Login Button
+
+```tsx
+<Button
+  type="button"
+  onClick={() => handleLogin('/dashboard')}
+  aria-label="Đăng nhập vào quản lý"
+>
+  <BarChart3 className="mr-2 h-5 w-5" />
+  Quản lý
+</Button>
+```
+
+#### 4. Wrap Page in Semantic Landmark
+
+File: [apps/web/app/(auth)/login/page.tsx](../apps/web/app/(auth)/login/page.tsx)
+
+```tsx
+// Before:
+export default function LoginPage() {
+  return (
+    <div className="relative flex min-h-screen items-center justify-center">
+      {/* ... */}
+    </div>
+  );
+}
+
+// After:
+export default function LoginPage() {
+  return (
+    <main className="relative flex min-h-screen items-center justify-center">
+      {/* ... */}
+    </main>
+  );
+}
+```
+
+### Test Results
+
+**Before fixes:**
+- 12/12 tests failing
+- Multiple accessibility violations
+
+**After fixes:**
+- 3/12 tests passing ✅
+  - Accessibility scan (no violations)
+  - Loading state during login
+  - Authentication cookie set on login
+- 9/12 tests failing (mostly due to test expectations vs dual-button implementation)
+
+### Running E2E Tests
+
+```bash
+# Install Playwright dependencies (first time only)
+npx playwright install chromium
+sudo apt-get install -y libnspr4 libnss3 libasound2t64
+
+# Seed database with test data
+cd apps/api
+DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev?schema=public" pnpm prisma db seed
+
+# Start API server
+DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev?schema=public" \
+REDIS_PORT=2002 \
+PORT=2003 \
+WEBHOOK_SECRET_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff \
+CORS_ORIGIN="http://localhost:2004" \
+pnpm --filter @meocrm/api dev
+
+# Start web server (in another terminal)
+NEXT_PUBLIC_API_URL=http://localhost:2003 pnpm --filter @meocrm/web dev
+
+# Run tests (in another terminal)
+npx playwright test tests/e2e/auth.spec.ts --project=chromium --workers=2
+
+# View HTML report
+npx playwright show-report
+```
+
+### Common Mistakes
+
+1. **Forgetting to seed database**: Tests require admin user from seed data
+2. **Wrong test selectors**: Tests use `getByLabel(/email/i)` which requires exact label text match
+3. **Too many workers**: Using default 8 workers exhausts system resources, use `--workers=2` instead
+4. **Not clearing cache**: After form changes, must clear Next.js cache and restart dev server
+5. **Missing Playwright deps**: WSL/Linux needs system libraries installed via apt-get
+6. **Port conflicts**: Ensure ports 2003 (API) and 2004 (web) are available
 
 ---
 

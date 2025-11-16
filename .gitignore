@@ -16,3 +16,6 @@ apps/api/prisma/*.backup*
 
 # Prevent stray shadow source directory
 apps/api/srcs/
+
+# MegaLLM Configuration
+.claude/settings.local.json

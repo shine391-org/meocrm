@@ -2,7 +2,7 @@ import { LoginForm } from '@/components/auth/login-form';
 
 export default function LoginPage() {
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden">
       {/* Animated gradient background */}
       <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900">
         {/* Decorative elements */}
@@ -31,6 +31,6 @@ export default function LoginPage() {
           <LoginForm />
         </div>
       </div>
-    </div>
+    </main>
   );
 }
