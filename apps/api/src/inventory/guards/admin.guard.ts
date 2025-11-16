@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { UserRole } from '@prisma/client';
 
 interface RequestUser {
