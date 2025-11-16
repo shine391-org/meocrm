@@ -1,4 +1,4 @@
 {
-    "coderabbit.agentType": "Native",
+    "coderabbit.agentType": "Codex CLI",
     "coderabbit.autoReviewMode": "auto"
 }
