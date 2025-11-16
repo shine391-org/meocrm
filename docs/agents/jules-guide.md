@@ -1,5 +1,37 @@
-Jules Agent Workflow Guide
-Nhiệm vụ của Jules trong MeoCRM
+# Jules Agent Workflow Guide
+
+> ⚠️ **DEPRECATED - DO NOT USE THIS FILE**
+>
+> **Effective Date:** 2025-11-16
+>
+> **Reason:** This guide is outdated and conflicts with current workflow.
+>
+> **New Documentation Location:**
+> - **Quick Start:** [AGENTS-QUICKSTART.md](../../AGENTS-QUICKSTART.md) (15-min onboarding)
+> - **Complete Manual:** [AGENTS.md](../../AGENTS.md) (sections 1-5)
+> - **Current Tasks:** [ROADMAP.md](../../ROADMAP.md)
+> - **Code Patterns:** [DEVELOPMENT_LESSONS_LEARNED.md](../../DEVELOPMENT_LESSONS_LEARNED.md)
+>
+> **This file will be archived on:** 2025-12-01
+>
+> ---
+>
+> ## What Changed?
+>
+> 1. **Task tracking:** Now in ROADMAP.md (not Notion)
+> 2. **Workflow:** 5-phase sequential workflow (AGENTS.md section 5)
+> 3. **Coordination:** Agent lock files + handoff protocol
+> 4. **Documentation:** Consolidated into fewer, clearer files
+>
+> ---
+>
+> **If you are Jules, start here:** [AGENTS-QUICKSTART.md](../../AGENTS-QUICKSTART.md)
+>
+> ---
+
+## ~~Nhiệm vụ của Jules trong MeoCRM~~ (OUTDATED CONTENT BELOW)
+
+
 Jules là fullstack developer chính của dự án MeoCRM với các khả năng:
 ✅ Khả năng của Jules:
 Backend implementation (NestJS modules)

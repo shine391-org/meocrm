@@ -10,66 +10,51 @@
 
 ## 📊 Project Status Dashboard
 
-### Overall Progress
+> ⚠️ **Note:** This overview shows historical snapshot. For current live status, see **[ROADMAP.md](../ROADMAP.md)** (updated real-time).
 
-**Total Tasks:** 136 tasks | 288 story points
+### Overall Progress (Updated 2025-11-16)
 
-**Completed:** 41 tasks (30%) | 127 points ✅
+**Total Tasks:** 187 tasks | 400 story points
 
-**In Progress:** 2 tasks (1%) | 13 points 🔵
+**Completed:** 56 tasks (30%) | 150 points ✅
 
-**Todo:** 93 tasks (69%) | 148 points ⏳
+**In Progress:** 40 tasks (21%) | 100 points 🔵
 
-### Progress by Type
+**Todo:** 91 tasks (49%) | 150 points ⏳
 
-**Backend:** 26 ✅ | 2 🔵 | 60 ⏳ = **30% complete**
+**Source of Truth:** [ROADMAP.md](../ROADMAP.md) - Updated in every commit
 
-**Frontend:** 1 ✅ | 0 🔵 | 19 ⏳ = **5% complete** ⚠️
+### Progress by Phase (See ROADMAP.md for details)
 
-**DevOps:** 12 ✅ | 0 🔵 | 3 ⏳ = **80% complete** ✨
+**Phase 1 - Foundation & Auth:** ~78% complete ✨
 
-**Testing:** 0 ✅ | 0 🔵 | 9 ⏳ = **0% complete** ⚠️
+**Phase 2 - Products & Inventory:** ~15% complete 🔵 **(Current Focus)**
 
-**Documentation:** 1 ✅ | 0 🔵 | 2 ⏳ = **33% complete**
+**Phase 3 - CRM Core:** ~25% complete 🔵
 
-**Full-stack:** 1 ✅ | 0 🔵 | 0 ⏳ = **100% complete**
+**Phase 4 - Orders & POS:** Blocked on Phase 2 ⏳
 
-### Progress by Phase
+**Phase 5 - Finance & Reports:** Planned ⏳
 
-**Phase 1 - Foundation & Auth:** 33/44 tasks = **75% complete** ⚠️ (Auth 100%, Frontend shell missing!)
+> 📊 For detailed breakdown by batch and task-level tracking, see [ROADMAP.md](../ROADMAP.md)
 
-**Phase 2 - Products & Inventory:** 4 ✅ | 1 🔵 | 30 ⏳ = **12% complete**
+### Critical Path (Currently Blocking)
 
-**Phase 3 - CRM Core:** 14 ✅ | 5 ⏳ = **74% complete** ✨
+See [ROADMAP.md](../ROADMAP.md) for live critical path. As of 2025-11-16:
 
-**Phase 4 - Supplier Management:** 3 ✅ | 4 ⏳ = **43% complete**
-
-**Phase 5 - POS & Orders:** 0 ✅ | 1 🔵 | 18 ⏳ = **0% complete**
-
-**Phase 8 - Integrations:** 0 ✅ | 13 ⏳ = **0% complete**
-
-### Critical Gaps Identified
-
-🔴 **Frontend Severely Behind:**
-
-- ✅ Only 1/20 frontend tasks complete (Customers CRUD)
-- ❌ No authentication pages (Login, Register)
-- ❌ No dashboard shell (Layout, Sidebar, Header)
-- ❌ No Products UI (6 tasks)
-- ❌ No POS UI (6 tasks)
-
-🔴 **Testing Infrastructure Missing:**
-
-- ❌ 0/9 testing tasks complete
-- ❌ No E2E test suite
-- ❌ No tenant isolation tests
+1. 🔴 **Frontend Auth (Batch 1C)** - 7 tasks - Waiting on design screenshots
+2. 🔴 **Products CRUD (Batch 2A)** - 10 tasks - In Progress (Jules)
+3. 🔴 **Categories (Batch 2B)** - 4 tasks - In Progress (Jules)
+4. 🔴 **Product Variants (Batch 2C)** - 4 tasks - In Progress (Jules)
 
 ### Quick Stats
 
-- ✅ **Complete:** 41 tasks
-- 🔵 **In Progress:** 2 tasks
-- ⏳ **Todo:** 93 tasks
-- 🎯 **Success Rate:** 95%+
+- ✅ **Complete:** 56 tasks (30%)
+- 🔵 **In Progress:** 40 tasks (21%)
+- ⏳ **Todo:** 91 tasks (49%)
+- 🎯 **Test Coverage:** 85.25% (Target: ≥80%)
+- ✅ **Tests Passing:** 281 tests
+- ⚠️ **Tests Failing:** 28 tests (response format issues - being fixed)
 
 ---
 
@@ -105,12 +90,12 @@ Refer to the `docs/` directory for detailed documentation.
 
 ### For Jules (Primary Agent)
 
-1. Read `AGENTS.md` - Your complete guide.
-2. Pick a task from the Task Board (Status = Todo, High Priority).
-3. Use a prompt from the Prompt Templates Library.
-4. Reference `docs/03_DATABASE_SCHEMA.md` for Prisma models.
-5. Follow UI Specifications for UI tasks.
-6. Create PR → Update Branch Tracking.
+1. **Start here:** Read [AGENTS-QUICKSTART.md](../AGENTS-QUICKSTART.md) (15 min onboarding)
+2. Read [AGENTS.md](../AGENTS.md) - Your complete operations manual
+3. Pick a task from [ROADMAP.md](../ROADMAP.md) (Status = Todo, High Priority)
+4. Follow Phase 2: IMPLEMENT workflow (AGENTS.md section 5)
+5. Reference `docs/03_DATABASE_SCHEMA.md` for Prisma models
+6. Create PR → Update [ROADMAP.md](../ROADMAP.md) → Tag Claude for review
 
 ---
 
