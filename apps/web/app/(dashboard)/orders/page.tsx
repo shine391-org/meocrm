@@ -22,8 +22,8 @@ export default function OrdersPage() {
         if (!isMounted) {
           return;
         }
-        // API returns { data: [...], meta: {...} }
-        setOrders(response.data || []);
+        // API returns Array<Order>
+        setOrders(response || []);
       } catch (error) {
         console.error('Failed to fetch orders', error);
         if (isMounted) {
