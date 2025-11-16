@@ -43,6 +43,11 @@ export class CustomersService {
 
     const { birthday, ...rest } = dto;
 
+    // Validate birthday if provided
+    if (birthday) {
+      this.validateBirthday(birthday);
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const customer = await tx.customer.create({
         data: {
@@ -157,6 +162,11 @@ export class CustomersService {
 
     const { birthday, ...rest } = dto;
 
+    // Validate birthday if provided
+    if (birthday) {
+      this.validateBirthday(birthday);
+    }
+
     await this.prisma.customer.updateMany({
       where: {
         id,
@@ -212,9 +222,34 @@ export class CustomersService {
     return { message: 'Customer deleted successfully' };
   }
 
+  private validateBirthday(birthday: string): void {
+    const birthdayDate = new Date(birthday);
+
+    // Check if date is valid
+    if (isNaN(birthdayDate.getTime())) {
+      throw new BadRequestException('Invalid birthday format');
+    }
+
+    const now = new Date();
+
+    // Check if birthday is in the future
+    if (birthdayDate > now) {
+      throw new BadRequestException('Birthday cannot be in the future');
+    }
+
+    // Check if birthday is more than 150 years ago
+    const maxAge = 150;
+    const minDate = new Date();
+    minDate.setFullYear(now.getFullYear() - maxAge);
+
+    if (birthdayDate < minDate) {
+      throw new BadRequestException('Birthday cannot be more than 150 years ago');
+    }
+  }
+
   private async generateCode(organizationId: string): Promise<string> {
     const lastCustomer = await this.prisma.customer.findFirst({
-      where: { 
+      where: {
         organizationId,
         deletedAt: null,
       },
@@ -228,7 +263,7 @@ export class CustomersService {
 
     const codeNumber = lastCustomer.code.substring(2);
     const lastNumber = parseInt(codeNumber, 10);
-    
+
     if (isNaN(lastNumber)) {
       throw new Error(`Invalid customer code format: ${lastCustomer.code}`);
     }

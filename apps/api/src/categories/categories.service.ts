@@ -168,34 +168,27 @@ export class CategoriesService {
   }
 
   private async getCategoryLevel(categoryId: string): Promise<number> {
-    const category = await this.prisma.category.findUnique({
-      where: { id: categoryId },
-      include: {
-        parent: {
-          where: { deletedAt: null },
-          include: {
-            parent: {
-              where: { deletedAt: null },
-              include: {
-                parent: {
-                  where: { deletedAt: null },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!category) {
-      return 0;
-    }
-
     let level = 1;
-    let current: { parent: any } | null = category;
-    while (current?.parent) {
-      level++;
-      current = current.parent;
+    let currentId: string | null = categoryId;
+
+    // Iteratively traverse up the hierarchy with individual queries
+    // More efficient than eager loading entire parent chain
+    while (currentId) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: currentId },
+        select: { parentId: true },
+      });
+
+      if (!category) {
+        return 0;
+      }
+
+      if (category.parentId) {
+        level++;
+        currentId = category.parentId;
+      } else {
+        currentId = null;
+      }
     }
 
     return level;

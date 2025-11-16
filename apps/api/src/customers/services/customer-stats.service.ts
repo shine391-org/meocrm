@@ -57,13 +57,14 @@ export class CustomerStatsService {
 
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, deletedAt: null },
-      select: { organizationId: true },
+      select: { organizationId: true, totalSpent: true, totalOrders: true },
     });
 
     if (!customer) {
       throw new NotFoundException(`Customer ${customerId} not found for revert stats`);
     }
 
+    // Try decrement with guards first
     const result = await prisma.customer.updateMany({
       where: {
         id: customerId,
@@ -78,8 +79,22 @@ export class CustomerStatsService {
       },
     });
 
+    // If guards fail, use safe fallback to prevent negative values
     if (result.count === 0) {
-      throw new BadRequestException('Customer stats not updated due to guard conditions');
+      const safeSpent = Math.max(0, Number(customer.totalSpent ?? 0) - orderTotal);
+      const safeOrders = Math.max(0, (customer.totalOrders ?? 0) - 1);
+
+      await prisma.customer.updateMany({
+        where: {
+          id: customerId,
+          organizationId: customer.organizationId,
+          deletedAt: null,
+        },
+        data: {
+          totalSpent: safeSpent,
+          totalOrders: safeOrders,
+        },
+      });
     }
 
     if (!tx) {

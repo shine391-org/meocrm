@@ -192,4 +192,114 @@ describe('CustomersService', () => {
         expect(code).toBe('KH000010');
     });
   });
+
+  describe('birthday validation', () => {
+    it('accepts valid birthday in ISO string format (create)', async () => {
+      const dto = {
+        name: 'Test Customer',
+        phone: '0987654321',
+        birthday: '1990-05-15T00:00:00.000Z'
+      };
+      const created = { id: '1', code: 'KH000001', ...dto, segment: null };
+
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+      prisma.customer.create.mockResolvedValue(created);
+      segmentationService.updateSegment.mockResolvedValue('Regular');
+
+      await service.create(dto, organizationId, userId);
+
+      expect(prisma.customer.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          birthday: expect.any(Date),
+        }),
+        include: expect.any(Object),
+      });
+    });
+
+    it('rejects future birthday (create)', async () => {
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1);
+
+      const dto = {
+        name: 'Test Customer',
+        phone: '0987654321',
+        birthday: futureDate.toISOString()
+      };
+
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow('Birthday cannot be in the future');
+    });
+
+    it('rejects unrealistic old birthday (create)', async () => {
+      const oldDate = new Date();
+      oldDate.setFullYear(oldDate.getFullYear() - 151);
+
+      const dto = {
+        name: 'Test Customer',
+        phone: '0987654321',
+        birthday: oldDate.toISOString()
+      };
+
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow('Birthday cannot be more than 150 years ago');
+    });
+
+    it('accepts valid birthday in update', async () => {
+      const dto = { birthday: '1985-03-20T00:00:00.000Z' };
+
+      prisma.customer.findFirst
+        .mockResolvedValueOnce({ id: '1', phone: '111', organizationId }) // findOne
+        .mockResolvedValueOnce(null) // duplicate phone check
+        .mockResolvedValueOnce({ id: '1', birthday: new Date(dto.birthday) }); // findOne after update
+      prisma.customer.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.update('1', dto, organizationId);
+
+      expect(prisma.customer.updateMany).toHaveBeenCalledWith({
+        where: { id: '1', organizationId, deletedAt: null },
+        data: { birthday: expect.any(Date) },
+      });
+    });
+
+    it('rejects future birthday in update', async () => {
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1);
+
+      const dto = { birthday: futureDate.toISOString() };
+
+      prisma.customer.findFirst.mockResolvedValueOnce({ id: '1', phone: '111', organizationId });
+
+      await expect(service.update('1', dto, organizationId))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.update('1', dto, organizationId))
+        .rejects.toThrow('Birthday cannot be in the future');
+    });
+
+    it('rejects invalid date format', async () => {
+      const dto = {
+        name: 'Test Customer',
+        phone: '0987654321',
+        birthday: 'invalid-date'
+      };
+
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // generateCode
+      prisma.customer.findFirst.mockResolvedValueOnce(null); // phone uniqueness
+
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, organizationId, userId))
+        .rejects.toThrow('Invalid birthday format');
+    });
+  });
 });

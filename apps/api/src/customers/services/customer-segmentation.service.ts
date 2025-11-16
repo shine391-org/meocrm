@@ -138,13 +138,33 @@ export class CustomerSegmentationService {
   }
 
   async updateAllSegments(organizationId: string): Promise<void> {
+    const BATCH_SIZE = 100; // Process 100 customers at a time
+    const CONCURRENCY_LIMIT = 5; // Allow up to 5 parallel updates
+
     const customers = await this.prisma.customer.findMany({
       where: { organizationId, deletedAt: null },
       select: { id: true },
     });
 
-    for (const customer of customers) {
-      await this.updateSegment(customer.id, organizationId);
+    // Process customers in batches to avoid overwhelming the database
+    for (let i = 0; i < customers.length; i += BATCH_SIZE) {
+      const batch = customers.slice(i, i + BATCH_SIZE);
+
+      // Process batch with controlled concurrency
+      const chunks: string[][] = [];
+      for (let j = 0; j < batch.length; j += CONCURRENCY_LIMIT) {
+        chunks.push(batch.slice(j, j + CONCURRENCY_LIMIT).map(c => c.id));
+      }
+
+      for (const chunk of chunks) {
+        await Promise.all(
+          chunk.map(customerId => this.updateSegment(customerId, organizationId))
+        );
+      }
+
+      this.logger.log(
+        `Processed ${Math.min(i + BATCH_SIZE, customers.length)}/${customers.length} customers for organization ${organizationId}`
+      );
     }
   }
 

@@ -20,10 +20,10 @@
 Được cấu hình trong GUI, nhưng ghi lại ở đây để tham chiếu nhanh:
 
 ```env
-DATABASE_URL=postgresql://meocrm_user:meocrm_dev_password@127.0.0.1:2001/meocrm_dev?schema=public
+DATABASE_URL=postgresql://meocrm_user:<YOUR_SECURE_DB_PASSWORD>@127.0.0.1:2001/meocrm_dev?schema=public
 DB_NAME=meocrm_dev
 DB_USER=meocrm_user
-DB_PASSWORD=meocrm_dev_password
+DB_PASSWORD=<YOUR_SECURE_DB_PASSWORD>
 DB_PORT=2001
 
 REDIS_HOST=localhost
@@ -37,11 +37,18 @@ API_PREFIX=api
 API_VERSION=v1
 PRISMA_HIDE_UPDATE_MESSAGE=true
 
-JWT_SECRET=dev-secret-jules-vm
-JWT_REFRESH_SECRET=dev-refresh-secret-jules-vm
+JWT_SECRET=<YOUR_SECURE_JWT_SECRET>
+JWT_REFRESH_SECRET=<YOUR_SECURE_JWT_REFRESH_SECRET>
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 ```
+
+> ⚠️ **Security Warning**: Replace `<YOUR_SECURE_*>` placeholders with cryptographically secure random values:
+> ```bash
+> # Generate secure secrets (32+ characters)
+> openssl rand -base64 32
+> ```
+> **NEVER commit real secrets to version control or share them in documentation!**
 
 ## Local Setup
 > Dành cho dev chạy trên máy cá nhân (ngoài Jules). Nếu bạn đang ở Jules VM, **đừng** chạy các bước dưới.
