@@ -6,7 +6,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
-import { SignOptions } from 'jsonwebtoken';
 
 type JwtDuration = `${number}d` | `${number}h` | `${number}m`;
 

@@ -311,7 +311,7 @@ export class InventoryService {
       const adjustmentType = quantity > 0 ? 'INCREASE' : 'DECREASE';
       const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
 
-      const adjustment = await tx.stockAdjustment.create({
+      await tx.stockAdjustment.create({
         data: {
           organizationId,
           code: `ADJ-${uniqueSuffix}`,
@@ -592,7 +592,7 @@ export class InventoryService {
    * INV-006: Stock return on order cancellation
    * Called by OrdersService when order status changes to CANCELLED
    */
-  async returnStockOnOrderCancel(orderId: string, organizationId: string, userId: string) {
+  async returnStockOnOrderCancel(orderId: string, organizationId: string, _userId: string) {
     // Get order with items
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, organizationId },
@@ -609,18 +609,20 @@ export class InventoryService {
       throw new NotFoundException('Order not found');
     }
 
-    // TODO: Order model needs branchId field for proper inventory integration
-    // For now, this method returns success without performing stock operations
-    // When Order model includes branchId, implement the full transaction logic
+    // NOTE: Order model now has branchId field (schema updated 2025-11-16)
+    // When OrdersModule is implemented, use order.branchId for inventory integration
+    if (!order.branchId) {
+      throw new BadRequestException('Order must have branchId for stock return');
+    }
 
-    return { message: 'Stock return functionality pending Order-Branch integration' };
+    return { message: 'Stock return functionality pending OrdersModule implementation' };
   }
 
   /**
    * Deduct stock when order moves to PROCESSING status
    * Called by OrdersService
    */
-  async deductStockOnOrderProcessing(orderId: string, organizationId: string, userId: string) {
+  async deductStockOnOrderProcessing(orderId: string, organizationId: string, _userId: string) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, organizationId },
       include: {
@@ -636,11 +638,13 @@ export class InventoryService {
       throw new NotFoundException('Order not found');
     }
 
-    // TODO: Order model needs branchId field for proper inventory integration
-    // For now, this method returns success without performing stock operations
-    // When Order model includes branchId, implement the full transaction logic
+    // NOTE: Order model now has branchId field (schema updated 2025-11-16)
+    // When OrdersModule is implemented, use order.branchId for inventory integration
+    if (!order.branchId) {
+      throw new BadRequestException('Order must have branchId for stock deduction');
+    }
 
-    return { message: 'Stock deduction functionality pending Order-Branch integration' };
+    return { message: 'Stock deduction functionality pending OrdersModule implementation' };
   }
 
   /**
