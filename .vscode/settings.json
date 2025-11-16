@@ -1,4 +1,5 @@
 {
     "coderabbit.agentType": "Codex CLI",
-    "coderabbit.autoReviewMode": "auto"
+    "coderabbit.autoReviewMode": "auto",
+    "chatgpt.openOnStartup": true
 }
