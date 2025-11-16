@@ -22,6 +22,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { RefundsApiModule } from './refunds/refunds.module';
 import { CronModule } from './modules/cron/cron.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     CustomersModule,
     OrdersModule,
     SuppliersModule,
+    InventoryModule,
   ],
   controllers: [AppController],
   providers: [

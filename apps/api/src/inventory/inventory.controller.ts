@@ -1,0 +1,74 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Param,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { InventoryService } from './inventory.service';
+import { GetInventoryDto } from './dto/get-inventory.dto';
+import { AdjustStockDto } from './dto/adjust-stock.dto';
+import { CreateTransferDto } from './dto/create-transfer.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OrganizationGuard } from '../common/guards/organization.guard';
+import { OrganizationId } from '../common/decorators/organization-id.decorator';
+
+@ApiTags('Inventory')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, OrganizationGuard)
+@Controller('inventory')
+export class InventoryController {
+  constructor(private readonly inventoryService: InventoryService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Get inventory by branch with pagination and filters' })
+  @ApiResponse({ status: 200, description: 'Inventory retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Branch not found' })
+  async getInventoryByBranch(
+    @Query() query: GetInventoryDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.inventoryService.getInventoryByBranch(query, organizationId);
+  }
+
+  @Post('adjust')
+  @ApiOperation({ summary: 'Manual stock adjustment (admin only)' })
+  @ApiResponse({ status: 200, description: 'Stock adjusted successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - insufficient stock' })
+  @ApiResponse({ status: 404, description: 'Product or branch not found' })
+  async adjustStock(
+    @Body() dto: AdjustStockDto,
+    @OrganizationId() organizationId: string,
+    @Req() req: any,
+  ) {
+    return this.inventoryService.adjustStock(dto, organizationId, req.user.id);
+  }
+
+  @Get('low-stock')
+  @ApiOperation({ summary: 'Get low stock alerts for a branch' })
+  @ApiResponse({ status: 200, description: 'Low stock alerts retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Branch not found' })
+  async getLowStockAlerts(
+    @Query('branchId') branchId: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.inventoryService.getLowStockAlerts(branchId, organizationId);
+  }
+
+  @Post('transfer')
+  @ApiOperation({ summary: 'Create inter-branch transfer' })
+  @ApiResponse({ status: 201, description: 'Transfer created successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - insufficient stock or invalid branches' })
+  @ApiResponse({ status: 404, description: 'Product or branch not found' })
+  async createTransfer(
+    @Body() dto: CreateTransferDto,
+    @OrganizationId() organizationId: string,
+    @Req() req: any,
+  ) {
+    return this.inventoryService.createTransfer(dto, organizationId, req.user.id);
+  }
+}
