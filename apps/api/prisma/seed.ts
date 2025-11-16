@@ -9,7 +9,6 @@ async function main() {
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.shippingOrder.deleteMany();
-  await prisma.inventoryTransaction.deleteMany();
   await prisma.inventory.deleteMany();
   await prisma.transfer.deleteMany();
   await prisma.productVariant.deleteMany();
@@ -36,11 +35,22 @@ async function main() {
     ],
   });
 
+  // Create admin users
   await prisma.user.create({
     data: {
       email: 'admin@lanoleather.vn',
       password: await bcrypt.hash('Admin@123', 10),
       name: 'Admin',
+      role: 'OWNER',
+      organizationId: org.id,
+    },
+  });
+
+  await prisma.user.create({
+    data: {
+      email: 'admin',
+      password: await bcrypt.hash('admin', 10),
+      name: 'Admin User',
       role: 'OWNER',
       organizationId: org.id,
     },
@@ -64,8 +74,8 @@ async function main() {
         organizationId: org.id,
         variants: {
           create: [
-            { sku: `${sku}-D`, name: 'Đen', sellPrice: 350000, stock: 20, organizationId: org.id, isActive: true },
-            { sku: `${sku}-N`, name: 'Nâu', sellPrice: 370000, stock: 15, organizationId: org.id, isActive: true },
+            { sku: `${sku}-D`, name: 'Đen', additionalPrice: 0, stock: 20, organizationId: org.id },
+            { sku: `${sku}-N`, name: 'Nâu', additionalPrice: 20000, stock: 15, organizationId: org.id },
           ],
         },
       },
@@ -85,7 +95,9 @@ async function main() {
     ],
   });
 
-  console.log('✅ Done! Admin: admin@lanoleather.vn / Admin@123');
+  console.log('✅ Done!');
+  console.log('   Admin 1: admin@lanoleather.vn / Admin@123');
+  console.log('   Admin 2: admin / admin');
 }
 
 main().catch(e => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

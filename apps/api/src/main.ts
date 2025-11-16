@@ -1,5 +1,6 @@
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
+import cookieParser from 'cookie-parser';
 import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -33,6 +34,7 @@ async function bootstrap() {
     }
   };
 
+  app.use(cookieParser(configService.get('COOKIE_SECRET') || 'dev-secret-key'));
   app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
   app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
   app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));

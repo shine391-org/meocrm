@@ -1,6 +1,6 @@
 import { getAuthHeaders } from './shared';
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api').replace(/\/$/, '');
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003').replace(/\/$/, '');
 
 export interface AuthUser {
   id: string;

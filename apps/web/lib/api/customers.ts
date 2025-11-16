@@ -1,7 +1,7 @@
 // apps/web/lib/api/customers.ts
 import { getAuthHeaders } from './shared';
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api').replace(/\/$/, '');
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003').replace(/\/$/, '');
 
 export async function getCustomers(page: number = 1, limit: number = 20, search: string = '') {
   const response = await fetch(
