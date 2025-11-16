@@ -5,6 +5,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductsDto, ProductSortBy, SortOrder } from './dto/query-products.dto';
 import { CreateVariantDto } from './variants/dto/create-variant.dto';
+import { UpdateVariantDto } from './variants/dto/update-variant.dto';
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -263,15 +264,31 @@ export class ProductsService {
 
   async createVariant(productId: string, dto: CreateVariantDto, organizationId: string) {
     const product = await this.findOne(productId, organizationId);
-    // Generate variant SKU from product SKU + name
-    const sku = dto.sku || `${product.sku}-${dto.name}`;
+
+    // Normalize SKU
+    const sku = this.normalizeVariantSku(product.sku, dto);
+
+    // Validate price: sellPrice + additionalPrice must be > 0
+    const additionalPrice = dto.additionalPrice ?? 0;
+    this.assertVariantPrice(product.sellPrice, additionalPrice);
+
+    // Check for duplicate SKU
+    const existingVariant = await this.prisma.productVariant.findFirst({
+      where: { sku, organizationId },
+      select: { id: true },
+    });
+
+    if (existingVariant) {
+      throw new ConflictException(`Variant SKU "${sku}" already exists`);
+    }
+
     return this.prisma.productVariant.create({
       data: {
         sku,
         productId,
         organizationId,
         name: dto.name,
-        additionalPrice: dto.additionalPrice ?? 0,
+        additionalPrice,
         stock: dto.stock ?? 0,
         images: dto.images || [],
       },
@@ -286,11 +303,18 @@ export class ProductsService {
     });
   }
 
-  async updateVariant(id: string, dto: Partial<CreateVariantDto>, organizationId: string) {
+  async updateVariant(id: string, dto: UpdateVariantDto, organizationId: string) {
     const variant = await this.prisma.productVariant.findFirst({
       where: { id, organizationId },
+      include: { product: true },
     });
     if (!variant) throw new NotFoundException(`Variant ${id} not found`);
+
+    // Validate price if additionalPrice is being updated
+    if (dto.additionalPrice !== undefined) {
+      this.assertVariantPrice(variant.product.sellPrice, dto.additionalPrice);
+    }
+
     const updateData: any = {};
     if (dto.name) updateData.name = dto.name;
     if (dto.additionalPrice !== undefined) updateData.additionalPrice = dto.additionalPrice;
