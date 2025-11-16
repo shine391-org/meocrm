@@ -83,7 +83,6 @@ export class InventoryService {
       const items = await this.prisma.$queryRawUnsafe<any[]>(
         `SELECT
           i.id as "inventoryId",
-          i."productId",
           i."branchId",
           i.quantity,
           i."createdAt" as "inventoryCreatedAt",

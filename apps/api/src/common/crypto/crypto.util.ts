@@ -83,7 +83,14 @@ export const decryptSecret = (payload: EncryptedSecretPayload, key: Buffer): str
     ]);
 
     return plaintext.toString('utf8');
-  } catch {
+  } catch (error) {
+    // Log error details for debugging without exposing sensitive data
+    console.error('Failed to decrypt webhook secret:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      hasIv: !!payload?.iv,
+      hasAuthTag: !!payload?.authTag,
+      hasCiphertext: !!payload?.ciphertext,
+    });
     throw new Error('Failed to decrypt webhook secret');
   }
 };

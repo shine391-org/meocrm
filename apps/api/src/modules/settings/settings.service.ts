@@ -57,10 +57,16 @@ export class SettingsService {
 
     const value = setting.value;
 
+    // Check for null/undefined before calling validator
+    if (value === null || value === undefined) {
+      return defaultValue;
+    }
+
+    // Only validate non-null/undefined values
     if (validator && !validator(value)) {
       return defaultValue;
     }
 
-    return value !== null && value !== undefined ? (value as T) : defaultValue;
+    return value as T;
   }
 }

@@ -15,6 +15,7 @@ import { CreateTransferDto } from './dto/create-transfer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrganizationGuard } from '../common/guards/organization.guard';
 import { OrganizationId } from '../common/decorators/organization-id.decorator';
+import { AdminGuard } from './guards/admin.guard';
 
 @ApiTags('Inventory')
 @ApiBearerAuth()
@@ -35,6 +36,7 @@ export class InventoryController {
   }
 
   @Post('adjust')
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Manual stock adjustment (admin only)' })
   @ApiResponse({ status: 200, description: 'Stock adjusted successfully' })
   @ApiResponse({ status: 400, description: 'Bad request - insufficient stock' })
