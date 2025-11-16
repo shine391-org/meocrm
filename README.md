@@ -52,7 +52,11 @@
 - **Focus**: Vietnamese retail CRM with SKU-heavy catalogs and shipping integrations.
 - **Audience**: Organizations running 10-50 concurrent users per tenant.
 - **Architecture**: Monorepo (NestJS API + Next.js Web) with multi-tenant enforcement.
-- **Latest Commit**: `c2957da` (Task A implementation – security + tests).
+- **Progress**: 56/187 tasks complete (30%) - See [ROADMAP.md](./ROADMAP.md)
+
+> 🚀 **New Agent?** Start with [AGENTS-QUICKSTART.md](./AGENTS-QUICKSTART.md) (15-min onboarding)
+
+> 📋 **Current Tasks:** [ROADMAP.md](./ROADMAP.md) | **Workflow:** [AGENTS.md](./AGENTS.md) section 5
 
 ## 2. Why MeoCRM
 - Built after studying KiotViet patterns and retail workflows in Vietnam.
@@ -567,26 +571,63 @@ pnpm --filter @meocrm/web run build
 - Restart terminal after changing environment profiles
 - For local development outside Jules, use .env files (never commit them)
 
-## 30. Implementation Status (summary)
-- **Security**: RequestContext + Prisma middleware ✅
-- **Multi-tenancy**: Auto orgId injection ✅
-- **Global Guards**: JWT guard + @Public decorator ✅
-- **Coverage**: 85.25% statements ✅
-- **Modules**: Auth, Products, Customers, Suppliers, Categories ✅
-- **Documentation**: Current sync (this README + docs) ✅
+## 30. Implementation Status
+
+**Last Updated:** 2025-11-16
+**Current Progress:** 56/187 tasks (30%) | 150/400 story points (38%)
+
+### Quick Stats:
+- ✅ **Completed:** 56 tasks (30%)
+- 🔄 **In Progress:** 40 tasks (21%)
+- 📋 **Pending:** 91 tasks (49%)
+- 🎯 **Test Coverage:** 85.25% (Target: ≥80%)
+- ✅ **Tests Passing:** 281 tests
+- ⚠️ **Tests Failing:** 28 tests (response format issues)
+
+### Module Status:
+- ✅ **Infrastructure:** 78% complete (32/41 tasks)
+- ✅ **Authentication:** 53% complete (8/15 tasks)
+- ✅ **Security:** Multi-tenant + Soft Delete ✅
+- 🔄 **Products:** 15% complete (5/33 tasks) - In Progress
+- 🔄 **Customers:** 21% complete (3/14 tasks) - In Progress
+- 🔄 **Suppliers:** 33% complete (2/6 tasks) - In Progress
+- 📋 **Orders:** 0% complete - Planned
+- 📋 **POS:** 0% complete - Planned
+- 📋 **Finance:** 0% complete - Planned
+
+**Detailed Progress:** See [ROADMAP.md](./ROADMAP.md) for complete task breakdown and timeline.
 
 ## 31. Roadmap (Phase-by-Phase)
-| Phase | Focus | Status |
-| --- | --- | --- |
-| Phase 1 | Foundation & Auth | 100% |
-| Phase 2 | Products & Inventory | 95% (variants polishing) |
-| Phase 3 | CRM Core | 80% (advanced analytics pending) |
-| Phase 4 | Suppliers & Shipping | 90% (SLA metrics in progress) |
-| Phase 5 | Analytics Dashboard | Planned |
-| Phase 6 | Loyalty & Promotions | Planned |
-| Phase 7 | Marketplace Integrations | Planned |
-| Phase 8 | Automation & Workflows | Planned |
-| Phase 9 | Mobile Companion | Planned |
+
+For detailed roadmap with all 187 tasks, dependencies, and timeline, see **[ROADMAP.md](./ROADMAP.md)**.
+
+### Phase Summary:
+
+| Phase | Focus | Progress | Tasks | Status |
+| --- | --- | --- | --- | --- |
+| **Phase 1** | Foundation & Auth | 78% | 56 tasks | ✅ Mostly Complete |
+| **Phase 2** | Products & Inventory | 15% | 49 tasks | 🔄 In Progress |
+| **Phase 3** | CRM Core | 25% | 20 tasks | 🔄 In Progress |
+| **Phase 4** | POS & Orders | 0% | 34 tasks | 📋 Blocked on Phase 2 |
+| **Phase 5** | Finance | 0% | 16 tasks | 📋 Planned |
+| **Phase 6** | Reports | 0% | 3 tasks | 📋 Planned |
+| **Phase 7** | Integrations | 5% | 20 tasks | 📋 Partial |
+| **Phase 8** | Testing & QA | 20% | 10 tasks | 🔄 Ongoing |
+
+### Critical Path (Currently Blocking):
+1. 🔴 **Frontend Auth (Batch 1C)** - 7 tasks - Waiting on design screenshots
+2. 🔴 **Products CRUD (Batch 2A)** - 10 tasks - In Progress (Jules)
+3. 🔴 **Categories (Batch 2B)** - 4 tasks - In Progress (Jules)
+4. 🔴 **Product Variants (Batch 2C)** - 4 tasks - In Progress (Jules)
+
+### Timeline Estimate:
+- **Phase 2 Complete:** 1 week (Products + Inventory)
+- **Phase 3 Complete:** 1.5 weeks (CRM modules)
+- **Phase 4 Complete:** 2 weeks (Orders + POS)
+- **Phase 5 Complete:** 2.5 weeks (Finance)
+- **v4.0 Release:** 3-4 weeks (All features functional)
+
+**📊 For complete breakdown:** [ROADMAP.md](./ROADMAP.md)
 
 ## 32. Lessons Learned Snapshot
 - Multi-tenant security belongs at ORM level.
