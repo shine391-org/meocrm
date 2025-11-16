@@ -256,6 +256,150 @@ pnpm prisma studio --port 5556
 
 ---
 
+## ⚠️ ISSUE #6: Login Authentication 404 Errors
+
+### Problem
+
+**Symptom:**
+
+```bash
+# Browser console shows:
+POST http://localhost:2003/api/auth/login 404 (Not Found)
+```
+
+**Root Cause:**
+
+Multiple issues preventing successful login:
+1. **Cookie-parser middleware missing**: Backend cannot handle signed cookies in authentication flow
+2. **Incorrect API URL configuration**: Frontend using `/api` prefix when backend routes don't have it
+3. **Browser cache persistence**: Next.js `.next` folder caching old JavaScript bundles with incorrect URLs
+4. **Multiple server instances**: Old servers running with outdated configurations
+
+### Solution
+
+#### Step 1: Fix Backend Cookie-Parser
+
+Add cookie-parser middleware to handle signed cookies:
+
+```typescript
+// apps/api/src/main.ts
+import cookieParser from 'cookie-parser'; // Use default import, not namespace
+
+async function bootstrap() {
+  // ... other setup ...
+
+  // Add BEFORE other middleware
+  app.use(cookieParser(configService.get('COOKIE_SECRET') || 'dev-secret-key'));
+  app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
+  app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
+  app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
+}
+```
+
+Install dependencies:
+
+```bash
+cd ~/projects/meocrm/apps/api
+pnpm add cookie-parser
+pnpm add -D @types/cookie-parser
+```
+
+#### Step 2: Fix API URLs in Frontend
+
+Remove `/api` prefix from all API client files:
+
+```typescript
+// ❌ WRONG - Has /api prefix
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003/api').replace(/\/$/, '');
+
+// ✅ CORRECT - No /api prefix
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2003').replace(/\/$/, '');
+```
+
+Files to update:
+- `apps/web/lib/api/auth.ts`
+- `apps/web/lib/api/customers.ts`
+- Any other API client files in `apps/web/lib/api/`
+
+#### Step 3: Fix Environment Variables
+
+Update `.env.local`:
+
+```bash
+# apps/web/.env.local
+# ❌ WRONG
+NEXT_PUBLIC_API_URL=http://localhost:2003/api
+
+# ✅ CORRECT
+NEXT_PUBLIC_API_URL=http://localhost:2003
+```
+
+#### Step 4: Clear Next.js Cache
+
+```bash
+# Kill all web servers
+pkill -f "pnpm.*web.*dev"
+
+# Clear cache
+rm -rf apps/web/.next
+
+# Restart with clean build
+cd ~/projects/meocrm
+NEXT_PUBLIC_API_URL=http://localhost:2003 pnpm --filter @meocrm/web dev
+```
+
+#### Step 5: Kill Old Server Instances
+
+```bash
+# Check for duplicate API servers
+ps aux | grep "pnpm.*api.*dev"
+
+# Kill old instances if found
+kill <PID>
+
+# Restart API server
+cd ~/projects/meocrm
+DATABASE_URL="postgresql://meocrm_user:meocrm_dev_password@localhost:2001/meocrm_dev?schema=public" \
+REDIS_PORT=2002 \
+PORT=2003 \
+WEBHOOK_SECRET_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff \
+CORS_ORIGIN="http://localhost:2004" \
+pnpm --filter @meocrm/api dev
+```
+
+### Verification
+
+Test backend directly with curl:
+
+```bash
+curl -X POST http://localhost:2003/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@lanoleather.vn","password":"Admin@123"}' \
+  -v
+```
+
+Expected response:
+- HTTP 201 Created
+- Set-Cookie header with `meocrm_refresh_token`
+- JSON response with user data and tokens
+
+Test frontend:
+1. Open browser developer tools (F12)
+2. Navigate to http://localhost:2004/login
+3. Hard refresh (Ctrl+Shift+R) to clear browser cache
+4. Enter credentials and login
+5. Check Network tab - should see POST to `http://localhost:2003/auth/login` (no `/api`)
+
+### Common Mistakes
+
+1. **Import syntax error**: Using `import * as cookieParser` instead of `import cookieParser`
+2. **Middleware order**: Cookie-parser must be added BEFORE body-parser
+3. **Forgetting to clear cache**: `.next` folder caches JavaScript bundles with old URLs
+4. **Multiple files need updating**: Must fix ALL API client files, not just auth.ts
+5. **Browser cache**: Need hard refresh (Ctrl+Shift+R) after clearing Next.js cache
+
+---
+
 ## 📚 Environment Variables Reference
 
 ### Current Setup (apps/api/.env)
