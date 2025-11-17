@@ -69,7 +69,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         organizationId: response.user.organization.id,
       });
       setUser(response.user);
-      router.replace('/');
     },
     [router],
   );
@@ -86,7 +85,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       organizationId: response.user.organization.id,
     });
     setUser(response.user);
-    router.replace('/');
   }, [router]);
 
   const refreshToken = useCallback(async () => {
