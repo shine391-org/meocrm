@@ -82,8 +82,8 @@ This guide helps you load the minimum context needed for each task type, reducin
 ### 5️⃣ Test Writing
 
 **Read (in order):**
-1. ✅ [guides/testing/Strategy-&-Coverage.md](guides/testing/Strategy-&-Coverage.md)
-2. ✅ Similar existing test
+1. ✅ [guides/testing/Strategy-&-Coverage.md](guides/testing/Strategy-&-Coverage.md) - Test strategy & E2E status
+2. ✅ Similar existing test (50 E2E tests in tests/e2e/)
 3. ✅ Code being tested
 4. ✅ [AGENTS.md](../AGENTS.md) - Testing commands
 
@@ -91,6 +91,11 @@ This guide helps you load the minimum context needed for each task type, reducin
 
 **Estimated context:** <40 KB
 **Time saved:** 80% (skip 160+ KB)
+
+**E2E Test Status:**
+- **50 tests total:** 22 passing (44%), 28 pending UI implementation
+- **Run:** `pnpm test:playwright`
+- **Files:** auth, dashboard, customers, orders, navigation, error-pages
 
 ---
 
@@ -165,7 +170,7 @@ pnpm --filter @meocrm/web dev     # Frontend dev server
 
 # Testing
 pnpm --filter @meocrm/api test    # Backend unit tests
-pnpm test:e2e                      # E2E tests
+pnpm test:playwright               # E2E tests (50 tests, 22 passing)
 
 # Database
 pnpm --filter @meocrm/api prisma:generate  # Generate Prisma client
