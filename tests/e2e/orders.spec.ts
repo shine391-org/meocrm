@@ -1,4 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Route } from '@playwright/test';
+
+test.describe.configure({ mode: 'serial' });
 
 test.describe('Orders Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -11,13 +13,14 @@ test.describe('Orders Page', () => {
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
 
-    // Navigate to orders page
-    await page.goto('/orders');
+    // Navigate to orders page via in-app navigation to preserve session
+    await page.getByRole('link', { name: /đơn hàng/i }).first().click();
+    await expect(page).toHaveURL(/\/orders/i, { timeout: 5000 });
   });
 
   test('should display orders page heading', async ({ page }) => {
     await expect(
-      page.getByRole('heading', { name: /orders|đơn hàng/i }),
+      page.getByRole('heading', { name: /^orders$/i }),
     ).toBeVisible();
   });
 
@@ -36,22 +39,33 @@ test.describe('Orders Page', () => {
 
     // Should either show orders or empty state message
     const hasOrders = await page.locator('text=/Order #|Đơn hàng #/i').count();
-    const hasEmptyState = await page.getByText(/chưa có đơn hàng|no orders/i).count();
+    const emptyState = page.getByText(/chưa có đơn hàng|no orders/i);
+    const hasEmptyState = await emptyState.count();
 
-    expect(hasOrders + hasEmptyState).toBeGreaterThan(0);
+    if (hasOrders > 0) {
+      await expect(page.locator('text=/Order #|Đơn hàng #/i').first()).toBeVisible();
+    } else {
+      await expect(emptyState.first()).toBeVisible();
+    }
   });
 
   test('should handle API error gracefully', async ({ page, context }) => {
     // Block API requests to simulate error
-    await context.route('**/orders*', (route) => route.abort());
+    const blockOrders = (route: Route) => route.abort();
+    const apiRoute = '**localhost:2003/orders**';
+    await context.route(apiRoute, blockOrders);
 
-    // Reload page
-    await page.reload();
+    try {
+      // Reload page to trigger fetch
+      await page.reload({ waitUntil: 'networkidle' });
 
-    // Should show error message
-    await expect(
-      page.getByText(/không thể tải|failed to load|error/i),
-    ).toBeVisible({ timeout: 5000 });
+      // Should show error message
+      await expect(
+        page.getByText(/không thể tải|failed to load|error/i),
+      ).toBeVisible({ timeout: 5000 });
+    } finally {
+      await context.unroute(apiRoute, blockOrders);
+    }
   });
 
   test('should display order details when available', async ({ page }) => {

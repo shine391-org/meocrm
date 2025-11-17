@@ -14,10 +14,10 @@ test.describe('Dashboard Page', () => {
 
   test('should display all KPI cards', async ({ page }) => {
     // Check for KPI cards
-    await expect(page.getByText(/doanh thu/i)).toBeVisible();
-    await expect(page.getByText(/tồn kho|tồi hàng/i)).toBeVisible();
-    await expect(page.getByText(/doanh thu thuần/i)).toBeVisible();
-    await expect(page.getByText(/đơn hàng/i)).toBeVisible();
+    await expect(page.getByText(/doanh thu/i).first()).toBeVisible();
+    await expect(page.getByText(/tồn kho|tồi hàng/i).first()).toBeVisible();
+    await expect(page.getByText(/doanh thu thuần/i).first()).toBeVisible();
+    await expect(page.getByText(/đơn hàng/i).first()).toBeVisible();
   });
 
   test('should display revenue chart', async ({ page }) => {
@@ -27,39 +27,37 @@ test.describe('Dashboard Page', () => {
 
   test('should display top products section', async ({ page }) => {
     await expect(
-      page.getByRole('heading', { name: /sản phẩm bán chạy|top products/i }),
+      page.getByText(/top 10 hàng bán chạy/i),
     ).toBeVisible();
   });
 
   test('should display top customers section', async ({ page }) => {
     await expect(
-      page.getByRole('heading', { name: /khách hàng tiềm năng|top customers/i }),
+      page.getByText(/top 10 khách mua nhiều nhất/i),
     ).toBeVisible();
   });
 
   test('should display activity feed', async ({ page }) => {
-    await expect(
-      page.getByRole('heading', { name: /hoạt động gần đây|activity|recent/i }),
-    ).toBeVisible();
+    await expect(page.getByText(/hoạt động gần đây/i)).toBeVisible();
   });
 
   test('should navigate to orders page from dashboard', async ({ page }) => {
     // Click on orders link in navigation
-    await page.getByRole('link', { name: /đơn hàng|orders/i }).click();
+    await page.getByRole('link', { name: /đơn hàng|orders/i }).first().click();
 
     await expect(page).toHaveURL(/\/orders/i, { timeout: 5000 });
   });
 
   test('should navigate to customers page from dashboard', async ({ page }) => {
     // Click on customers link in navigation
-    await page.getByRole('link', { name: /khách hàng|customers/i }).click();
+    await page.getByRole('link', { name: /khách hàng|customers/i }).first().click();
 
     await expect(page).toHaveURL(/\/customers/i, { timeout: 5000 });
   });
 
   test('should navigate to products page from dashboard', async ({ page }) => {
     // Click on products link in navigation
-    await page.getByRole('link', { name: /sản phẩm|products/i }).click();
+    await page.getByRole('link', { name: /hàng hóa/i }).first().click();
 
     await expect(page).toHaveURL(/\/products/i, { timeout: 5000 });
   });
@@ -69,6 +67,6 @@ test.describe('Dashboard Page', () => {
     await page.setViewportSize({ width: 375, height: 667 });
 
     // Check that page still renders (no layout breaks)
-    await expect(page.getByText(/doanh thu/i)).toBeVisible();
+    await expect(page.getByText(/doanh thu/i).first()).toBeVisible();
   });
 });

@@ -1,4 +1,5 @@
 const ORGANIZATION_ID_KEY = 'organizationId';
+const ACCESS_TOKEN_KEY = 'accessToken';
 
 const isBrowser = () => typeof window !== 'undefined';
 
@@ -14,7 +15,12 @@ export const getBrowserToken = (): string | null => {
   if (!isBrowser()) {
     return null;
   }
-  return accessTokenMemory;
+  if (accessTokenMemory) {
+    return accessTokenMemory;
+  }
+  const storedToken = window.sessionStorage?.getItem(ACCESS_TOKEN_KEY) ?? null;
+  accessTokenMemory = storedToken;
+  return storedToken;
 };
 
 /**
@@ -34,6 +40,7 @@ export const persistSession = ({
   }
   // Store access token in memory only (NOT in localStorage)
   accessTokenMemory = accessToken;
+  window.sessionStorage?.setItem(ACCESS_TOKEN_KEY, accessToken);
 
   // Organization ID can be stored in localStorage as it's not sensitive
   if (organizationId) {
@@ -50,6 +57,7 @@ export const clearSession = (): void => {
     return;
   }
   accessTokenMemory = null;
+  window.sessionStorage?.removeItem(ACCESS_TOKEN_KEY);
   window.localStorage.removeItem(ORGANIZATION_ID_KEY);
 };
 

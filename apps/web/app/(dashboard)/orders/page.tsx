@@ -23,7 +23,12 @@ export default function OrdersPage() {
         if (!isMounted) {
           return;
         }
-        setOrders(latestOrders);
+        const normalizedOrders = Array.isArray(latestOrders)
+          ? latestOrders
+          : Array.isArray((latestOrders as any)?.data)
+            ? (latestOrders as any).data
+            : [];
+        setOrders(normalizedOrders);
       } catch (error) {
         console.error('Failed to fetch orders', error);
         if (isMounted) {

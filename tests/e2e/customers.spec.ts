@@ -1,4 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Route } from '@playwright/test';
+
+test.describe.configure({ mode: 'serial' });
 
 test.describe('Customers Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -11,19 +13,20 @@ test.describe('Customers Page', () => {
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
 
-    // Navigate to customers page
-    await page.goto('/customers');
+    // Navigate to customers page via in-app navigation to preserve session state
+    await page.getByRole('link', { name: /khách hàng/i }).first().click();
+    await expect(page).toHaveURL(/\/customers/i, { timeout: 5000 });
   });
 
   test('should display customers page heading', async ({ page }) => {
     await expect(
-      page.getByRole('heading', { name: /customers|khách hàng/i }),
+      page.getByRole('heading', { name: /quản lý khách hàng/i }),
     ).toBeVisible();
   });
 
   test('should display search input', async ({ page }) => {
     await expect(
-      page.getByPlaceholder(/search|tìm kiếm/i),
+      page.getByPlaceholder(/tìm theo tên.*sđt.*email/i),
     ).toBeVisible();
   });
 
@@ -40,13 +43,13 @@ test.describe('Customers Page', () => {
   test('should filter customers by search term', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    const searchInput = page.getByPlaceholder(/search|tìm kiếm/i);
+    const searchInput = page.getByPlaceholder(/tìm theo tên.*sđt.*email/i);
 
     // Type search term
     await searchInput.fill('test');
 
-    // URL should update with search param
-    await expect(page).toHaveURL(/search=test/i, { timeout: 3000 });
+    // URL should update with search param after debounce
+    await expect(page).toHaveURL(/search=test/i, { timeout: 1000 });
   });
 
   test('should navigate between pages with pagination', async ({ page }) => {
@@ -68,31 +71,34 @@ test.describe('Customers Page', () => {
   });
 
   test('should handle API error gracefully', async ({ page, context }) => {
-    // Block API requests to simulate error
-    await context.route('**/customers*', (route) => route.abort());
+    const blockCustomers = (route: Route) => route.abort();
+    const apiRoute = '**localhost:2003/customers**';
+    await context.route(apiRoute, blockCustomers);
 
-    // Reload page
-    await page.reload();
+    try {
+      await page.reload({ waitUntil: 'networkidle' });
 
-    // Should show error message or handle gracefully
-    // The page should not crash
-    await expect(page).toHaveURL(/\/customers/i);
+      // Should show error message or handle gracefully
+      await expect(page.getByText(/không thể tải|failed to fetch/i)).toBeVisible();
+    } finally {
+      await context.unroute(apiRoute, blockCustomers);
+    }
   });
 
   test('should clear search when clicking clear button', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    const searchInput = page.getByPlaceholder(/search|tìm kiếm/i);
+    const searchInput = page.getByPlaceholder(/tìm theo tên.*sđt.*email/i);
 
     // Type search term
     await searchInput.fill('test');
-    await expect(page).toHaveURL(/search=test/i, { timeout: 3000 });
+    await expect(page).toHaveURL(/search=test/i, { timeout: 1000 });
 
     // Clear search
     await searchInput.clear();
 
-    // Search should be removed from URL after debounce
-    await page.waitForTimeout(1000);
+    // Search should be removed from URL after debounce (500ms + buffer)
+    await page.waitForTimeout(700);
     await expect(page).not.toHaveURL(/search=test/i);
   });
 
@@ -100,9 +106,9 @@ test.describe('Customers Page', () => {
     await page.waitForLoadState('networkidle');
 
     // Search for something
-    const searchInput = page.getByPlaceholder(/search|tìm kiếm/i);
+    const searchInput = page.getByPlaceholder(/tìm theo tên.*sđt.*email/i);
     await searchInput.fill('admin');
-    await expect(page).toHaveURL(/search=admin/i, { timeout: 3000 });
+    await expect(page).toHaveURL(/search=admin/i, { timeout: 1000 });
 
     // Reload page
     await page.reload();

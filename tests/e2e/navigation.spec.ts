@@ -14,19 +14,22 @@ test.describe('Navigation and Layout', () => {
 
   test('should display sidebar with all navigation links', async ({ page }) => {
     // Check main navigation links
-    await expect(page.getByRole('link', { name: /dashboard|trang chủ/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /orders|đơn hàng/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /customers|khách hàng/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /products|sản phẩm/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /tổng quan/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /hàng hóa/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /đơn hàng/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /khách hàng/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /sổ quỹ/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /báo cáo/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /cài đặt/i }).first()).toBeVisible();
   });
 
   test('should highlight active navigation link', async ({ page }) => {
     // Go to orders page
-    await page.getByRole('link', { name: /orders|đơn hàng/i }).click();
+    const ordersLink = page.getByRole('link', { name: /đơn hàng/i }).first();
+    await ordersLink.click();
     await expect(page).toHaveURL(/\/orders/i);
 
     // Orders link should be highlighted (has active class or aria-current)
-    const ordersLink = page.getByRole('link', { name: /orders|đơn hàng/i });
     const hasActiveState = await ordersLink.evaluate((el) => {
       return el.classList.contains('active') ||
              el.getAttribute('aria-current') === 'page' ||
@@ -38,35 +41,37 @@ test.describe('Navigation and Layout', () => {
 
   test('should navigate between all main pages', async ({ page }) => {
     // Dashboard
-    await page.getByRole('link', { name: /dashboard|trang chủ/i }).click();
+    await page.getByRole('link', { name: /tổng quan/i }).first().click();
     await expect(page).toHaveURL(/\/$|\/dashboard/i);
 
     // Orders
-    await page.getByRole('link', { name: /orders|đơn hàng/i }).click();
+    await page.getByRole('link', { name: /đơn hàng/i }).first().click();
     await expect(page).toHaveURL(/\/orders/i);
 
     // Customers
-    await page.getByRole('link', { name: /customers|khách hàng/i }).click();
+    await page.getByRole('link', { name: /khách hàng/i }).first().click();
     await expect(page).toHaveURL(/\/customers/i);
 
     // Products
-    await page.getByRole('link', { name: /products|sản phẩm/i }).click();
+    await page.getByRole('link', { name: /hàng hóa/i }).first().click();
     await expect(page).toHaveURL(/\/products/i);
 
     // POS
-    await page.getByRole('link', { name: /pos|bán hàng/i }).click();
+    await page.getByRole('button', { name: /bán hàng/i }).first().click();
     await expect(page).toHaveURL(/\/pos/i);
+
+    // Back to dashboard via mode switcher
+    await page.getByRole('button', { name: /quản lý/i }).first().click();
+    await expect(page).toHaveURL(/\/$|\/dashboard/i);
   });
 
   test('should display user menu in header', async ({ page }) => {
     // Check for user menu or profile button
-    const userButton = page.getByRole('button', { name: /user|admin|account|tài khoản/i });
+    const userMenuButton = page.locator('button.rounded-full').first();
+    await expect(userMenuButton).toBeVisible();
 
-    // User button might be visible or in a dropdown
-    const userMenuExists = await userButton.count() > 0 ||
-                           await page.getByText(/admin@lanoleather.vn/i).count() > 0;
-
-    expect(userMenuExists).toBeTruthy();
+    await userMenuButton.click();
+    await expect(page.getByRole('menuitem', { name: /log out/i })).toBeVisible();
   });
 
   test('should open and close mobile menu on small screens', async ({ page }) => {
@@ -74,30 +79,36 @@ test.describe('Navigation and Layout', () => {
     await page.setViewportSize({ width: 375, height: 667 });
 
     // Look for mobile menu button (hamburger)
-    const menuButton = page.getByRole('button', { name: /menu|navigation/i });
+    const menuButton = page.getByRole('button', { name: /menu|navigation/i }).first();
 
     if (await menuButton.isVisible()) {
       // Open menu
       await menuButton.click();
 
       // Navigation should be visible
-      await expect(page.getByRole('link', { name: /dashboard|trang chủ/i })).toBeVisible();
+      await expect(page.getByRole('link', { name: /tổng quan/i }).first()).toBeVisible();
 
-      // Close menu
-      await menuButton.click();
+      // Close menu via the sheet close button (or Escape fallback)
+      const closeButton = page.getByRole('button', { name: /close/i }).first();
+      if (await closeButton.isVisible()) {
+        await closeButton.click();
+      } else {
+        await page.keyboard.press('Escape');
+      }
+      await expect(menuButton).toBeVisible();
     }
   });
 
   test('should maintain scroll position when navigating back', async ({ page }) => {
     // Go to a page with content
-    await page.goto('/customers');
-    await page.waitForLoadState('networkidle');
+    await page.getByRole('link', { name: /khách hàng/i }).first().click();
+    await expect(page.getByRole('heading', { name: /quản lý khách hàng/i })).toBeVisible();
 
     // Scroll down if there's content
     await page.evaluate(() => window.scrollBy(0, 500));
 
     // Navigate to another page
-    await page.getByRole('link', { name: /orders|đơn hàng/i }).click();
+    await page.getByRole('link', { name: /đơn hàng/i }).first().click();
     await expect(page).toHaveURL(/\/orders/i);
 
     // Go back
@@ -105,7 +116,7 @@ test.describe('Navigation and Layout', () => {
     await expect(page).toHaveURL(/\/customers/i);
 
     // Page should be functional
-    await expect(page.getByRole('heading', { name: /customers|khách hàng/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /quản lý khách hàng/i })).toBeVisible();
   });
 
   test('should handle browser back and forward navigation', async ({ page }) => {
@@ -139,21 +150,12 @@ test.describe('Navigation and Layout', () => {
   });
 
   test('should have accessible navigation with keyboard', async ({ page }) => {
-    // Tab through navigation links
-    await page.keyboard.press('Tab');
-
-    // Check if focus moves through navigation elements
-    let focusedElement = await page.evaluate(() => document.activeElement?.tagName);
-
-    // Some element should receive focus
-    expect(focusedElement).toBeTruthy();
-
-    // Press Enter on a focused link should navigate
-    const dashboardLink = page.getByRole('link', { name: /dashboard|trang chủ/i });
+    const dashboardLink = page.getByRole('link', { name: /tổng quan/i }).first();
     await dashboardLink.focus();
+    await expect(dashboardLink).toBeFocused();
+
     await page.keyboard.press('Enter');
 
-    // Should navigate
     await expect(page).toHaveURL(/\/$|\/dashboard/i);
   });
 });

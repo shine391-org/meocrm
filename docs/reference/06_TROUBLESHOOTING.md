@@ -513,7 +513,7 @@ File: [apps/web/components/auth/login-form.tsx](../apps/web/components/auth/logi
 ```tsx
 <Button
   type="button"
-  onClick={() => handleLogin('/dashboard')}
+  onClick={() => handleLogin('/')}
   aria-label="Đăng nhập vào quản lý"
 >
   <BarChart3 className="mr-2 h-5 w-5" />
