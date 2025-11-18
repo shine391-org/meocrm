@@ -455,6 +455,11 @@ See Critical Path section above for details.
 - Login flow working correctly ✅
 - Authentication tests all passing ✅
 
+#### Latest Progress (2025-11-18)
+- ✅ Stabilized API unit/integration specs for Customers, Inventory, Orders, Products, Refunds, and Webhooks to unblock future backend work.
+- ✅ ProductsController unit tests now reflect OrganizationGuard signature (OrganizationId decorator).
+- ⚠️ Full `pnpm --filter @meocrm/api test --detectOpenHandles` run still times out because long-running integration suites keep handles open; rerun after closing outstanding async jobs.
+
 #### Todo:
 - [ ] TEST-003 - E2E: Tenant isolation tests 🔴 Critical (3 pts)
 - [ ] TEST-004 - E2E: Orders creation flow ⭐ High (3 pts)
@@ -487,6 +492,7 @@ See Critical Path section above for details.
 - [x] P3-BUG-003 - Refactor PrismaService from REQUEST-scoped to SINGLETON (3 pts) ✅
 - [x] P4-BUG-001 - Fix Redis Docker Exec Timeout (2 pts) ✅
 - [x] P4-BUG-002 - Fix Database Table Name Mismatch (1 pt) ✅
+- [x] TEST-API-001 - Align API specs with schema refactors (Customers/Products/Orders/Refunds/Webhooks) ✅
 
 ---
 
