@@ -38,7 +38,7 @@ export function Sidebar() {
           const isRoot = item.href === '/';
           const isActive = isRoot
             ? pathname === '/'
-            : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            : pathname === item.href || pathname?.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}

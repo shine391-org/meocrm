@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,8 +27,8 @@ function CustomersPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
-  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [page, setPage] = useState(Number(searchParams?.get('page')) || 1);
+  const [searchTerm, setSearchTerm] = useState(searchParams?.get('search') || '');
   const [debouncedSearch] = useDebounce(searchTerm, 500);
 
   const { data, error, isLoading } = useSWR([page, debouncedSearch], fetcher, {
@@ -34,7 +36,7 @@ function CustomersPageContent() {
   });
 
   useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams?.toString());
     if (page > 1) {
       params.set('page', String(page));
     } else {
@@ -48,7 +50,7 @@ function CustomersPageContent() {
       params.delete('search');
     }
     const queryString = params.toString();
-    router.replace(queryString ? `${pathname}?${queryString}` : pathname);
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname || '/customers');
   }, [page, debouncedSearch, pathname, router, searchParams]);
 
 

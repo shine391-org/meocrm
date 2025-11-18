@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState } from 'react';
 import { OrdersService, Order } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -21,7 +23,12 @@ export default function OrdersPage() {
         if (!isMounted) {
           return;
         }
-        setOrders(latestOrders);
+        const normalizedOrders = Array.isArray(latestOrders)
+          ? latestOrders
+          : Array.isArray((latestOrders as any)?.data)
+            ? (latestOrders as any).data
+            : [];
+        setOrders(normalizedOrders);
       } catch (error) {
         console.error('Failed to fetch orders', error);
         if (isMounted) {

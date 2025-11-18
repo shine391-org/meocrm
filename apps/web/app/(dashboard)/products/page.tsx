@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 export default function ProductsPage() {
   return (
     <section className="space-y-2">

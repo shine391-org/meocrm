@@ -14,15 +14,16 @@ test.describe('Authentication Flow', () => {
     // Check form elements exist
     await expect(page.getByLabel(/email/i)).toBeVisible();
     await expect(page.getByLabel(/password/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /login|đăng nhập/i })).toBeVisible();
+    // Check for "Quản lý" button (management login)
+    await expect(page.getByRole('button', { name: /quản lý/i })).toBeVisible();
   });
 
   test('should show validation errors for empty form', async ({ page }) => {
     // Click login button without filling form
-    await page.getByRole('button', { name: /login|đăng nhập/i }).click();
+    await page.getByRole('button', { name: /quản lý/i }).click();
 
-    // Should show validation errors (adjust selectors based on actual error display)
-    await expect(page.getByText(/required|bắt buộc/i).first()).toBeVisible();
+    // Should show validation errors via toast
+    await expect(page.getByText(/vui lòng nhập đầy đủ thông tin/i)).toBeVisible({ timeout: 3000 });
   });
 
   test('should show error for invalid credentials', async ({ page }) => {
@@ -31,10 +32,10 @@ test.describe('Authentication Flow', () => {
     await page.getByLabel(/password/i).fill('wrongpassword');
 
     // Submit form
-    await page.getByRole('button', { name: /login|đăng nhập/i }).click();
+    await page.getByRole('button', { name: /quản lý/i }).click();
 
-    // Should show error message
-    await expect(page.getByText(/invalid|incorrect|sai|không đúng/i)).toBeVisible({
+    // Should show error message (toast notification) - use .first() to handle title + description
+    await expect(page.getByText(/sai email hoặc mật khẩu|đăng nhập thất bại/i).first()).toBeVisible({
       timeout: 5000,
     });
   });
@@ -45,14 +46,14 @@ test.describe('Authentication Flow', () => {
     await page.getByLabel(/password/i).fill('Admin@123');
 
     // Submit form
-    await page.getByRole('button', { name: /login|đăng nhập/i }).click();
+    await page.getByRole('button', { name: /quản lý/i }).click();
 
     // Should redirect to dashboard
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
 
-    // Should show user info or dashboard elements
+    // Should show dashboard navigation
     await expect(
-      page.getByText(/admin|dashboard|trang chủ/i).first(),
+      page.getByRole('link', { name: /tổng quan/i }).first(),
     ).toBeVisible();
   });
 
@@ -60,7 +61,7 @@ test.describe('Authentication Flow', () => {
     // Login first
     await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
     await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /login|đăng nhập/i }).click();
+    await page.getByRole('button', { name: /quản lý/i }).click();
 
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
@@ -76,21 +77,17 @@ test.describe('Authentication Flow', () => {
     // Login first
     await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
     await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /login|đăng nhập/i }).click();
+    await page.getByRole('button', { name: /quản lý/i }).click();
 
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
 
-    // Find and click logout button (adjust selector based on UI)
-    // This might be in a dropdown menu or header
-    const logoutButton = page.getByRole('button', { name: /logout|đăng xuất/i });
-    if (await logoutButton.isVisible()) {
-      await logoutButton.click();
-    } else {
-      // Try finding in dropdown menu
-      await page.getByRole('button', { name: /user|account|tài khoản/i }).click();
-      await page.getByRole('menuitem', { name: /logout|đăng xuất/i }).click();
-    }
+    // Click avatar button to open user menu dropdown (it's a button with variant="ghost")
+    const avatarButton = page.locator('button[class*="rounded-full"]').first();
+    await avatarButton.click();
+
+    // Click "Log out" menu item
+    await page.getByRole('menuitem', { name: /log out/i }).click();
 
     // Should redirect to login page
     await expect(page).toHaveURL(/\/login/, { timeout: 5000 });
@@ -118,8 +115,17 @@ test.describe('Authentication Flow', () => {
     await page.keyboard.press('Tab'); // Focus password
     await expect(page.getByLabel(/password/i)).toBeFocused();
 
-    await page.keyboard.press('Tab'); // Focus submit button
-    await expect(page.getByRole('button', { name: /login|đăng nhập/i })).toBeFocused();
+    // The submit button should be focusable (might need more tabs if there are links in between)
+    let focused = false;
+    for (let i = 0; i < 5; i++) {
+      await page.keyboard.press('Tab');
+      const submitButton = page.getByRole('button', { name: /quản lý/i });
+      if (await submitButton.evaluate(el => el === document.activeElement)) {
+        focused = true;
+        break;
+      }
+    }
+    expect(focused).toBeTruthy();
   });
 
   test('should show loading state during login', async ({ page }) => {
@@ -128,12 +134,11 @@ test.describe('Authentication Flow', () => {
     await page.getByLabel(/password/i).fill('Admin@123');
 
     // Submit form
-    const submitButton = page.getByRole('button', { name: /login|đăng nhập/i });
+    const submitButton = page.getByRole('button', { name: /quản lý/i });
     await submitButton.click();
 
-    // Button should show loading state (adjust based on implementation)
-    // Could be disabled, show spinner, or change text
-    await expect(submitButton).toBeDisabled();
+    // Should show loading text
+    await expect(page.getByText(/đang đăng nhập/i)).toBeVisible({ timeout: 2000 });
   });
 
   test('should handle network errors gracefully', async ({ page, context }) => {
@@ -145,11 +150,11 @@ test.describe('Authentication Flow', () => {
     await page.getByLabel(/password/i).fill('Admin@123');
 
     // Submit form
-    await page.getByRole('button', { name: /login|đăng nhập/i }).click();
+    await page.getByRole('button', { name: /quản lý/i }).click();
 
-    // Should show error message
+    // Should show error message (looking for first match since toast has title and description)
     await expect(
-      page.getByText(/error|failed|lỗi|thất bại/i),
+      page.getByText(/đăng nhập thất bại/i).first(),
     ).toBeVisible({ timeout: 5000 });
   });
 
@@ -157,7 +162,7 @@ test.describe('Authentication Flow', () => {
     // Login
     await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
     await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /login|đăng nhập/i }).click();
+    await page.getByRole('button', { name: /quản lý/i }).click();
 
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 export default function PosPage() {
   return (
     <section className="space-y-2">

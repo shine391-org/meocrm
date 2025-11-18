@@ -148,7 +148,7 @@ export function LoginForm() {
         {/* Quản lý Button */}
         <Button
           type="button"
-          onClick={() => handleLogin('/dashboard')}
+          onClick={() => handleLogin('/')}
           disabled={isLoading}
           className="h-12 bg-slate-700 hover:bg-slate-800 text-white font-medium text-base transition-all duration-200 hover:scale-105"
           aria-label="Đăng nhập vào quản lý"

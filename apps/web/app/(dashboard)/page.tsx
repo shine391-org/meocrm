@@ -1,189 +1,164 @@
 'use client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+export const dynamic = 'force-dynamic';
+
+import { RevenueChart } from '@/components/dashboard/revenue-chart';
+import { KPICards, type KPIData } from '@/components/dashboard/kpi-cards';
+import { TopProducts, type TopProduct } from '@/components/dashboard/top-products';
+import { TopCustomers, type TopCustomer } from '@/components/dashboard/top-customers';
+import { ActivityFeed, type Activity } from '@/components/dashboard/activity-feed';
 import {
   DollarSign,
   ShoppingCart,
-  Users,
   Package,
-  TrendingUp,
   TrendingDown,
 } from 'lucide-react';
 
 export default function DashboardPage() {
-  // Mock data - will be replaced with real API data later
-  const kpiData = [
+  // Mock KPI data matching KiotViet interface
+  const kpiData: KPIData[] = [
     {
-      title: 'Doanh thu hôm nay',
-      value: '15,450,000đ',
-      change: '+12.5%',
-      trend: 'up' as const,
+      title: 'Doanh thu',
+      value: '0',
+      subtitle: 'Số đơn hàng hôm nay',
+      subtitleValue: '0',
       icon: DollarSign,
       bgColor: 'bg-blue-500',
     },
     {
-      title: 'Đơn hàng hôm nay',
-      value: '24',
-      change: '+8.2%',
-      trend: 'up' as const,
-      icon: ShoppingCart,
-      bgColor: 'bg-green-500',
-    },
-    {
-      title: 'Khách hàng mới',
-      value: '12',
-      change: '+15.3%',
-      trend: 'up' as const,
-      icon: Users,
-      bgColor: 'bg-purple-500',
-    },
-    {
-      title: 'Tồn kho',
-      value: '1,234',
-      change: '-2.1%',
-      trend: 'down' as const,
+      title: 'Tồi hàng',
+      value: '0',
+      subtitle: 'Giá trị tồn kho',
+      subtitleValue: '0đ',
       icon: Package,
       bgColor: 'bg-orange-500',
     },
+    {
+      title: 'Doanh thu thuần',
+      value: '-39.08%',
+      change: -39.08,
+      trend: 'down',
+      icon: TrendingDown,
+      bgColor: 'bg-red-500',
+    },
+    {
+      title: 'Đơn hàng',
+      value: '0',
+      subtitle: 'Đơn hàng hôm nay',
+      subtitleValue: '0',
+      icon: ShoppingCart,
+      bgColor: 'bg-green-500',
+    },
   ];
 
-  const topProducts = [
-    { name: 'Áo thun nam', quantity: 45, revenue: '4,500,000đ' },
-    { name: 'Quần jean nữ', quantity: 38, revenue: '7,600,000đ' },
-    { name: 'Giày thể thao', quantity: 32, revenue: '9,600,000đ' },
-    { name: 'Túi xách', quantity: 28, revenue: '5,600,000đ' },
-    { name: 'Áo khoác', quantity: 25, revenue: '6,250,000đ' },
+  // Mock top products data
+  const topProducts: TopProduct[] = [
+    { name: 'Áo thun nam basic', quantity: 45, revenue: 4500000 },
+    { name: 'Quần jean nữ skinny', quantity: 38, revenue: 3800000 },
+    { name: 'Giày sneaker trắng', quantity: 32, revenue: 3200000 },
+    { name: 'Túi xách da nữ', quantity: 28, revenue: 2800000 },
+    { name: 'Áo khoác hoodie', quantity: 25, revenue: 2500000 },
+    { name: 'Váy midi công sở', quantity: 22, revenue: 2200000 },
+    { name: 'Giày cao gót 5cm', quantity: 20, revenue: 2000000 },
+    { name: 'Áo sơ mi trắng', quantity: 18, revenue: 1800000 },
+    { name: 'Quần tây nam', quantity: 15, revenue: 1500000 },
+    { name: 'Balo laptop 15 inch', quantity: 12, revenue: 1200000 },
   ];
 
-  const topCustomers = [
-    { name: 'Nguyễn Văn A', orders: 15, total: '12,500,000đ' },
-    { name: 'Trần Thị B', orders: 12, total: '9,800,000đ' },
-    { name: 'Lê Văn C', orders: 10, total: '8,200,000đ' },
-    { name: 'Phạm Thị D', orders: 8, total: '6,400,000đ' },
-    { name: 'Hoàng Văn E', orders: 7, total: '5,600,000đ' },
+  // Mock top customers data
+  const topCustomers: TopCustomer[] = [
+    { name: 'Nguyễn Văn An', orderCount: 15, totalRevenue: 8500000 },
+    { name: 'Trần Thị Bình', orderCount: 12, totalRevenue: 7200000 },
+    { name: 'Lê Hoàng Cường', orderCount: 10, totalRevenue: 6800000 },
+    { name: 'Phạm Minh Đức', orderCount: 9, totalRevenue: 5900000 },
+    { name: 'Võ Thị Nga', orderCount: 8, totalRevenue: 5200000 },
+    { name: 'Đặng Văn Hùng', orderCount: 7, totalRevenue: 4800000 },
+    { name: 'Hoàng Thị Kim', orderCount: 6, totalRevenue: 4200000 },
+    { name: 'Bùi Văn Long', orderCount: 5, totalRevenue: 3600000 },
+    { name: 'Trương Thị Mai', orderCount: 4, totalRevenue: 3100000 },
+    { name: 'Phan Văn Nam', orderCount: 3, totalRevenue: 2500000 },
+  ];
+
+  // Mock activity data
+  const activities: Activity[] = [
+    {
+      id: '1',
+      type: 'order_created',
+      message: 'Đơn hàng mới #DH001234',
+      details: 'Nguyễn Văn An - 3 sản phẩm',
+      timestamp: new Date(Date.now() - 11 * 60 * 1000), // 11 minutes ago
+      amount: 1250000,
+    },
+    {
+      id: '2',
+      type: 'order_completed',
+      message: 'Đơn hàng #DH001233 đã hoàn thành',
+      details: 'Trần Thị Bình - Thanh toán COD',
+      timestamp: new Date(Date.now() - 45 * 60 * 1000), // 45 minutes ago
+      amount: 850000,
+    },
+    {
+      id: '3',
+      type: 'product_added',
+      message: 'Thêm sản phẩm mới',
+      details: 'Áo khoác bomber unisex - SKU: AK-001',
+      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+    },
+    {
+      id: '4',
+      type: 'customer_created',
+      message: 'Khách hàng mới đăng ký',
+      details: 'Lê Minh Tuấn - tuanle@example.com',
+      timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000), // 3 hours ago
+    },
+    {
+      id: '5',
+      type: 'inventory_updated',
+      message: 'Cập nhật tồn kho',
+      details: 'Áo thun nam basic - Nhập thêm 50 sản phẩm',
+      timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
+    },
+    {
+      id: '6',
+      type: 'order_cancelled',
+      message: 'Đơn hàng #DH001230 đã hủy',
+      details: 'Khách hàng yêu cầu hủy - Hoàn tiền',
+      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000), // 5 hours ago
+      amount: 650000,
+    },
+    {
+      id: '7',
+      type: 'product_updated',
+      message: 'Cập nhật giá sản phẩm',
+      details: 'Giày sneaker trắng - Giảm 15%',
+      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000), // 6 hours ago
+    },
+    {
+      id: '8',
+      type: 'order_created',
+      message: 'Đơn hàng mới #DH001229',
+      details: 'Phạm Văn Đức - 5 sản phẩm',
+      timestamp: new Date(Date.now() - 7 * 60 * 60 * 1000), // 7 hours ago
+      amount: 2100000,
+    },
   ];
 
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {kpiData.map((kpi) => {
-          const Icon = kpi.icon;
-          const TrendIcon = kpi.trend === 'up' ? TrendingUp : TrendingDown;
-          return (
-            <Card key={kpi.title}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600">
-                      {kpi.title}
-                    </p>
-                    <p className="mt-2 text-2xl font-bold">{kpi.value}</p>
-                    <div className="mt-2 flex items-center gap-1">
-                      <TrendIcon
-                        className={`h-4 w-4 ${
-                          kpi.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                        }`}
-                      />
-                      <span
-                        className={`text-sm font-medium ${
-                          kpi.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                        }`}
-                      >
-                        {kpi.change}
-                      </span>
-                      <span className="text-sm text-gray-500">so với hôm qua</span>
-                    </div>
-                  </div>
-                  <div className={`rounded-full ${kpi.bgColor} p-3`}>
-                    <Icon className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+      <KPICards data={kpiData} />
+
+      {/* Revenue Chart */}
+      <RevenueChart />
+
+      {/* Top Products and Top Customers */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <TopProducts products={topProducts} />
+        <TopCustomers customers={topCustomers} />
       </div>
 
-      {/* Top Products and Customers */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Top Products */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Top sản phẩm bán chạy</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {topProducts.map((product, index) => (
-                <div
-                  key={product.name}
-                  className="flex items-center justify-between border-b pb-3 last:border-0"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-600">
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-medium">{product.name}</p>
-                      <p className="text-sm text-gray-500">
-                        Đã bán: {product.quantity}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="font-semibold text-green-600">
-                    {product.revenue}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Top Customers */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Top khách hàng</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {topCustomers.map((customer, index) => (
-                <div
-                  key={customer.name}
-                  className="flex items-center justify-between border-b pb-3 last:border-0"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-sm font-semibold text-purple-600">
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-medium">{customer.name}</p>
-                      <p className="text-sm text-gray-500">
-                        {customer.orders} đơn hàng
-                      </p>
-                    </div>
-                  </div>
-                  <p className="font-semibold text-green-600">
-                    {customer.total}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Activity - Placeholder for charts */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Biểu đồ doanh thu 7 ngày qua</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex h-64 items-center justify-center rounded-lg bg-gray-50">
-            <p className="text-gray-500">
-              Biểu đồ sẽ được thêm vào sau (Recharts/Chart.js)
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Activity Feed */}
+      <ActivityFeed activities={activities} />
     </div>
   );
 }

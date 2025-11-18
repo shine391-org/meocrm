@@ -182,9 +182,20 @@ export class AuthService {
       expiresIn: accessExpiresIn,
     });
 
-    const refreshToken = this.jwtService.sign(payload, {
+    // Add unique jti (JWT ID) to ensure each refresh token is unique
+    const refreshTokenPayload = {
+      ...payload,
+      jti: `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
+    };
+
+    const refreshToken = this.jwtService.sign(refreshTokenPayload, {
       secret: refreshSecret,
       expiresIn: refreshExpiresIn,
+    });
+
+    // Delete existing refresh tokens for this user to prevent duplicates
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId },
     });
 
     // Store refresh token in database
