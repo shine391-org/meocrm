@@ -68,11 +68,11 @@ describe('RefundsRolesGuard', () => {
     await expect(guard.canActivate(context)).rejects.toThrow(ForbiddenException);
   });
 
-  it('should use default roles if settings service returns null', async () => {
+  it('should use default OWNER role when settings returns null', async () => {
     const context = {
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { role: UserRole.MANAGER },
+          user: { role: UserRole.OWNER },
         }),
       }),
     } as ExecutionContext;

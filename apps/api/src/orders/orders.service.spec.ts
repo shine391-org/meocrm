@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
@@ -443,10 +444,41 @@ describe('OrdersService', () => {
   });
 
   describe('updateStatus', () => {
-    const order = { id: 'order-1', status: OrderStatus.PENDING } as any;
+    const order = {
+      id: 'order-1',
+      status: OrderStatus.PENDING,
+      organizationId: 'org-id',
+      customerId: 'cust-1',
+      code: 'ORD-1',
+      subtotal: new Prisma.Decimal(100),
+      tax: new Prisma.Decimal(10),
+      shipping: new Prisma.Decimal(5),
+      discount: new Prisma.Decimal(0),
+      total: new Prisma.Decimal(115),
+      paidAmount: new Prisma.Decimal(0),
+      paymentMethod: 'CASH',
+      isPaid: false,
+      items: [],
+      customer: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: null,
+      deletedAt: null,
+      branchId: null,
+      notes: null,
+    } as any;
 
     it('should allow a valid status transition', async () => {
       prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.update.mockResolvedValue({
+        ...order,
+        subtotal: new Prisma.Decimal(100),
+        tax: new Prisma.Decimal(10),
+        shipping: new Prisma.Decimal(5),
+        discount: new Prisma.Decimal(0),
+        total: new Prisma.Decimal(115),
+        paidAmount: new Prisma.Decimal(0),
+      } as any);
       await service.updateStatus(
         'order-1',
         { status: OrderStatus.CONFIRMED } as any,
@@ -454,7 +486,10 @@ describe('OrdersService', () => {
       );
       expect(prisma.order.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { status: OrderStatus.CONFIRMED, updatedAt: expect.any(Date) },
+          data: expect.objectContaining({
+            status: OrderStatus.CONFIRMED,
+            updatedAt: expect.any(Date),
+          }),
         }),
       );
     });

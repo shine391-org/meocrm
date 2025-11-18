@@ -51,7 +51,7 @@ describe('ProductsController', () => {
       const queryDto = {};
       mockProductsService.findAll.mockResolvedValue(mockResult);
 
-      const result = await controller.findAll(queryDto as any, mockUser);
+      const result = await controller.findAll(queryDto as any, 'org1');
 
       expect(result).toEqual(mockResult);
       expect(service.findAll).toHaveBeenCalledWith(queryDto, 'org1');
@@ -63,7 +63,7 @@ describe('ProductsController', () => {
       const mockProduct = { id: '1', name: 'Product 1' };
       mockProductsService.findOne.mockResolvedValue(mockProduct);
 
-      const result = await controller.findOne('1', mockUser);
+      const result = await controller.findOne('1', 'org1');
       expect(result).toEqual(mockProduct);
     });
   });
@@ -74,7 +74,7 @@ describe('ProductsController', () => {
       const mockProduct = { id: '1', ...createDto };
       mockProductsService.create.mockResolvedValue(mockProduct);
 
-      const result = await controller.create(createDto as any, mockUser);
+      const result = await controller.create(createDto as any, 'org1');
       expect(result).toEqual(mockProduct);
     });
   });
@@ -85,7 +85,7 @@ describe('ProductsController', () => {
       const mockProduct = { id: '1', ...updateDto };
       mockProductsService.update.mockResolvedValue(mockProduct);
 
-      const result = await controller.update('1', updateDto as any, mockUser);
+      const result = await controller.update('1', updateDto as any, 'org1');
       expect(result).toEqual(mockProduct);
     });
   });
@@ -94,7 +94,7 @@ describe('ProductsController', () => {
     it('should remove a product', async () => {
       mockProductsService.remove.mockResolvedValue(undefined);
 
-      await controller.remove('1', mockUser);
+      await controller.remove('1', 'org1');
       expect(service.remove).toHaveBeenCalledWith('1', 'org1');
     });
   });

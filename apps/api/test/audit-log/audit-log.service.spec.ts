@@ -9,16 +9,23 @@ describe('AuditLogService', () => {
   let auditLogService: AuditLogService;
 
   beforeAll(async () => {
+    prisma = PrismaService.getInstance();
     const moduleRef = await Test.createTestingModule({
-      providers: [PrismaService, AuditLogService],
+      providers: [
+        AuditLogService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
-    prisma = moduleRef.get(PrismaService);
     auditLogService = moduleRef.get(AuditLogService);
   });
 
   beforeEach(async () => {
     await cleanupDatabase(prisma);
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
   });
 
   it('throws if organization context is missing', async () => {

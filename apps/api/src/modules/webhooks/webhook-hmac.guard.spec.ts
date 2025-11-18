@@ -1,4 +1,4 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { WebhookHMACGuard } from './webhook-hmac.guard';
@@ -28,7 +28,7 @@ describe('WebhookHMACGuard', () => {
     const guard = createGuard('secret');
     const context = createContext({ headers: {}, rawBody: '{}' });
 
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(guard.canActivate(context)).toBe(false);
   });
 
   it('rejects when WEBHOOK_SECRET is missing', () => {
@@ -38,7 +38,7 @@ describe('WebhookHMACGuard', () => {
       rawBody: '{}',
     });
 
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(guard.canActivate(context)).toBe(false);
   });
 
   it('rejects non-hex signatures', () => {
@@ -48,7 +48,7 @@ describe('WebhookHMACGuard', () => {
       rawBody: '{}',
     });
 
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(guard.canActivate(context)).toBe(false);
   });
 
   it('rejects invalid HMAC digests', () => {
@@ -58,7 +58,7 @@ describe('WebhookHMACGuard', () => {
       rawBody: JSON.stringify({ foo: 'bar' }),
     });
 
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(guard.canActivate(context)).toBe(false);
   });
 
   it('accepts valid signatures generated with the shared secret', () => {
@@ -95,7 +95,7 @@ describe('WebhookHMACGuard', () => {
       rawBody: { unexpected: true },
     });
 
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(guard.canActivate(context)).toBe(false);
   });
 
   it('coerces buffer raw bodies before signing', () => {

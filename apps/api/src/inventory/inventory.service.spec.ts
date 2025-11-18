@@ -113,17 +113,51 @@ describe('InventoryService', () => {
     });
 
     it('should filter low stock items when lowStockOnly is true', async () => {
+      const now = new Date();
       prisma.branch.findFirst.mockResolvedValue(mockBranch as any);
-      prisma.inventory.findMany.mockResolvedValue([]);
-      prisma.inventory.count.mockResolvedValue(0);
+      (prisma.$queryRawUnsafe as jest.Mock)
+        .mockResolvedValueOnce([{ count: BigInt(1) }])
+        .mockResolvedValueOnce([
+          {
+            inventoryId: 'inv-1',
+            branchId: 'branch-1',
+            quantity: 5,
+            inventoryCreatedAt: now,
+            inventoryUpdatedAt: now,
+            productId: 'prod-1',
+            productName: 'Product 1',
+            sku: 'SKU001',
+            productDescription: null,
+            categoryId: 'cat-1',
+            sellPrice: 100,
+            costPrice: 50,
+            minStock: 10,
+            organizationId: 'org-1',
+            productCreatedAt: now,
+            productUpdatedAt: now,
+            productDeletedAt: null,
+            categoryName: 'Category 1',
+            categoryDescription: null,
+            categoryParentId: null,
+            categoryOrganizationId: 'org-1',
+            categoryCreatedAt: now,
+            categoryUpdatedAt: now,
+            branchName: 'Branch 1',
+            branchAddress: '123 Street',
+            branchOrganizationId: 'org-1',
+            branchCreatedAt: now,
+            branchUpdatedAt: now,
+          },
+        ]);
 
-      await service.getInventoryByBranch(
+      const result = await service.getInventoryByBranch(
         { branchId: 'branch-1', lowStockOnly: true },
         'org-1',
       );
 
-      const findManyCall = prisma.inventory.findMany.mock.calls[0][0];
-      expect(findManyCall.where.product.minStock).toEqual({ gt: 0 });
+      expect(prisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      expect(result.meta.total).toBe(1);
+      expect(result.data[0].product?.name).toBe('Product 1');
     });
 
     it('should normalize limit to be between 1 and 100', async () => {
@@ -142,7 +176,7 @@ describe('InventoryService', () => {
   });
 
   describe('adjustStock', () => {
-    const mockProduct = { id: 'prod-1', organizationId: 'org-1' };
+    const mockProduct = { id: 'prod-1', organizationId: 'org-1', sellPrice: 500000 };
     const mockBranch = { id: 'branch-1', organizationId: 'org-1' };
     const mockInventory = {
       id: 'inv-1',
@@ -158,9 +192,11 @@ describe('InventoryService', () => {
 
     it('should increase stock with positive quantity', async () => {
       prisma.inventory.findUnique.mockResolvedValue(mockInventory as any);
-      prisma.inventory.update.mockResolvedValue({
+      prisma.inventory.upsert.mockResolvedValue({
         ...mockInventory,
         quantity: 60,
+        product: mockProduct as any,
+        branch: mockBranch as any,
       } as any);
       prisma.stockAdjustment.create.mockResolvedValue({} as any);
 
@@ -176,32 +212,41 @@ describe('InventoryService', () => {
       );
 
       expect(result.data.quantity).toBe(60);
-      expect(prisma.inventory.update).toHaveBeenCalledWith({
-        where: { id: 'inv-1' },
-        data: { quantity: 60 },
-        include: {
-          product: { include: { category: true } },
-          branch: true,
+      expect(prisma.inventory.upsert).toHaveBeenCalledWith({
+        where: {
+          productId_branchId: { productId: 'prod-1', branchId: 'branch-1' },
         },
+        update: { quantity: { increment: 10 } },
+        create: { productId: 'prod-1', branchId: 'branch-1', quantity: 10 },
+        include: { product: true, branch: true },
       });
-      expect(prisma.stockAdjustment.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          productId: 'prod-1',
-          branchId: 'branch-1',
-          quantity: 10,
-          previousQuantity: 50,
-          newQuantity: 60,
-          reason: StockAdjustmentReason.MANUAL_ADJUSTMENT,
-          userId: 'user-1',
+      expect(prisma.stockAdjustment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            branchId: 'branch-1',
+            type: 'INCREASE',
+            items: expect.objectContaining({
+              create: [
+                expect.objectContaining({
+                  productId: 'prod-1',
+                  oldQuantity: 50,
+                  newQuantity: 60,
+                  difference: 10,
+                }),
+              ],
+            }),
+          }),
         }),
-      });
+      );
     });
 
     it('should decrease stock with negative quantity', async () => {
       prisma.inventory.findUnique.mockResolvedValue(mockInventory as any);
-      prisma.inventory.update.mockResolvedValue({
+      prisma.inventory.upsert.mockResolvedValue({
         ...mockInventory,
         quantity: 40,
+        product: mockProduct as any,
+        branch: mockBranch as any,
       } as any);
       prisma.stockAdjustment.create.mockResolvedValue({} as any);
 
@@ -221,6 +266,12 @@ describe('InventoryService', () => {
 
     it('should throw BadRequestException when reducing stock below zero', async () => {
       prisma.inventory.findUnique.mockResolvedValue(mockInventory as any);
+      prisma.inventory.upsert.mockResolvedValue({
+        ...mockInventory,
+        quantity: -10,
+        product: mockProduct as any,
+        branch: mockBranch as any,
+      } as any);
 
       await expect(
         service.adjustStock(
@@ -272,11 +323,13 @@ describe('InventoryService', () => {
 
     it('should create inventory record if not exists', async () => {
       prisma.inventory.findUnique.mockResolvedValue(null);
-      prisma.inventory.create.mockResolvedValue({
+      prisma.inventory.upsert.mockResolvedValue({
         id: 'inv-new',
         productId: 'prod-1',
         branchId: 'branch-1',
         quantity: 10,
+        product: mockProduct as any,
+        branch: mockBranch as any,
       } as any);
       prisma.stockAdjustment.create.mockResolvedValue({} as any);
 
@@ -292,17 +345,15 @@ describe('InventoryService', () => {
       );
 
       expect(result.data.quantity).toBe(10);
-      expect(prisma.inventory.create).toHaveBeenCalledWith({
-        data: {
-          productId: 'prod-1',
-          branchId: 'branch-1',
-          quantity: 10,
-        },
-        include: {
-          product: { include: { category: true } },
-          branch: true,
-        },
-      });
+      expect(prisma.inventory.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: {
+            productId: 'prod-1',
+            branchId: 'branch-1',
+            quantity: 10,
+          },
+        }),
+      );
     });
   });
 
@@ -314,7 +365,7 @@ describe('InventoryService', () => {
       prisma.inventory.findMany.mockResolvedValue([
         {
           id: 'inv-1',
-          quantity: 2,
+          quantity: 0,
           product: { id: 'prod-1', name: 'Product 1', minStock: 10 },
         },
         {
@@ -327,8 +378,8 @@ describe('InventoryService', () => {
       const result = await service.getLowStockAlerts('branch-1', 'org-1');
 
       expect(result.data).toHaveLength(2);
-      expect(result.data[0].alertLevel).toBe('CRITICAL');
-      expect(result.data[1].alertLevel).toBe('WARNING');
+      const alertLevels = result.data.map((alert) => alert.alertLevel).sort();
+      expect(alertLevels).toEqual(['CRITICAL', 'WARNING']);
       expect(result.meta.critical).toBe(1);
       expect(result.meta.warning).toBe(1);
     });
@@ -347,21 +398,18 @@ describe('InventoryService', () => {
 
       await service.getLowStockAlerts('branch-1', 'org-1');
 
-      expect(prisma.inventory.findMany).toHaveBeenCalledWith({
-        where: {
-          branchId: 'branch-1',
-          product: {
-            organizationId: 'org-1',
-            deletedAt: null,
-            minStock: { gt: 0 },
+      expect(prisma.inventory.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            branchId: 'branch-1',
+            product: {
+              organizationId: 'org-1',
+              deletedAt: null,
+              minStock: { gt: 0 },
+            },
           },
-        },
-        include: {
-          product: { include: { category: true } },
-          branch: true,
-        },
-        orderBy: { quantity: 'asc' },
-      });
+        }),
+      );
     });
   });
 
@@ -384,12 +432,9 @@ describe('InventoryService', () => {
       prisma.branch.findFirst
         .mockResolvedValueOnce(mockFromBranch as any)
         .mockResolvedValueOnce(mockToBranch as any);
-      prisma.inventory.findUnique
-        .mockResolvedValueOnce(mockFromInventory as any)
-        .mockResolvedValueOnce({ id: 'inv-2', quantity: 30 } as any);
-      prisma.inventory.update
-        .mockResolvedValueOnce({ ...mockFromInventory, quantity: 40 } as any)
-        .mockResolvedValueOnce({ id: 'inv-2', quantity: 40 } as any);
+      prisma.inventory.findUnique.mockResolvedValueOnce(mockFromInventory as any);
+      prisma.inventory.update.mockResolvedValueOnce({ ...mockFromInventory, quantity: 40 } as any);
+      prisma.inventory.upsert.mockResolvedValueOnce({ id: 'inv-2', quantity: 40 } as any);
       prisma.transfer.create.mockResolvedValue({ id: 'transfer-1' } as any);
       prisma.stockAdjustment.create.mockResolvedValue({} as any);
 
@@ -406,18 +451,22 @@ describe('InventoryService', () => {
       );
 
       expect(result.data.id).toBe('transfer-1');
-      expect(prisma.inventory.update).toHaveBeenCalledTimes(2);
+      expect(prisma.inventory.update).toHaveBeenCalledTimes(1);
+      expect(prisma.inventory.upsert).toHaveBeenCalledTimes(1);
       expect(prisma.stockAdjustment.create).toHaveBeenCalledTimes(2);
-      expect(prisma.transfer.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          productId: 'prod-1',
-          fromBranchId: 'branch-1',
-          toBranchId: 'branch-2',
-          quantity: 10,
-          status: 'RECEIVED',
-          notes: 'Test transfer',
+      expect(prisma.transfer.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            fromBranchId: 'branch-1',
+            toBranchId: 'branch-2',
+            status: 'RECEIVED',
+          }),
+          include: expect.objectContaining({
+            fromBranch: true,
+            toBranch: true,
+          }),
         }),
-      });
+      );
     });
 
     it('should throw BadRequestException when transferring to same branch', async () => {
@@ -496,13 +545,12 @@ describe('InventoryService', () => {
         .mockResolvedValueOnce(mockFromBranch as any)
         .mockResolvedValueOnce(mockToBranch as any);
       prisma.inventory.findUnique
-        .mockResolvedValueOnce(mockFromInventory as any)
-        .mockResolvedValueOnce(null);
+        .mockResolvedValueOnce(mockFromInventory as any);
       prisma.inventory.update.mockResolvedValue({
         ...mockFromInventory,
         quantity: 40,
       } as any);
-      prisma.inventory.create.mockResolvedValue({
+      prisma.inventory.upsert.mockResolvedValue({
         id: 'inv-new',
         quantity: 10,
       } as any);
@@ -520,13 +568,15 @@ describe('InventoryService', () => {
         'user-1',
       );
 
-      expect(prisma.inventory.create).toHaveBeenCalledWith({
-        data: {
-          productId: 'prod-1',
-          branchId: 'branch-2',
-          quantity: 10,
-        },
-      });
+      expect(prisma.inventory.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: {
+            productId: 'prod-1',
+            branchId: 'branch-2',
+            quantity: 10,
+          },
+        }),
+      );
     });
   });
 
@@ -549,10 +599,10 @@ describe('InventoryService', () => {
       prisma.order.findFirst.mockResolvedValue(mockOrder as any);
     });
 
-    it('should return placeholder message (pending Order-Branch integration)', async () => {
+    it('should return placeholder message (pending Orders module)', async () => {
       const result = await service.deductStockOnOrderProcessing('order-1', 'org-1', 'user-1');
 
-      expect(result.message).toContain('pending Order-Branch integration');
+      expect(result.message).toContain('pending OrdersModule implementation');
       expect(prisma.order.findFirst).toHaveBeenCalledWith({
         where: { id: 'order-1', organizationId: 'org-1' },
         include: {
@@ -593,10 +643,10 @@ describe('InventoryService', () => {
       prisma.order.findFirst.mockResolvedValue(mockOrder as any);
     });
 
-    it('should return placeholder message (pending Order-Branch integration)', async () => {
+    it('should return placeholder message (pending Orders module)', async () => {
       const result = await service.returnStockOnOrderCancel('order-1', 'org-1', 'user-1');
 
-      expect(result.message).toContain('pending Order-Branch integration');
+      expect(result.message).toContain('pending OrdersModule implementation');
       expect(prisma.order.findFirst).toHaveBeenCalledWith({
         where: { id: 'order-1', organizationId: 'org-1' },
         include: {

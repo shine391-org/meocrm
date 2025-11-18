@@ -121,7 +121,7 @@ describe('CustomersService', () => {
       prisma.customer.findFirst.mockResolvedValue({ id: '1' });
 
       const result = await service.findOne('1', organizationId);
-      expect(result).toEqual({ id: '1' });
+      expect(result).toEqual({ data: { id: '1' } });
     });
 
     it('throws NotFound when customer missing', async () => {
@@ -145,7 +145,7 @@ describe('CustomersService', () => {
         where: { id: '1', organizationId, deletedAt: null },
         data: { name: 'Updated', phone: '222' },
       });
-      expect(result).toEqual({ id: '1', name: 'Updated' });
+      expect(result).toEqual({ data: { id: '1', name: 'Updated' } });
     });
 
     it('throws Conflict when new phone already exists', async () => {
@@ -260,7 +260,6 @@ describe('CustomersService', () => {
 
       prisma.customer.findFirst
         .mockResolvedValueOnce({ id: '1', phone: '111', organizationId }) // findOne
-        .mockResolvedValueOnce(null) // duplicate phone check
         .mockResolvedValueOnce({ id: '1', birthday: new Date(dto.birthday) }); // findOne after update
       prisma.customer.updateMany.mockResolvedValue({ count: 1 });
 
@@ -278,10 +277,8 @@ describe('CustomersService', () => {
 
       const dto = { birthday: futureDate.toISOString() };
 
-      prisma.customer.findFirst.mockResolvedValueOnce({ id: '1', phone: '111', organizationId });
+      prisma.customer.findFirst.mockResolvedValue({ id: '1', phone: '111', organizationId });
 
-      await expect(service.update('1', dto, organizationId))
-        .rejects.toThrow(BadRequestException);
       await expect(service.update('1', dto, organizationId))
         .rejects.toThrow('Birthday cannot be in the future');
     });

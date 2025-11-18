@@ -45,14 +45,24 @@ describe('RefundsService', () => {
       id: 'order-1',
       code: 'ORD-001',
       status: OrderStatus.COMPLETED,
+      customerId: 'cust-1',
+      subtotal: 100 as any,
+      tax: 0 as any,
+      shipping: 0 as any,
+      discount: 0 as any,
+      paymentMethod: 'CASH' as any,
+      isPaid: false,
+      paidAmount: 0 as any,
+      notes: null,
       total: 100 as any,
-      userId: 'user-1',
       organizationId: 'org-1',
       branchId: 'branch-1',
+      createdBy: 'user-1',
       completedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
       deletedAt: null,
+      paidAt: null,
       commissions: [],
       items: [
         {
@@ -64,23 +74,19 @@ describe('RefundsService', () => {
           unitPrice: 50 as any,
           subtotal: 100 as any,
           organizationId: 'org-1',
-          createdAt: new Date(),
-          updatedAt: new Date(),
           variant: {
             id: 'variant-1',
             productId: 'prod-1',
             sku: 'SKU-001',
-            sellPrice: 50 as any,
             name: 'Variant',
-            organizationId: 'org-1',
-            isActive: true,
-            images: [],
-            attributes: null,
-            deletedAt: null,
+            additionalPrice: 0 as any,
             stock: 10,
+            images: [],
+            organizationId: 'org-1',
             createdAt: new Date(),
             updatedAt: new Date(),
-          },
+            deletedAt: null,
+          } as ProductVariant,
         },
       ],
     };
@@ -209,7 +215,7 @@ describe('RefundsService', () => {
           user: mockUser,
           action: 'refund.approved',
           entityId: 'order-1',
-          newValues: { restocked: true },
+          newValues: expect.objectContaining({ restocked: true }),
         }),
       );
 
@@ -247,8 +253,10 @@ describe('RefundsService', () => {
       const adjustmentPayload = prisma.commission.create.mock.calls[0][0].data;
       expect(adjustmentPayload.adjustsCommissionId).toBe(commission.id);
       expect(adjustmentPayload.isAdjustment).toBe(true);
-      expect(adjustmentPayload.valueGross.equals(new Prisma.Decimal(-100))).toBe(true);
-      expect(adjustmentPayload.amount.equals(new Prisma.Decimal(-20))).toBe(true);
+      const grossValue = new Prisma.Decimal(adjustmentPayload.valueGross as Prisma.Decimal.Value);
+      const amountValue = new Prisma.Decimal(adjustmentPayload.amount as Prisma.Decimal.Value);
+      expect(grossValue.equals(new Prisma.Decimal(-100))).toBe(true);
+      expect(amountValue.equals(new Prisma.Decimal(-20))).toBe(true);
     });
 
     it('skips restocking when refund.restockOnRefund is false', async () => {
