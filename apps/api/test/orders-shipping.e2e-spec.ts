@@ -25,6 +25,7 @@ describe('Orders Shipping (e2e)', () => {
   let customerId: string;
   let productId: string;
   let productPrice: number;
+  let branchId: string;
 
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
@@ -48,6 +49,16 @@ describe('Orders Shipping (e2e)', () => {
     const product = await createProduct(prisma, organizationId, { sellPrice: 100000 });
     productId = product.id;
     productPrice = Number(product.sellPrice);
+
+    const branch = await prisma.branch.create({
+      data: {
+        organizationId,
+        name: 'Shipping Branch',
+        address: '789 Ship St',
+        phone: '0933001122',
+      },
+    });
+    branchId = branch.id;
 
     // Seed settings for this organization
     await prisma.setting.createMany({
@@ -93,6 +104,7 @@ describe('Orders Shipping (e2e)', () => {
 
   const createOrderPayload = (channel: string, quantity: number) => ({
     customerId,
+    branchId,
     items: [{ productId, quantity }],
     paymentMethod: 'CASH',
     channel,
@@ -109,8 +121,8 @@ describe('Orders Shipping (e2e)', () => {
     const subtotal = productPrice * payload.items[0].quantity;
     const expectedTax = subtotal * taxRate;
 
-    expect(response.body.shipping).toBe(0);
-    expect(response.body.total).toBe(subtotal + expectedTax);
+    expect(response.body.data.shipping).toBe(0);
+    expect(response.body.data.total).toBe(subtotal + expectedTax);
   });
 
   it('should NOT apply free shipping for ONLINE channel when subtotal is below threshold', async () => {
@@ -124,8 +136,8 @@ describe('Orders Shipping (e2e)', () => {
     const subtotal = productPrice * payload.items[0].quantity;
     const expectedTax = subtotal * taxRate;
 
-    expect(response.body.shipping).toBe(defaultShippingFee);
-    expect(response.body.total).toBe(subtotal + expectedTax + defaultShippingFee);
+    expect(response.body.data.shipping).toBe(defaultShippingFee);
+    expect(response.body.data.total).toBe(subtotal + expectedTax + defaultShippingFee);
   });
 
   it('should NOT apply free shipping for POS channel even when subtotal is above threshold', async () => {
@@ -139,7 +151,7 @@ describe('Orders Shipping (e2e)', () => {
     const subtotal = productPrice * payload.items[0].quantity;
     const expectedTax = subtotal * taxRate;
 
-    expect(response.body.shipping).toBe(defaultShippingFee);
-    expect(response.body.total).toBe(subtotal + expectedTax + defaultShippingFee);
+    expect(response.body.data.shipping).toBe(defaultShippingFee);
+    expect(response.body.data.total).toBe(subtotal + expectedTax + defaultShippingFee);
   });
 });

@@ -32,6 +32,11 @@ export class CreateOrderItemDto {
 }
 
 export class CreateOrderDto {
+  @ApiProperty({ example: 'branch-uuid', description: 'Branch fulfilling the order' })
+  @IsString()
+  @IsNotEmpty()
+  branchId!: string;
+
   @ApiProperty({ example: 'customer-uuid' })
   @IsString()
   @IsNotEmpty()

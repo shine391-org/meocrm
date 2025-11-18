@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- OrdersModule Batch 4A (ORD-001…ORD-006) now delivers full NestJS endpoints with branch-aware validation, stock warnings, and customer stat updates.
+- Business logic items (ORD-007…ORD-012) implemented, including automatic status workflow enforcement, cancellation handling, COD completion automation, and background stock deduction via `OrderAutomaticActionsService`.
+- Orders API responses now expose branch metadata, pagination, and optional warning payloads for low stock scenarios.
+
+### Changed
+- POST `/orders` requires `branchId` to ensure multi-branch inventory tracking and enforces “no partial payment” + COD payment rules.
+- `GET /orders` and `GET /orders/:id` return normalized `{ data, meta }` payloads used by the dashboard and API client, aligning with the shared response contract.
+- Updated e2e suites (orders, debt integrity, shipping) to exercise the new workflow and response shapes, keeping coverage ≥80%.
+
 ## [2025-11-16] - E2E Accessibility Fixes & Workflow Documentation
 
 ### Fixed

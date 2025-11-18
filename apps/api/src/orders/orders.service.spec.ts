@@ -6,12 +6,14 @@ import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { Prisma, PrismaClient, OrderStatus } from '@prisma/client';
 import { PricingService } from './pricing.service';
 import { SettingsService } from '../modules/settings/settings.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 
 describe('OrdersService', () => {
   let service: OrdersService;
   let prisma: DeepMockProxy<PrismaClient>;
+  let eventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -27,6 +29,8 @@ describe('OrdersService', () => {
             calculateTotals: jest.fn().mockResolvedValue({
               shippingFee: 10, // Default mock shipping fee
               freeShipApplied: false,
+              taxRate: 0.1,
+              taxAmount: 5,
             }),
           },
         },
@@ -34,16 +38,28 @@ describe('OrdersService', () => {
           provide: SettingsService,
           useValue: mockDeep<SettingsService>(),
         },
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
+        },
       ],
     }).compile();
 
     service = module.get<OrdersService>(OrdersService);
     prisma = module.get(PrismaService) as DeepMockProxy<PrismaClient>;
+    eventEmitter = module.get(EventEmitter2) as any;
+    eventEmitter.emit.mockReset();
 
     (prisma.$transaction as unknown as jest.Mock).mockImplementation(
       async (callback: (tx: PrismaTransactionalClient) => Promise<any>) =>
         callback(prisma as unknown as PrismaTransactionalClient),
     );
+
+    prisma.branch.findFirst.mockResolvedValue({
+      id: 'branch-1',
+      name: 'Branch 1',
+      organizationId: 'org-1',
+    } as any);
   });
 
   describe('calculateOrderTotals (variants)', () => {
@@ -124,6 +140,7 @@ describe('OrdersService', () => {
 
   describe('create', () => {
     const mockCreateDto = {
+      branchId: 'branch-1',
       customerId: 'customer-1',
       items: [
         {
@@ -132,6 +149,7 @@ describe('OrdersService', () => {
           unitPrice: 100,
         },
       ],
+      paymentMethod: 'CASH',
     };
 
     const mockProduct = {
@@ -155,6 +173,17 @@ describe('OrdersService', () => {
       paidAmount: 0,
       status: OrderStatus.PENDING,
       organizationId: 'org-1',
+      items: [],
+      customer: {
+        id: 'customer-1',
+        totalSpent: 0,
+        debt: 0,
+        totalOrders: 0,
+      },
+      branch: {
+        id: 'branch-1',
+        name: 'Branch 1',
+      },
     };
 
     const mockCustomer = {
@@ -169,6 +198,12 @@ describe('OrdersService', () => {
       (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
         // Create a mock transaction client
         const txClient = {
+          branch: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'branch-1',
+              name: 'Branch 1',
+            }),
+          },
           product: {
             findFirst: jest.fn().mockResolvedValue(mockProduct),
             update: jest.fn().mockResolvedValue(mockProduct),
@@ -189,9 +224,13 @@ describe('OrdersService', () => {
     });
 
     it('should create order and increase customer debt when isPaid=false', async () => {
-      const result = await service.create(mockCreateDto as any, 'org-1');
+      const result = await service.create(
+        mockCreateDto as any,
+        'org-1',
+        { id: 'user-1', organizationId: 'org-1' } as any,
+      );
 
-      expect(result).toMatchObject({
+      expect(result.data).toMatchObject({
         id: 'order-1',
         isPaid: false,
         paidAmount: 0,
@@ -201,12 +240,21 @@ describe('OrdersService', () => {
       expect(prisma.$transaction).toHaveBeenCalled();
     });
 
-    it('should NOT increase customer debt when isPaid=true', async () => {
-      // subtotal 200 + tax 20 + shipping 10 = 230
-      const paidDto = { ...mockCreateDto, isPaid: true, paidAmount: 230 };
+    it('respects immediate payment when allowed', async () => {
+      const paidDto = {
+        ...mockCreateDto,
+        isPaid: true,
+        paidAmount: 215,
+      };
 
       (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
         const txClient = {
+          branch: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'branch-1',
+              name: 'Branch 1',
+            }),
+          },
           product: {
             findFirst: jest.fn().mockResolvedValue(mockProduct),
           },
@@ -222,53 +270,24 @@ describe('OrdersService', () => {
         return callback(txClient);
       });
 
-      const result = await service.create(paidDto as any, 'org-1');
+      const result = await service.create(
+        paidDto as any,
+        'org-1',
+        { id: 'user-1', organizationId: 'org-1' } as any,
+      );
 
-      expect(result.isPaid).toBe(true);
-    });
-
-    it('should handle partial payment correctly', async () => {
-      const partialDto = {
-        ...mockCreateDto,
-        isPaid: false,
-        paidAmount: 50,
-      };
-
-      // Total = 200, paidAmount = 50 → debt increase = 150
-      (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
-        const txClient = {
-          product: {
-            findFirst: jest.fn().mockResolvedValue(mockProduct),
-          },
-          order: {
-            create: jest.fn().mockResolvedValue({
-              ...mockOrder,
-              paidAmount: 50,
-            }),
-            findFirst: jest.fn().mockResolvedValue(null),
-          },
-          customer: {
-            findFirst: jest.fn().mockResolvedValue({ id: 'customer-1' }),
-            update: jest.fn().mockImplementation((args) => {
-              // total 230 - paid 50 = 180
-              // Verify debt increment is correct
-              expect(args.data.debt).toEqual({ increment: 180 });
-              return Promise.resolve({
-                ...mockCustomer,
-                debt: 180,
-              });
-            }),
-          },
-        };
-        return callback(txClient);
-      });
-
-      await service.create(partialDto as any, 'org-1');
+      expect(result.data.isPaid).toBe(true);
     });
 
     it('should throw error if product not found', async () => {
       (prisma.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
         const txClient = {
+          branch: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'branch-1',
+              name: 'Branch 1',
+            }),
+          },
           product: {
             findFirst: jest.fn().mockResolvedValue(null),
           },
@@ -282,7 +301,11 @@ describe('OrdersService', () => {
       });
 
       await expect(
-        service.create(mockCreateDto as any, 'org-1'),
+        service.create(
+          mockCreateDto as any,
+          'org-1',
+          { id: 'user-1', organizationId: 'org-1' } as any,
+        ),
       ).rejects.toThrow();
     });
   });
@@ -304,7 +327,7 @@ describe('OrdersService', () => {
     } as any;
 
     beforeEach(() => {
-      jest.spyOn(service, 'findOne').mockResolvedValue(baseOrder);
+      jest.spyOn(service, 'findOne').mockResolvedValue({ data: baseOrder });
     });
 
     it('updates customer stats when shipping changes', async () => {
@@ -366,7 +389,7 @@ describe('OrdersService', () => {
     } as any;
 
     beforeEach(() => {
-      jest.spyOn(service, 'findOne').mockResolvedValue(removableOrder);
+      jest.spyOn(service, 'findOne').mockResolvedValue({ data: removableOrder });
     });
 
     it('reverts customer debt using computed totals', async () => {
@@ -421,11 +444,14 @@ describe('OrdersService', () => {
         discount: new Prisma.Decimal(0),
         total: new Prisma.Decimal(115),
         paidAmount: new Prisma.Decimal(20),
+        customer: null,
+        items: [],
+        branch: null,
       } as any;
       prisma.order.findFirst.mockResolvedValue(order);
 
       const result = await service.findOne('order-1', 'org-id');
-      expect(result).toMatchObject({
+      expect(result.data).toMatchObject({
         id: 'order-1',
         subtotal: 100,
         tax: 10,
@@ -465,6 +491,7 @@ describe('OrdersService', () => {
       completedAt: null,
       deletedAt: null,
       branchId: null,
+      branch: null,
       notes: null,
     } as any;
 
@@ -478,6 +505,9 @@ describe('OrdersService', () => {
         discount: new Prisma.Decimal(0),
         total: new Prisma.Decimal(115),
         paidAmount: new Prisma.Decimal(0),
+        customer: null,
+        items: [],
+        branch: null,
       } as any);
       await service.updateStatus(
         'order-1',
@@ -492,6 +522,15 @@ describe('OrdersService', () => {
           }),
         }),
       );
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'orders.status.changed',
+        expect.objectContaining({
+          orderId: 'order-1',
+          previousStatus: OrderStatus.PENDING,
+          nextStatus: OrderStatus.CONFIRMED,
+        }),
+      );
     });
 
     it('should reject an invalid status transition', async () => {
@@ -499,7 +538,7 @@ describe('OrdersService', () => {
       await expect(
         service.updateStatus('order-1', { status: OrderStatus.DELIVERED } as any, 'org-id'),
       ).rejects.toThrow(
-        'Cannot transition from PENDING to DELIVERED. Valid transitions: CONFIRMED, CANCELLED',
+        'Cannot transition from PENDING to DELIVERED. Valid transitions: CONFIRMED, PROCESSING, CANCELLED',
       );
     });
 

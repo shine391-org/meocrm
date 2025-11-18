@@ -26,11 +26,13 @@ import { User } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderEntity } from './entities/order.entity';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { OrganizationGuard } from '../common/guards/organization.guard';
+import { OrganizationId } from '../common/decorators/organization-id.decorator';
 
 @ApiTags('orders')
 @ApiBearerAuth()
 @Controller('orders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, OrganizationGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
@@ -48,9 +50,10 @@ export class OrdersController {
   })
   create(
     @Body() createOrderDto: CreateOrderDto,
+    @OrganizationId() organizationId: string,
     @CurrentUser() user: User,
   ) {
-    return this.ordersService.create(createOrderDto, user.organizationId);
+    return this.ordersService.create(createOrderDto, organizationId, user);
   }
 
   @Get()
@@ -59,16 +62,22 @@ export class OrdersController {
     status: 200,
     description: 'Orders retrieved successfully',
   })
-  findAll(@Query() query: QueryOrdersDto, @CurrentUser() user: User) {
-    return this.ordersService.findAll(user.organizationId, query);
+  findAll(
+    @Query() query: QueryOrdersDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.ordersService.findAll(organizationId, query);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get order detail' })
   @ApiResponse({ status: 200, description: 'Order found', type: OrderEntity })
   @ApiResponse({ status: 404, description: 'Order not found' })
-  findOne(@Param('id') id: string, @CurrentUser() user: User) {
-    return this.ordersService.findOne(id, user.organizationId);
+  findOne(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.ordersService.findOne(id, organizationId);
   }
 
   @Put(':id')
@@ -79,9 +88,10 @@ export class OrdersController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateOrderDto,
+    @OrganizationId() organizationId: string,
     @CurrentUser() user: User,
   ) {
-    return this.ordersService.update(id, dto, user.organizationId);
+    return this.ordersService.update(id, dto, organizationId, user);
   }
 
   @Delete(':id')
@@ -89,8 +99,12 @@ export class OrdersController {
   @ApiResponse({ status: 200, description: 'Order deleted' })
   @ApiResponse({ status: 400, description: 'Cannot delete order' })
   @ApiResponse({ status: 404, description: 'Order not found' })
-  remove(@Param('id') id: string, @CurrentUser() user: User) {
-    return this.ordersService.remove(id, user.organizationId);
+  remove(
+    @Param('id') id: string,
+    @OrganizationId() organizationId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.ordersService.remove(id, organizationId, user);
   }
 
   @Patch(':id/status')
@@ -104,8 +118,9 @@ export class OrdersController {
   updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
+    @OrganizationId() organizationId: string,
     @CurrentUser() user: User,
   ) {
-    return this.ordersService.updateStatus(id, dto, user.organizationId);
+    return this.ordersService.updateStatus(id, dto, organizationId, user);
   }
 }

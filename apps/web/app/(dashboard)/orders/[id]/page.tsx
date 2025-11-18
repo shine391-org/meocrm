@@ -108,17 +108,18 @@ export default function OrderDetailsPage() {
       }
 
       const latestOrder = await OrdersService.getOrdersById(orderId);
+      const normalizedOrder = (latestOrder as any)?.data ?? latestOrder;
       if (!isMountedRef.current) {
         return;
       }
 
-      if (latestOrder.organizationId && latestOrder.organizationId !== tenantId) {
+      if (normalizedOrder.organizationId && normalizedOrder.organizationId !== tenantId) {
         setOrder(null);
         setErrorMessage('Bạn không được phép xem đơn hàng này.');
         return;
       }
 
-      setOrder(latestOrder);
+      setOrder(normalizedOrder as Order);
     } catch (error) {
       console.error('Failed to fetch order', error);
       if (isMountedRef.current) {

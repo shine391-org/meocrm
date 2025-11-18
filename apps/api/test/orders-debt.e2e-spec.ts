@@ -12,6 +12,7 @@ describe('Orders Debt Integrity E2E', () => {
   let customerId: string;
   let productId: string;
   let organizationId: string;
+  let branchId: string;
   const TEST_ORG_PREFIX = 'E2E-DEBT-';
   const RELATED_PREFIXES = ['E2E-ORDERS-'];
 
@@ -72,6 +73,16 @@ describe('Orders Debt Integrity E2E', () => {
       },
     });
     productId = product.id;
+
+    const branch = await prisma.branch.create({
+      data: {
+        organizationId,
+        name: 'Debt Branch',
+        address: '456 Debt St',
+        phone: '0900999888',
+      },
+    });
+    branchId = branch.id;
   });
 
   afterAll(async () => {
@@ -95,13 +106,14 @@ describe('Orders Debt Integrity E2E', () => {
     const response = await request(app.getHttpServer())
       .post('/orders')
       .set('Authorization', `Bearer ${authToken}`)
-      .send({
+        .send({
         customerId,
+        branchId,
         items: [{ productId, quantity: 2 }],
         paymentMethod: 'CASH',
       })
       .expect(201);
-    return response.body;
+    return response.body.data;
   };
 
   const deleteOrder = async (orderId: string) => {
@@ -124,7 +136,7 @@ describe('Orders Debt Integrity E2E', () => {
     await request(app.getHttpServer())
       .put(`/orders/${order.id}`)
       .set('Authorization', `Bearer ${authToken}`)
-      .send({ shipping: 50000 })
+        .send({ shipping: 50000 })
       .expect(200);
 
     await deleteOrder(order.id);
@@ -137,7 +149,7 @@ describe('Orders Debt Integrity E2E', () => {
     await request(app.getHttpServer())
       .put(`/orders/${order.id}`)
       .set('Authorization', `Bearer ${authToken}`)
-      .send({ discount: 15000 })
+        .send({ discount: 15000 })
       .expect(200);
 
     await deleteOrder(order.id);
@@ -150,7 +162,7 @@ describe('Orders Debt Integrity E2E', () => {
     await request(app.getHttpServer())
       .put(`/orders/${order.id}`)
       .set('Authorization', `Bearer ${authToken}`)
-      .send({ shipping: 60000, discount: 10000 })
+        .send({ shipping: 60000, discount: 10000 })
       .expect(200);
 
     await deleteOrder(order.id);

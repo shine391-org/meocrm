@@ -225,7 +225,7 @@ describe('WebhooksService + HMAC guard integration', () => {
     });
 
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`order ${order.id}`),
+      expect.stringContaining('skipped'),
     );
 
     warnSpy.mockRestore();

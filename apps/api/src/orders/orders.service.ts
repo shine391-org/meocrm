@@ -2,14 +2,17 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, CreateOrderItemDto } from './dto/create-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
-import { Prisma, OrderStatus } from '@prisma/client';
+import { Prisma, OrderStatus, PaymentMethod, User } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { PricingService } from './pricing.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { OrderWarning, OrderStatusChangedEvent } from './orders.types';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 type OrderFinancialInput = {
@@ -20,12 +23,53 @@ type OrderFinancialInput = {
   paidAmount: Prisma.Decimal | number;
 };
 
+type OrderWithRelations = Prisma.OrderGetPayload<{
+  include: {
+    customer: true;
+    items: {
+      include: {
+        product: true;
+        variant: true;
+      };
+    };
+    branch: true;
+  };
+}>;
+
+type OrderActor = Pick<User, 'id' | 'organizationId'> | undefined;
+
+const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.PENDING]: [
+    OrderStatus.CONFIRMED,
+    OrderStatus.PROCESSING,
+    OrderStatus.CANCELLED,
+  ],
+  [OrderStatus.CONFIRMED]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+  [OrderStatus.PROCESSING]: [
+    OrderStatus.SHIPPED,
+    OrderStatus.COMPLETED,
+    OrderStatus.CANCELLED,
+  ],
+  [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
+  [OrderStatus.DELIVERED]: [OrderStatus.COMPLETED],
+  [OrderStatus.COMPLETED]: [],
+  [OrderStatus.CANCELLED]: [],
+};
+
+const CANCELLABLE_STATUSES: OrderStatus[] = [
+  OrderStatus.PENDING,
+  OrderStatus.PROCESSING,
+];
+
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricingService: PricingService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  private readonly logger = new Logger(OrdersService.name);
 
   async generateOrderCode(
     organizationId: string,
@@ -47,9 +91,12 @@ export class OrdersService {
     return `ORD${(lastNumber + 1).toString().padStart(3, '0')}`;
   }
 
-  async create(dto: CreateOrderDto, organizationId: string) {
+  async create(dto: CreateOrderDto, organizationId: string, user: User) {
+    if (!dto.items?.length) {
+      throw new BadRequestException('Order must include at least one item');
+    }
+
     return this.prisma.$transaction(async (prisma) => {
-      // 1. Validate customer
       const customer = await prisma.customer.findFirst({
         where: { id: dto.customerId, organizationId, deletedAt: null },
       });
@@ -59,53 +106,86 @@ export class OrdersService {
         );
       }
 
-      // 2. Validate products and calculate totals
-      const { itemsData, subtotal, tax } = await this.calculateOrderTotals(
+      const branch = await prisma.branch.findFirst({
+        where: { id: dto.branchId, organizationId },
+      });
+      if (!branch) {
+        throw new NotFoundException(
+          `Branch with ID ${dto.branchId} not found`,
+        );
+      }
+
+      const { itemsData, subtotal, warnings } = await this.calculateOrderTotals(
         dto.items,
         organizationId,
         prisma,
       );
 
-      // 3. Calculate shipping and apply promotions (e.g., free ship)
       const pricingResult = await this.pricingService.calculateTotals({
         channel: dto.channel,
-        subtotal: subtotal,
+        subtotal,
       });
-      const finalShippingFee = pricingResult.shippingFee;
-
-      // 4. Calculate final total
-      const total = subtotal + tax + finalShippingFee - (dto.discount || 0);
-
-      if (dto.paidAmount && dto.paidAmount > total) {
-        throw new BadRequestException(
-          `paidAmount (${dto.paidAmount}) cannot exceed order total (${total})`,
-        );
+      const discount = Number(dto.discount ?? 0);
+      if (discount < 0) {
+        throw new BadRequestException('Discount must be zero or positive');
+      }
+      if (discount > subtotal) {
+        throw new BadRequestException('Discount cannot exceed subtotal');
       }
 
-      if (dto.isPaid === true && dto.paidAmount !== total) {
+      const tax = Number(pricingResult.taxAmount ?? 0);
+      const shipping = Number(pricingResult.shippingFee ?? 0);
+      const total = subtotal - discount + tax + shipping;
+
+      if (total <= 0) {
+        throw new BadRequestException('Order total must be greater than zero');
+      }
+
+      const basePaidAmount = Number(dto.paidAmount ?? 0);
+      const wantsPaid = Boolean(dto.isPaid);
+
+      if (basePaidAmount < 0) {
+        throw new BadRequestException('paidAmount cannot be negative');
+      }
+
+      if (wantsPaid && basePaidAmount !== total) {
         throw new BadRequestException(
           `When isPaid is true, paidAmount must equal total (${total})`,
         );
       }
 
-      // 4. Generate code
-      const code = await this.generateOrderCode(organizationId, prisma);
+      if (!wantsPaid && basePaidAmount > 0) {
+        throw new BadRequestException('Partial payments are not supported');
+      }
 
-      // 5. Create order
+      if (dto.paymentMethod === PaymentMethod.COD && wantsPaid) {
+        throw new BadRequestException('COD orders cannot be marked as paid upfront');
+      }
+
+      const paidAmount = wantsPaid ? total : 0;
+      const isPaid = wantsPaid;
+
+      const status =
+        dto.channel?.toUpperCase() === 'POS' && isPaid
+          ? OrderStatus.COMPLETED
+          : OrderStatus.PENDING;
+
       const order = await prisma.order.create({
         data: {
-          code,
+          code: await this.generateOrderCode(organizationId, prisma),
           customerId: dto.customerId,
+          branchId: dto.branchId,
           subtotal,
           tax,
-          shipping: finalShippingFee,
-          discount: dto.discount || 0,
+          shipping,
+          discount,
           total,
-          isPaid: dto.isPaid || false,
-          paidAmount: dto.paidAmount || 0,
-          status: OrderStatus.PENDING,
+          isPaid,
+          paidAmount,
           paymentMethod: dto.paymentMethod,
           notes: dto.notes ?? null,
+          status,
+          completedAt: status === OrderStatus.COMPLETED ? new Date() : undefined,
           organizationId,
           items: { create: itemsData },
         },
@@ -117,28 +197,45 @@ export class OrdersService {
               variant: true,
             },
           },
+          branch: true,
         },
       });
 
-      // 6. Update customer stats
       await prisma.customer.update({
         where: { id: dto.customerId },
         data: {
           totalSpent: { increment: total },
           totalOrders: { increment: 1 },
           debt: {
-            increment: dto.isPaid ? 0 : total - (dto.paidAmount || 0),
+            increment: isPaid ? 0 : Math.max(total - paidAmount, 0),
           },
           lastOrderAt: new Date(),
         },
       });
 
-      return this.mapOrderResponse(order);
+      const normalized = this.mapOrderResponse(order);
+
+      this.eventEmitter.emit('orders.created', {
+        orderId: order.id,
+        organizationId,
+        userId: user?.id,
+        warnings,
+      });
+
+      return {
+        data: normalized,
+        warnings,
+      };
     });
   }
 
-  async update(id: string, dto: UpdateOrderDto, organizationId: string) {
-    const order = await this.findOne(id, organizationId);
+  async update(
+    id: string,
+    dto: UpdateOrderDto,
+    organizationId: string,
+    _user?: User,
+  ) {
+    const { data: order } = await this.findOne(id, organizationId);
     const previousFinancials = this.calculateOrderFinancials(order);
 
     // ⚠️ Only allow update if status = PENDING
@@ -163,8 +260,13 @@ export class OrdersService {
           prisma,
         );
         subtotal = calculated.subtotal;
-        tax = calculated.tax;
         itemsData = calculated.itemsData;
+
+        const pricingTotals = await this.pricingService.calculateTotals({
+          channel: undefined,
+          subtotal,
+        });
+        tax = Number(pricingTotals.taxAmount ?? subtotal * pricingTotals.taxRate);
       }
 
       const shipping = Number(dto.shipping ?? order.shipping);
@@ -192,7 +294,11 @@ export class OrdersService {
           notes: dto.notes,
           updatedAt: new Date(),
         },
-        include: { customer: true, items: true },
+        include: {
+          customer: true,
+          items: true,
+          branch: true,
+        },
       });
 
       const totalDelta =
@@ -215,12 +321,12 @@ export class OrdersService {
         });
       }
 
-      return orderUpdate;
+      return { data: this.mapOrderResponse(orderUpdate) };
     });
   }
 
-  async remove(id: string, organizationId: string) {
-    const order = await this.findOne(id, organizationId);
+  async remove(id: string, organizationId: string, _user?: User) {
+    const { data: order } = await this.findOne(id, organizationId);
 
     // ⚠️ Only allow delete if status = PENDING or CANCELLED
     const removableStatuses: OrderStatus[] = [
@@ -265,10 +371,22 @@ export class OrdersService {
       }
 
       // Soft delete
-      return prisma.order.update({
+      const deleted = await prisma.order.update({
         where: { id },
         data: { deletedAt: new Date() },
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+              variant: true,
+            },
+          },
+          branch: true,
+        },
       });
+
+      return { data: this.mapOrderResponse(deleted) };
     });
   }
 
@@ -292,10 +410,11 @@ export class OrdersService {
   ): Promise<{
     itemsData: any[];
     subtotal: number;
-    tax: number;
+    warnings: OrderWarning[];
   }> {
     let subtotal = 0;
-    const itemsData = [];
+    const itemsData: any[] = [];
+    const warnings: OrderWarning[] = [];
 
     for (const item of items) {
       const product = await prisma.product.findFirst({
@@ -309,7 +428,8 @@ export class OrdersService {
 
       const basePrice = Number(product.sellPrice);
       let unitPrice = basePrice;
-      let selectedVariant = null;
+      let selectedVariant: { id: string; additionalPrice: Prisma.Decimal | number; stock: number; sku?: string | null } | null =
+        null;
 
       if (item.variantId) {
         const variant = product.variants.find((v) => v.id === item.variantId);
@@ -324,14 +444,26 @@ export class OrdersService {
         selectedVariant = variant;
       }
 
-      // Stock check (log warning only)
-      const availableStock = selectedVariant
-        ? selectedVariant.stock
-        : product.stock;
-      if (availableStock < item.quantity) {
-        console.warn(
-          `Low stock warning: Product SKU ${product.sku}, Available: ${availableStock}, Requested: ${item.quantity}`,
+      const availableStock = Number(
+        selectedVariant ? selectedVariant.stock : product.stock,
+      );
+
+      if (availableStock <= 0) {
+        throw new BadRequestException(
+          `Product ${product.name} is out of stock`,
         );
+      }
+
+      if (availableStock < item.quantity) {
+        warnings.push({
+          type: 'LOW_STOCK',
+          productId: product.id,
+          variantId: selectedVariant?.id,
+          sku: selectedVariant?.sku ?? product.sku,
+          available: availableStock,
+          requested: item.quantity,
+          message: `Only ${availableStock} units available for ${product.name}, requested ${item.quantity}`,
+        });
       }
 
       const itemSubtotal = unitPrice * item.quantity;
@@ -347,12 +479,12 @@ export class OrdersService {
       });
     }
 
-    const tax = subtotal * 0.1; // 10% VAT
-    return { itemsData, subtotal, tax };
+    return { itemsData, subtotal, warnings };
   }
 
   async findAll(organizationId: string, query: QueryOrdersDto) {
-    const { page, limit, status, customerId, fromDate, toDate } = query;
+    const { page, limit, status, customerId, fromDate, toDate, paymentMethod } =
+      query;
     const where: Prisma.OrderWhereInput = {
       organizationId,
       deletedAt: null,
@@ -363,6 +495,9 @@ export class OrdersService {
     }
     if (customerId) {
       where.customerId = customerId;
+    }
+    if (paymentMethod) {
+      where.paymentMethod = paymentMethod;
     }
     if (fromDate || toDate) {
       where.createdAt = {};
@@ -380,6 +515,9 @@ export class OrdersService {
         include: {
           customer: {
             select: { name: true, phone: true },
+          },
+          branch: {
+            select: { id: true, name: true },
           },
           _count: {
             select: { items: true },
@@ -421,6 +559,7 @@ export class OrdersService {
             variant: true,
           },
         },
+        branch: true,
       },
     });
 
@@ -428,64 +567,141 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${id} not found`);
     }
 
-    return this.mapOrderResponse(order);
+    return { data: this.mapOrderResponse(order) };
   }
 
   async updateStatus(
     id: string,
     dto: UpdateOrderStatusDto,
     organizationId: string,
+    actor?: OrderActor,
   ) {
-    const order = await this.prisma.order.findFirst({
-      where: { id, organizationId, deletedAt: null },
-    });
-
-    if (!order) {
-      throw new NotFoundException(`Order with ID ${id} not found`);
-    }
-
-    const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-      [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
-      [OrderStatus.CONFIRMED]: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
-      [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
-      [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
-      [OrderStatus.DELIVERED]: [],
-      [OrderStatus.CANCELLED]: [],
-      [OrderStatus.COMPLETED]: [],
-    };
-
-    const validTransitions = VALID_TRANSITIONS[order.status];
-    if (!validTransitions.includes(dto.status)) {
-      throw new BadRequestException(
-        `Cannot transition from ${order.status} to ${
-          dto.status
-        }. Valid transitions: ${validTransitions.join(', ')}`,
-      );
-    }
-
-    // Customer stats are not adjusted for CANCELLED orders per clarification
-
-    const updated = await this.prisma.order.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        notes: dto.notes
-          ? `${order.notes || ''}\n[${new Date().toISOString()}] ${dto.notes}`
-          : order.notes,
-        updatedAt: new Date(),
-      },
-      include: {
-        customer: true,
-        items: {
-          include: {
-            product: true,
-            variant: true,
+    const result = await this.prisma.$transaction(async (prisma) => {
+      const order = await prisma.order.findFirst({
+        where: { id, organizationId, deletedAt: null },
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+              variant: true,
+            },
           },
+          branch: true,
         },
-      },
+      });
+
+      if (!order) {
+        throw new NotFoundException(`Order with ID ${id} not found`);
+      }
+
+      if (order.status === dto.status) {
+        throw new BadRequestException('Order already in the requested status');
+      }
+
+      const allowedTransitions = ORDER_STATUS_TRANSITIONS[order.status] ?? [];
+      if (!allowedTransitions.includes(dto.status)) {
+        throw new BadRequestException(
+          `Cannot transition from ${order.status} to ${
+            dto.status
+          }. Valid transitions: ${allowedTransitions.join(', ')}`,
+        );
+      }
+
+      if (
+        dto.status === OrderStatus.CANCELLED &&
+        !CANCELLABLE_STATUSES.includes(order.status)
+      ) {
+        throw new BadRequestException(
+          'Only pending or processing orders can be cancelled',
+        );
+      }
+
+      const updateData: Prisma.OrderUpdateInput = {
+        status: dto.status,
+        updatedAt: new Date(),
+      };
+
+      if (dto.notes) {
+        updateData.notes = order.notes
+          ? `${order.notes}\n${dto.notes}`
+          : dto.notes;
+      }
+
+      if (dto.status === OrderStatus.COMPLETED) {
+        updateData.completedAt = new Date();
+        if (order.paymentMethod === PaymentMethod.COD && !order.isPaid) {
+          updateData.isPaid = true;
+          updateData.paidAmount = order.total;
+          updateData.paidAt = new Date();
+        }
+      }
+
+      const updated = await prisma.order.update({
+        where: { id: order.id },
+        data: updateData,
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+              variant: true,
+            },
+          },
+          branch: true,
+        },
+      });
+
+      if (dto.status === OrderStatus.CANCELLED && order.customerId) {
+        const { totalAmount, outstanding } = this.calculateOrderFinancials({
+          subtotal: order.subtotal,
+          tax: order.tax,
+          shipping: order.shipping,
+          discount: order.discount,
+          paidAmount: order.paidAmount,
+        });
+
+        await prisma.customer.update({
+          where: { id: order.customerId },
+          data: {
+            totalOrders: { decrement: 1 },
+            totalSpent: { decrement: totalAmount },
+            ...(outstanding > 0 && {
+              debt: { decrement: outstanding },
+            }),
+          },
+        });
+      }
+
+      if (
+        dto.status === OrderStatus.COMPLETED &&
+        order.paymentMethod === PaymentMethod.COD &&
+        !order.isPaid &&
+        order.customerId
+      ) {
+        await prisma.customer.update({
+          where: { id: order.customerId },
+          data: {
+            debt: { decrement: Number(order.total) },
+          },
+        });
+      }
+
+      return {
+        updated,
+        previousStatus: order.status,
+      };
     });
 
-    return this.mapOrderResponse(updated);
+    this.eventEmitter.emit('orders.status.changed', {
+      orderId: result.updated.id,
+      organizationId,
+      previousStatus: result.previousStatus,
+      nextStatus: dto.status,
+      userId: actor?.id,
+    } satisfies OrderStatusChangedEvent);
+
+    return { data: this.mapOrderResponse(result.updated) };
   }
 
   private mapOrderResponse(order: any) {
@@ -497,19 +713,27 @@ export class OrdersService {
       discount: Number(order.discount),
       total: Number(order.total),
       paidAmount: Number(order.paidAmount),
+      branch: order.branch
+        ? {
+            id: order.branch.id,
+            name: order.branch.name,
+          }
+        : undefined,
       items: order.items?.map((item: any) => ({
         ...item,
         price: Number(item.unitPrice),
         quantity: Number(item.quantity),
-        discount: Number(item.discount),
+        discount: Number(item.discount ?? 0),
         total: Number(item.subtotal),
       })),
-      customer: order.customer ? {
-        ...order.customer,
-        totalSpent: Number(order.customer.totalSpent),
-        debt: Number(order.customer.debt),
-        totalOrders: Number(order.customer.totalOrders),
-      } : undefined,
+      customer: order.customer
+        ? {
+            ...order.customer,
+            totalSpent: Number(order.customer.totalSpent),
+            debt: Number(order.customer.debt),
+            totalOrders: Number(order.customer.totalOrders),
+          }
+        : undefined,
     };
   }
 }

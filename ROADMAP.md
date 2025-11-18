@@ -294,20 +294,20 @@ See Critical Path section above for details.
 **🔴 BLOCKING POS & Finance**
 **⚠️ Depends on:** Products + Customers + Inventory complete
 
-- [ ] ORD-001 - Setup OrdersModule 🔴 Critical (1 pt)
-- [ ] ORD-002 - POST /orders with items 🔴 Critical (3 pts)
-- [ ] ORD-003 - Calculate order totals 🔴 Critical (2 pts)
-- [ ] ORD-004 - Update customer stats in transaction 🔴 Critical (2 pts)
-- [ ] ORD-005 - Order status workflow ⭐ High (1 pt)
-- [ ] ORD-006 - Orders E2E tests ⭐ High (2 pts)
+- [x] ORD-001 - Setup OrdersModule 🔴 Critical (1 pt)
+- [x] ORD-002 - POST /orders with items 🔴 Critical (3 pts)
+- [x] ORD-003 - Calculate order totals 🔴 Critical (2 pts)
+- [x] ORD-004 - Update customer stats in transaction 🔴 Critical (2 pts)
+- [x] ORD-005 - Order status workflow ⭐ High (1 pt)
+- [x] ORD-006 - Orders E2E tests ⭐ High (2 pts)
 
 #### Business Logic - Todo:
-- [ ] ORD-007 - Order Status Transition Validation ⭐ High (2 pts)
-- [ ] ORD-008 - Order Cancellation Business Logic 🔴 Critical (3 pts) ✅ Decision confirmed
-- [ ] ORD-009 - Order Refund Processing ⭐ High (3 pts)
-- [ ] ORD-010 - Stock Deduction on Order Status Change 🔴 Critical (5 pts) ✅ Decision confirmed
-- [ ] ORD-011 - Order Validation Rules ⭐ High (2 pts)
-- [ ] ORD-012 - Order Automatic Actions Service ⭐ High (3 pts)
+- [x] ORD-007 - Order Status Transition Validation ⭐ High (2 pts)
+- [x] ORD-008 - Order Cancellation Business Logic 🔴 Critical (3 pts) ✅ Decision confirmed
+- [x] ORD-009 - Order Refund Processing ⭐ High (3 pts)
+- [x] ORD-010 - Stock Deduction on Order Status Change 🔴 Critical (5 pts) ✅ Decision confirmed
+- [x] ORD-011 - Order Validation Rules ⭐ High (2 pts)
+- [x] ORD-012 - Order Automatic Actions Service ⭐ High (3 pts)
 
 #### In Progress:
 - [ ] ORD-BACKEND-001 - Orders Backend - CRUD & Workflow 🔴 Critical (8 pts)

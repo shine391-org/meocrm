@@ -344,42 +344,29 @@ List orders
 
 ```json
 {
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "id": "uuid",
-        "code": "HD031537",
-        "customerId": "uuid",
-        "customer": {
-          "name": "Trần Thanh Tâm",
-          "phone": "0937946879"
-        },
-        "subtotal": 520000,
-        "discount": 0,
-        "total": 550000,
-        "paymentMethod": "COD",
-        "isPaid": false,
-        "paidAmount": 0,
-        "status": "PENDING",
-        "items": [
-          {
-            "productId": "uuid",
-            "product": {
-              "sku": "VCTN064",
-              "name": "Ví cầm tay nam"
-            },
-            "quantity": 1,
-            "price": 520000,
-            "discount": 0,
-            "lineTotal": 520000
-          }
-        ],
-        "createdAt": "2025-11-05T15:50:06Z"
-      }
-    ],
-    "pagination": { "..." }
-  }
+  "data": [
+    {
+      "id": "ord_01HZYJZP4S0",
+      "code": "ORD032",
+      "branch": { "id": "br_01HZYJX", "name": "Chi nhánh Q1" },
+      "customer": {
+        "name": "Trần Thanh Tâm",
+        "phone": "0937946879"
+      },
+      "subtotal": 520000,
+      "discount": 0,
+      "tax": 52000,
+      "shipping": 30000,
+      "total": 602000,
+      "paymentMethod": "COD",
+      "isPaid": false,
+      "paidAmount": 0,
+      "status": "PENDING",
+      "itemsCount": 1,
+      "createdAt": "2025-11-05T15:50:06Z"
+    }
+  ],
+  "meta": { "total": 1, "page": 1, "limit": 20, "lastPage": 1 }
 }
 ```
 
@@ -391,32 +378,52 @@ Create order
 
 ```json
 {
+  "branchId": "uuid",
   "customerId": "uuid",
   "items": [
     {
       "productId": "uuid",
       "quantity": 2,
-      "price": 520000,
-      "discount": 0
+      "variantId": null
     }
   ],
   "discount": 0,
   "paymentMethod": "CASH",
-  "shippingInfo": {
-    "partnerId": "uuid",
-    "recipientName": "Trần Thanh Tâm",
-    "recipientPhone": "0937946879",
-    "recipientAddress": "17 Hưng Phước 3",
-    "recipientProvince": "Hồ Chí Minh",
-    "recipientDistrict": "Quận 7",
-    "recipientWard": "Phường Tân Phong",
-    "shippingFee": 30000,
-    "codAmount": 550000
-  }
+  "channel": "POS",
+  "notes": "Khách thanh toán tại quầy"
 }
 ```
 
 **Response:** `201 Created`
+
+```json
+{
+  "data": {
+    "id": "ord_01HZYM2M0A3",
+    "code": "ORD033",
+    "branchId": "uuid",
+    "status": "COMPLETED",
+    "subtotal": 1040000,
+    "tax": 104000,
+    "shipping": 0,
+    "discount": 0,
+    "total": 1144000,
+    "isPaid": true,
+    "paymentMethod": "CASH",
+    "items": [
+      {
+        "productId": "uuid",
+        "quantity": 2,
+        "price": 520000,
+        "total": 1040000
+      }
+    ]
+  },
+  "warnings": []
+}
+```
+
+> **Note:** When stock is lower than the requested quantity, the `warnings` array contains entries with `type`, `message`, `requested`, and `available`. Orders are blocked only when stock is zero.
 
 ---
 

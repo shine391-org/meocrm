@@ -5,7 +5,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import * as crypto from 'crypto';
 import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
-import { OrdersService } from '../../orders/orders.service';
 import { OrderStatus, Prisma, Webhook } from '@prisma/client';
 import {
   decryptSecret,
@@ -18,6 +17,7 @@ import {
 } from '../../common/crypto/crypto.util';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { UpdateWebhookDto } from './dto/update-webhook.dto';
+import { OrdersService } from '../../orders/orders.service';
 
 export interface WebhookResponse {
   id: string;
@@ -71,23 +71,29 @@ export class WebhooksService implements OnModuleInit {
 
   @OnEvent('shipping.delivered')
   async handleShippingDelivered(payload: any) {
-    this.logger.log('Handling shipping.delivered event', payload);
-    const { orderId, organizationId } = payload.data;
-    if (orderId && organizationId) {
-      const result = await this.prisma.order.updateMany({
-        where: { id: orderId, organizationId, status: OrderStatus.PROCESSING },
-        data: {
-          status: OrderStatus.COMPLETED,
-          completedAt: new Date(),
-        },
-      });
-      if (result.count === 0) {
-        this.logger.warn(
-          `shipping.delivered skipped: order ${orderId} in org ${organizationId} is not in PROCESSING state`,
-        );
-      }
-    } else {
+    const orderId = payload?.data?.orderId;
+    const organizationId =
+      payload?.organizationId ?? payload?.data?.organizationId;
+
+    if (!orderId || !organizationId) {
       this.logger.warn('shipping.delivered payload missing orderId or organizationId');
+      return;
+    }
+
+    try {
+      await this.ordersService.updateStatus(
+        orderId,
+        { status: OrderStatus.COMPLETED, notes: '[auto] Shipping delivered' },
+        organizationId,
+        {
+          id: payload?.data?.handledBy ?? 'system-shipping-webhook',
+          organizationId,
+        } as any,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `shipping.delivered skipped: ${(error as Error).message}`,
+      );
     }
   }
 

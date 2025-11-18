@@ -2,10 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WebhooksService } from './webhooks.service';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
-import { OrdersService } from '../../orders/orders.service';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { NotFoundException } from '@nestjs/common';
 import * as cryptoUtil from '../../common/crypto/crypto.util';
+import { OrdersService } from '../../orders/orders.service';
 
 const mockAxiosFactory = () => {
   const instance = Object.assign(jest.fn(), {
@@ -332,15 +332,20 @@ describe('WebhooksService', () => {
   });
 
   describe('handleShippingDelivered', () => {
-    it('should not update if order not in processing', async () => {
-      (prisma as any).order.updateMany.mockResolvedValue({ count: 0 });
+    it('logs warning if update fails', async () => {
+      const warnSpy = jest.spyOn((service as any).logger, 'warn');
+      ordersService.updateStatus.mockRejectedValue(new Error('invalid transition'));
+
       await service.handleShippingDelivered({ data: { orderId: 'o1', organizationId: 'org1' } });
-      expect((prisma as any).order.updateMany).toHaveBeenCalled();
+
+      expect(ordersService.updateStatus).toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('skipped'));
+      warnSpy.mockRestore();
     });
 
     it('should not update if missing identifiers', async () => {
       await service.handleShippingDelivered({ data: { organizationId: 'org1' } });
-      expect((prisma as any).order.updateMany).not.toHaveBeenCalled();
+      expect(ordersService.updateStatus).not.toHaveBeenCalled();
     });
   });
 

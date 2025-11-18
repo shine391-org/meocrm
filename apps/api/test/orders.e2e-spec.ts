@@ -11,6 +11,7 @@ describe('Orders E2E', () => {
   let prisma: PrismaService;
   let authToken: string;
   let organizationId: string;
+  let branchId: string;
   const TEST_ORG_CODE_PREFIX = 'E2E-ORDERS-';
 
   // Test data
@@ -84,6 +85,16 @@ describe('Orders E2E', () => {
         organizationId,
       },
     });
+
+    const branch = await prisma.branch.create({
+      data: {
+        organizationId,
+        name: 'E2E Branch',
+        address: '123 Branch St',
+        phone: '0900000000',
+      },
+    });
+    branchId = branch.id;
   });
 
   afterAll(async () => {
@@ -114,15 +125,18 @@ describe('Orders E2E', () => {
 
   describe('PUT /orders/:id', () => {
     it('should update order when status is PENDING', async () => {
-        const { body: order } = await request(app.getHttpServer())
+        const { body: createdOrder } = await request(app.getHttpServer())
           .post('/orders')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
-            customerId: customer.id,
-            items: [{ productId: product1.id, quantity: 1 }],
-            paymentMethod: 'CASH',
-          })
-          .expect(201);
+          customerId: customer.id,
+          branchId,
+          items: [{ productId: product1.id, quantity: 1 }],
+          paymentMethod: 'CASH',
+        })
+        .expect(201);
+
+        const order = createdOrder.data;
 
         const { body } = await request(app.getHttpServer())
           .put(`/orders/${order.id}`)
@@ -130,19 +144,22 @@ describe('Orders E2E', () => {
           .send({ notes: 'Updated note' })
           .expect(200);
 
-        expect(body.notes).toBe('Updated note');
+        expect(body.data.notes).toContain('Updated note');
       });
 
       it('should NOT update order when status is not PENDING', async () => {
-        const { body: order } = await request(app.getHttpServer())
+        const { body: created } = await request(app.getHttpServer())
           .post('/orders')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
             customerId: customer.id,
+            branchId,
             items: [{ productId: product1.id, quantity: 1 }],
             paymentMethod: 'CASH',
           })
           .expect(201);
+
+        const order = created.data;
 
         await prisma.order.update({
           where: { id: order.id },
@@ -159,15 +176,18 @@ describe('Orders E2E', () => {
 
   describe('DELETE /orders/:id', () => {
     it('should soft delete order when status is PENDING', async () => {
-      const { body: order } = await request(app.getHttpServer())
+      const { body: createdOrder } = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           customerId: customer.id,
+          branchId,
           items: [{ productId: product1.id, quantity: 1 }],
           paymentMethod: 'CASH',
         })
         .expect(201);
+
+      const order = createdOrder.data;
 
       await request(app.getHttpServer())
         .delete(`/orders/${order.id}`)
@@ -187,14 +207,15 @@ describe('Orders E2E', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           customerId: customer.id,
+          branchId,
           items: [{ productId: product1.id, quantity: 2 }], // 200k + 20k tax = 220k
           paymentMethod: 'CASH',
         })
         .expect(201);
 
       const order = await prisma.order.findFirst({ where: { customerId: customer.id }});
-      const orderTotal = Number(createResponse.body.total);
-      const amountOwed = Number(createResponse.body.amountOwed || 0);
+      const orderTotal = Number(createResponse.body.data.total);
+      const amountOwed = orderTotal - Number(createResponse.body.data.paidAmount ?? 0);
       const expectedTotalSpent = orderTotal - amountOwed; // Business logic: totalSpent = what customer actually paid
 
       const customerBefore = await prisma.customer.findUnique({

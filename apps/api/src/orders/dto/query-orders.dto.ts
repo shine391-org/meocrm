@@ -9,7 +9,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, PaymentMethod } from '@prisma/client';
 
 export class QueryOrdersDto {
   @ApiProperty({ required: false, default: 1 })
@@ -35,6 +35,11 @@ export class QueryOrdersDto {
   @IsOptional()
   @IsString()
   customerId?: string;
+
+  @ApiProperty({ required: false, enum: PaymentMethod })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
 
   @ApiProperty({ required: false, example: '2025-11-01' })
   @IsOptional()

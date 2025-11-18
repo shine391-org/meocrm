@@ -48,6 +48,9 @@ export class OrderEntity implements Partial<Order> {
   @ApiProperty()
   code!: string;
 
+  @ApiProperty({ description: 'Branch fulfilling the order', nullable: true })
+  branchId?: string | null;
+
   @ApiProperty({ type: () => OrderCustomerEntity })
   @Type(() => OrderCustomerEntity)
   customer?: OrderCustomerEntity;
