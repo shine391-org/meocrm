@@ -4,10 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 
 export interface TopProduct {
+  id: string;
   name: string;
   quantity: number;
   revenue: number;
-  maxRevenue?: number;
 }
 
 interface TopProductsProps {
@@ -24,7 +24,7 @@ const formatCurrency = (value: number) => {
 
 export function TopProducts({ products, title = 'Top 10 hàng bán chạy' }: TopProductsProps) {
   // Calculate max revenue for progress bar scaling
-  const maxRevenue = Math.max(...products.map((p) => p.revenue));
+  const maxRevenue = products.length ? Math.max(...products.map((p) => p.revenue)) : 0;
 
   return (
     <Card>
@@ -34,10 +34,10 @@ export function TopProducts({ products, title = 'Top 10 hàng bán chạy' }: To
       <CardContent>
         <div className="space-y-4">
           {products.map((product, index) => {
-            const progressPercentage = (product.revenue / maxRevenue) * 100;
+            const progressPercentage = maxRevenue > 0 ? (product.revenue / maxRevenue) * 100 : 0;
 
             return (
-              <div key={index} className="space-y-2">
+              <div key={product.id} className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <span className="text-gray-500 shrink-0">

@@ -35,7 +35,7 @@ describe('AuthController', () => {
   describe('register', () => {
     it('should register a new user and set refresh token cookie', async () => {
       const registerDto: RegisterDto = { name: 'Test', email: 'test@test.com', password: 'password', organizationCode: 'test' };
-      const tokens = { accessToken: 'access', refreshToken: 'refresh' };
+      const tokens = { accessToken: 'access', refreshToken: 'refresh', refreshTokenMaxAgeMs: 604800000 };
       mockAuthService.register.mockResolvedValue(tokens);
 
       const res = { cookie: jest.fn() } as unknown as Response;
@@ -43,7 +43,11 @@ describe('AuthController', () => {
       const result = await controller.register(registerDto, res);
 
       expect(service.register).toHaveBeenCalledWith(registerDto);
-      expect(res.cookie).toHaveBeenCalledWith('meocrm_refresh_token', 'refresh', expect.any(Object));
+      expect(res.cookie).toHaveBeenCalledWith(
+        'meocrm_refresh_token',
+        'refresh',
+        expect.objectContaining({ maxAge: tokens.refreshTokenMaxAgeMs }),
+      );
       expect(result).toEqual(tokens);
     });
   });
@@ -51,7 +55,7 @@ describe('AuthController', () => {
   describe('login', () => {
     it('should login a user and set refresh token cookie', async () => {
       const loginDto: LoginDto = { email: 'test@test.com', password: 'password' };
-      const tokens = { accessToken: 'access', refreshToken: 'refresh' };
+      const tokens = { accessToken: 'access', refreshToken: 'refresh', refreshTokenMaxAgeMs: 604800000 };
       mockAuthService.login.mockResolvedValue(tokens);
 
       const res = { cookie: jest.fn() } as unknown as Response;
@@ -59,28 +63,36 @@ describe('AuthController', () => {
       const result = await controller.login(loginDto, res);
 
       expect(service.login).toHaveBeenCalledWith(loginDto);
-      expect(res.cookie).toHaveBeenCalledWith('meocrm_refresh_token', 'refresh', expect.any(Object));
+      expect(res.cookie).toHaveBeenCalledWith(
+        'meocrm_refresh_token',
+        'refresh',
+        expect.objectContaining({ maxAge: tokens.refreshTokenMaxAgeMs }),
+      );
       expect(result).toEqual(tokens);
     });
   });
 
   describe('refresh', () => {
     it('should refresh the access token', async () => {
-      const tokens = { accessToken: 'new-access', refreshToken: 'new-refresh' };
+      const tokens = { accessToken: 'new-access', refreshToken: 'new-refresh', refreshTokenMaxAgeMs: 604800000 };
       mockAuthService.refreshAccessToken.mockResolvedValue(tokens);
 
-      const req = { cookies: { meocrm_refresh_token: 'refresh' } } as any;
+      const req = { signedCookies: { meocrm_refresh_token: 'refresh' } } as any;
       const res = { cookie: jest.fn() } as unknown as Response;
 
       const result = await controller.refresh(req, res);
 
       expect(service.refreshAccessToken).toHaveBeenCalledWith('refresh');
-      expect(res.cookie).toHaveBeenCalledWith('meocrm_refresh_token', 'new-refresh', expect.any(Object));
+      expect(res.cookie).toHaveBeenCalledWith(
+        'meocrm_refresh_token',
+        'new-refresh',
+        expect.objectContaining({ maxAge: tokens.refreshTokenMaxAgeMs }),
+      );
       expect(result).toEqual(tokens);
     });
 
     it('should throw UnauthorizedException if refresh token is missing', async () => {
-      const req = { cookies: {} } as any;
+      const req = { signedCookies: {} } as any;
       const res = { cookie: jest.fn() } as unknown as Response;
 
       await expect(controller.refresh(req, res)).rejects.toThrow(UnauthorizedException);
@@ -91,7 +103,7 @@ describe('AuthController', () => {
     it('should logout a user and clear the refresh token cookie', async () => {
       mockAuthService.logout.mockResolvedValue({ message: 'Logged out' });
 
-      const req = { cookies: { meocrm_refresh_token: 'refresh' } } as any;
+      const req = { signedCookies: { meocrm_refresh_token: 'refresh' } } as any;
       const res = { cookie: jest.fn() } as unknown as Response;
       const user = { id: '1' };
 

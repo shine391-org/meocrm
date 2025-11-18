@@ -452,7 +452,7 @@ grep -r "localhost:2003/api" apps/web/.next/
 
 ---
 
-## ⚠️ ISSUE #5: E2E Test Accessibility Failures
+## ⚠️ ISSUE #7: E2E Test Accessibility Failures
 
 ### Problem
 

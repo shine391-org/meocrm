@@ -9,7 +9,7 @@ import { Public } from './decorators/public.decorator';
 import { Request, Response } from 'express';
 
 const REFRESH_TOKEN_COOKIE = 'meocrm_refresh_token';
-const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_TOKEN_DEFAULT_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -22,7 +22,7 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'User registered successfully' })
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.register(dto);
-    this.setRefreshTokenCookie(res, result.refreshToken);
+    this.setRefreshTokenCookie(res, result.refreshToken, result.refreshTokenMaxAgeMs);
     return result;
   }
 
@@ -32,7 +32,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Login successful' })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
-    this.setRefreshTokenCookie(res, result.refreshToken);
+    this.setRefreshTokenCookie(res, result.refreshToken, result.refreshTokenMaxAgeMs);
     return result;
   }
 
@@ -46,7 +46,7 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token missing');
     }
     const result = await this.authService.refreshAccessToken(refreshToken);
-    this.setRefreshTokenCookie(res, result.refreshToken);
+    this.setRefreshTokenCookie(res, result.refreshToken, result.refreshTokenMaxAgeMs);
     return result;
   }
 
@@ -77,12 +77,12 @@ export class AuthController {
     return this.authService.getCurrentUser(user.id);
   }
 
-  private setRefreshTokenCookie(res: Response, token: string) {
+  private setRefreshTokenCookie(res: Response, token: string, maxAge = REFRESH_TOKEN_DEFAULT_MAX_AGE) {
     res.cookie(REFRESH_TOKEN_COOKIE, token, {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.isSecureCookie(),
-      maxAge: REFRESH_TOKEN_MAX_AGE,
+      maxAge,
       path: '/',
       signed: true,
     });

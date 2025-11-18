@@ -1,20 +1,55 @@
 #!/bin/bash
 # Database Export Script
-# Exports the current database to a snapshot file
+# Exports the current database to a snapshot file using env-supplied credentials.
 
-set -e
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
 
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Database connection details
-DB_HOST="localhost"
-DB_PORT="2001"
-DB_NAME="meocrm_dev"
-DB_USER="meocrm_user"
-DB_PASSWORD="meocrm_dev_password"
+load_env_file() {
+  local file="$1"
+  if [ -f "$file" ]; then
+    # shellcheck disable=SC1090
+    set -a && source "$file" && set +a
+  fi
+}
+
+# Allow developers to keep secrets in ignored env files.
+load_env_file ".env.local"
+load_env_file ".env"
+
+REQUIRED_VARS=(DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD)
+MISSING=()
+for var in "${REQUIRED_VARS[@]}"; do
+  if [ -z "${!var:-}" ]; then
+    MISSING+=("$var")
+  fi
+done
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  echo -e "${RED}✗${NC} Missing required environment variables: ${MISSING[*]}"
+  echo "Provide them via your shell, CI secrets, or an env file that is excluded from version control."
+  exit 1
+fi
+
+create_pgpass_file() {
+  local file
+  file="$(mktemp)"
+  chmod 600 "$file"
+  echo "${DB_HOST}:${DB_PORT}:${DB_NAME}:${DB_USER}:${DB_PASSWORD}" > "$file"
+  echo "$file"
+}
+
+PGPASSFILE="$(create_pgpass_file)"
+trap 'rm -f "$PGPASSFILE"' EXIT
+export PGPASSFILE
 
 # Export directory
 EXPORT_DIR="scripts/fixtures"
@@ -32,7 +67,7 @@ echo "  File:     $EXPORT_FILE"
 echo ""
 
 # Export database using pg_dump
-PGPASSWORD="$DB_PASSWORD" pg_dump \
+if pg_dump \
   -h "$DB_HOST" \
   -p "$DB_PORT" \
   -U "$DB_USER" \
@@ -42,9 +77,7 @@ PGPASSWORD="$DB_PASSWORD" pg_dump \
   --no-owner \
   --no-privileges \
   --format=plain \
-  --file="$EXPORT_FILE"
-
-if [ $? -eq 0 ]; then
+  --file="$EXPORT_FILE"; then
     # Get file size
     FILE_SIZE=$(du -h "$EXPORT_FILE" | cut -f1)
 
@@ -64,6 +97,7 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "Or restore the latest snapshot:"
     echo "  ${YELLOW}./scripts/db-import.sh${NC}"
+    echo ""
 else
     echo -e "${RED}✗${NC} Database export failed!"
     exit 1

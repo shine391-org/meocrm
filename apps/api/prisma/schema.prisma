@@ -1583,6 +1583,7 @@ model RefreshToken {
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+  remember  Boolean  @default(false)
 
   @@index([userId])
   @@map("refresh_tokens")

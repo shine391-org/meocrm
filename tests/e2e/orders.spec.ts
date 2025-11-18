@@ -1,4 +1,24 @@
-import { test, expect, Route } from '@playwright/test';
+import { test, expect, Route, Page } from '@playwright/test';
+
+const stripTrailingSlash = (value: string) => value.replace(/\/$/, '');
+
+const resolveApiOrigin = async (page: Page): Promise<string> => {
+  const envOrigin = process.env.PLAYWRIGHT_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || process.env.API_BASE_URL;
+  if (envOrigin) {
+    return stripTrailingSlash(envOrigin);
+  }
+
+  try {
+    const currentUrl = page.url();
+    if (currentUrl) {
+      return stripTrailingSlash(new URL(currentUrl).origin);
+    }
+  } catch {
+    // ignore and fall through to default
+  }
+
+  return 'http://localhost:2003';
+};
 
 test.describe.configure({ mode: 'serial' });
 
@@ -52,8 +72,10 @@ test.describe('Orders Page', () => {
   test('should handle API error gracefully', async ({ page, context }) => {
     // Block API requests to simulate error
     const blockOrders = (route: Route) => route.abort();
-    const apiRoute = '**localhost:2003/orders**';
-    await context.route(apiRoute, blockOrders);
+    const apiOrigin = await resolveApiOrigin(page);
+    const ordersEndpoint = `${apiOrigin}/orders`;
+    const ordersRouteMatcher = (url: URL) => url.href.startsWith(ordersEndpoint);
+    await context.route(ordersRouteMatcher, blockOrders);
 
     try {
       // Reload page to trigger fetch
@@ -64,7 +86,7 @@ test.describe('Orders Page', () => {
         page.getByText(/không thể tải|failed to load|error/i),
       ).toBeVisible({ timeout: 5000 });
     } finally {
-      await context.unroute(apiRoute, blockOrders);
+      await context.unroute(ordersRouteMatcher, blockOrders);
     }
   });
 

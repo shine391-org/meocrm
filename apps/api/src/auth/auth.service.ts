@@ -9,6 +9,10 @@ import { JwtPayload } from './strategies/jwt.strategy';
 
 type JwtDuration = `${number}d` | `${number}h` | `${number}m`;
 
+interface TokenOptions {
+  remember?: boolean;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -51,7 +55,7 @@ export class AuthService {
       include: { organization: true },
     });
 
-    const { accessToken, refreshToken } = await this.generateTokens(user.id, user.email, user.organizationId);
+    const { accessToken, refreshToken, refreshTokenMaxAgeMs } = await this.generateTokens(user.id, user.email, user.organizationId);
 
     return {
       user: {
@@ -63,6 +67,7 @@ export class AuthService {
       },
       accessToken,
       refreshToken,
+      refreshTokenMaxAgeMs,
     };
   }
 
@@ -82,7 +87,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const { accessToken, refreshToken } = await this.generateTokens(user.id, user.email, user.organizationId);
+    const { accessToken, refreshToken, refreshTokenMaxAgeMs } = await this.generateTokens(user.id, user.email, user.organizationId, {
+      remember: dto.remember ?? false,
+    });
 
     return {
       user: {
@@ -94,6 +101,7 @@ export class AuthService {
       },
       accessToken,
       refreshToken,
+      refreshTokenMaxAgeMs,
     };
   }
 
@@ -113,10 +121,11 @@ export class AuthService {
         throw new UnauthorizedException('Invalid or expired refresh token');
       }
 
-      const { accessToken, refreshToken: newRefreshToken } = await this.generateTokens(
+      const { accessToken, refreshToken: newRefreshToken, refreshTokenMaxAgeMs } = await this.generateTokens(
         storedToken.user.id,
         storedToken.user.email,
         storedToken.user.organizationId,
+        { remember: storedToken.remember },
       );
 
       // Delete old refresh token
@@ -127,6 +136,7 @@ export class AuthService {
       return {
         accessToken,
         refreshToken: newRefreshToken,
+        refreshTokenMaxAgeMs,
       };
     } catch (error) {
       this.logger.error('Refresh token validation failed', error instanceof Error ? error.stack : error);
@@ -165,7 +175,7 @@ export class AuthService {
     };
   }
 
-  private async generateTokens(userId: string, email: string, organizationId: string) {
+  private async generateTokens(userId: string, email: string, organizationId: string, options: TokenOptions = {}) {
     const payload: JwtPayload = {
       sub: userId,
       email,
@@ -175,7 +185,7 @@ export class AuthService {
     const accessSecret = this.getSecretOrThrow('JWT_SECRET');
     const refreshSecret = this.getSecretOrThrow('JWT_REFRESH_SECRET');
     const accessExpiresIn = (this.configService.get<string>('JWT_EXPIRES_IN') ?? '15m') as JwtDuration;
-    const refreshExpiresIn = (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d') as JwtDuration;
+    const { duration: refreshExpiresIn, ttlMs: refreshTokenTtlMs } = this.getRefreshExpiry(options.remember ?? false);
 
     const accessToken = this.jwtService.sign(payload, {
       secret: accessSecret,
@@ -186,6 +196,7 @@ export class AuthService {
     const refreshTokenPayload = {
       ...payload,
       jti: `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
+      remember: options.remember ?? false,
     };
 
     const refreshToken = this.jwtService.sign(refreshTokenPayload, {
@@ -199,18 +210,18 @@ export class AuthService {
     });
 
     // Store refresh token in database
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    const expiresAt = new Date(Date.now() + refreshTokenTtlMs);
 
     await this.prisma.refreshToken.create({
       data: {
         userId,
         token: refreshToken,
         expiresAt,
+        remember: options.remember ?? false,
       },
     });
 
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, refreshTokenMaxAgeMs: refreshTokenTtlMs };
   }
 
   private getSecretOrThrow(key: 'JWT_SECRET' | 'JWT_REFRESH_SECRET') {
@@ -219,5 +230,32 @@ export class AuthService {
       throw new Error(`${key} is not configured`);
     }
     return value;
+  }
+
+  private getRefreshExpiry(remember: boolean): { duration: JwtDuration; ttlMs: number } {
+    if (remember) {
+      const duration = (this.configService.get<string>('JWT_REFRESH_REMEMBER_EXPIRES_IN') ?? '30d') as JwtDuration;
+      return { duration, ttlMs: this.durationToMs(duration) };
+    }
+
+    const duration = (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d') as JwtDuration;
+    return { duration, ttlMs: this.durationToMs(duration) };
+  }
+
+  private durationToMs(duration: JwtDuration): number {
+    const match = duration.match(/^(\d+)([dhm])$/);
+    if (!match) {
+      throw new Error(`Invalid JWT duration format: ${duration}`);
+    }
+
+    const value = Number(match[1]);
+    const unit = match[2];
+    const unitMap: Record<string, number> = {
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+
+    return value * unitMap[unit];
   }
 }

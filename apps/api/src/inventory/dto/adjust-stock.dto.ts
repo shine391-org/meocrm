@@ -1,4 +1,4 @@
-import { IsString, IsInt, IsEnum, IsOptional } from 'class-validator';
+import { IsString, IsInt, IsEnum, IsOptional, NotEquals, Max, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum StockAdjustmentReason {
@@ -21,10 +21,15 @@ export class AdjustStockDto {
   branchId: string;
 
   @ApiProperty({
-    description: 'Quantity to adjust (positive to add, negative to remove)',
-    example: 10
+    description: 'Quantity to adjust (positive to add, negative to remove). Must be a non-zero integer between -1,000,000 and 1,000,000.',
+    example: 10,
+    minimum: -1000000,
+    maximum: 1000000,
   })
   @IsInt()
+  @NotEquals(0)
+  @Min(-1000000)
+  @Max(1000000)
   quantity: number;
 
   @ApiProperty({

@@ -2,4 +2,5 @@
     "coderabbit.agentType": "Claude Code",
     "coderabbit.autoReviewMode": "auto",
     "claudeCode.environmentVariables": []
+
 }    

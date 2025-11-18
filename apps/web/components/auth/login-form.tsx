@@ -57,7 +57,7 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      await login({ email, password });
+      await login({ email, password, remember: rememberMe });
       // Successful login will redirect via useAuth hook
       // But we can override the redirect here
       router.push(redirectTo);
@@ -79,10 +79,10 @@ export function LoginForm() {
         </Label>
         <Input
           id="email"
-          type="text"
+          type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="trung"
+          placeholder="email@example.com"
           className="h-11 text-base"
           disabled={isLoading}
         />

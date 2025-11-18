@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "MCP_DOCKER": {
+      "command": "docker",
+      "args": ["mcp", "gateway", "run"],
+      "env": {
+        "LOCALAPPDATA": "${LOCALAPPDATA}",
+        "PROGRAMDATA": "${PROGRAMDATA}",
+        "PROGRAMFILES": "${PROGRAMFILES}"
+      },
+      "type": "stdio"
+    }
+  }
+}

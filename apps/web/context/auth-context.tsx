@@ -22,7 +22,7 @@ import { persistSession, clearSession, getBrowserToken, setOrganizationId } from
 
 interface AuthContextType {
   user: AuthUser | null;
-  login: (data: { email: string; password: string }) => Promise<void>;
+  login: (data: { email: string; password: string; remember?: boolean }) => Promise<void>;
   register: (data: {
     name: string;
     email: string;
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logout]);
 
   const login = useCallback(
-    async (data: { email: string; password: string }) => {
+    async (data: { email: string; password: string; remember?: boolean }) => {
       const response = await loginApi(data);
       persistSession({
         accessToken: response.accessToken,

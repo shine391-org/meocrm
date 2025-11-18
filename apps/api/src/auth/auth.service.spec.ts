@@ -70,6 +70,7 @@ describe('AuthService', () => {
         email: 'user@example.com',
         organizationId: 'org-1',
       },
+      remember: false,
     };
 
     jwtServiceMock.verify.mockReturnValue({ sub: 'user-1' });
@@ -92,6 +93,7 @@ describe('AuthService', () => {
     expect(result).toEqual({
       accessToken: 'new-access',
       refreshToken: 'new-refresh',
+      refreshTokenMaxAgeMs: expect.any(Number),
     });
   });
 
@@ -118,7 +120,31 @@ describe('AuthService', () => {
     const result = await service.login({ email: 'user@example.com', password: 'secret' });
 
     expect(result.accessToken).toBe('access');
-    expect(prismaMock.refreshToken.create).toHaveBeenCalled();
+    expect(result.refreshTokenMaxAgeMs).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(prismaMock.refreshToken.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ remember: false }),
+    });
+  });
+
+  it('extends refresh token lifetime when remember flag is set', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      password: 'hashed',
+      name: 'Jane',
+      role: 'STAFF',
+      organization: { id: 'org-1', name: 'Org' },
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    jwtServiceMock.sign.mockReturnValueOnce('access').mockReturnValueOnce('refresh');
+    prismaMock.refreshToken.create.mockResolvedValue({ id: 'token' });
+
+    const result = await service.login({ email: 'user@example.com', password: 'secret', remember: true });
+
+    expect(result.refreshTokenMaxAgeMs).toBe(30 * 24 * 60 * 60 * 1000);
+    expect(prismaMock.refreshToken.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ remember: true }),
+    });
   });
 
   it('throws when password mismatch on login', async () => {
@@ -162,6 +188,7 @@ describe('AuthService', () => {
       }),
     );
     expect(result.accessToken).toBe('access');
+    expect(result.refreshTokenMaxAgeMs).toBe(7 * 24 * 60 * 60 * 1000);
   });
 
   it('throws when registering with duplicate email', async () => {

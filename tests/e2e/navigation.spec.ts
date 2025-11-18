@@ -117,6 +117,9 @@ test.describe('Navigation and Layout', () => {
 
     // Page should be functional
     await expect(page.getByRole('heading', { name: /quản lý khách hàng/i })).toBeVisible();
+
+    const scrollPosition = await page.evaluate(() => window.scrollY);
+    expect(scrollPosition).toBeGreaterThan(400);
   });
 
   test('should handle browser back and forward navigation', async ({ page }) => {

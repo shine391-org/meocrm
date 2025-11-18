@@ -13,6 +13,9 @@ function IsDifferentBranch(property: string, validationOptions?: ValidationOptio
         validate(value: any, args: ValidationArguments) {
           const [relatedPropertyName] = args.constraints;
           const relatedValue = (args.object as any)[relatedPropertyName];
+          if (value == null || relatedValue == null) {
+            return false;
+          }
           return value !== relatedValue;
         },
       },

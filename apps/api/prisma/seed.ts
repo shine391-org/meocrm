@@ -1,5 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
+import { mkdtempSync, writeFileSync, chmodSync } from 'fs';
+import * as path from 'path';
+import { tmpdir } from 'os';
 
 const prisma = new PrismaClient();
 
@@ -35,26 +39,54 @@ async function main() {
     ],
   });
 
-  // Create admin users
-  await prisma.user.create({
-    data: {
-      email: 'admin@lanoleather.vn',
-      password: await bcrypt.hash('Admin@123', 10),
-      name: 'Admin',
-      role: 'OWNER',
-      organizationId: org.id,
-    },
-  });
+  const nodeEnv = (process.env.NODE_ENV ?? 'development').toLowerCase();
+  const isProduction = nodeEnv === 'production';
+  const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim();
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  const allowOwnerRole = process.env.SEED_ALLOW_OWNER_ROLE === 'true';
 
-  await prisma.user.create({
-    data: {
-      email: 'admin',
-      password: await bcrypt.hash('admin', 10),
-      name: 'Admin User',
-      role: 'OWNER',
-      organizationId: org.id,
-    },
-  });
+  if (isProduction) {
+    console.log('⚠️  Skipping admin user creation in production environment.');
+  } else {
+    if (!adminEmail) {
+      throw new Error('SEED_ADMIN_EMAIL must be provided to create the seed admin user.');
+    }
+
+    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail);
+    if (!isValidEmail) {
+      throw new Error('SEED_ADMIN_EMAIL must be a valid email address.');
+    }
+
+    let resolvedPassword = adminPassword;
+    let generatedPassword: string | null = null;
+
+    if (!resolvedPassword) {
+      generatedPassword = randomBytes(16).toString('hex');
+      resolvedPassword = generatedPassword;
+    }
+
+    const hashedPassword = await bcrypt.hash(resolvedPassword, 10);
+
+    await prisma.user.create({
+      data: {
+        email: adminEmail,
+        password: hashedPassword,
+        name: 'System Admin',
+        role: allowOwnerRole ? 'OWNER' : 'ADMIN',
+        organizationId: org.id,
+      },
+    });
+
+    console.log(`   Admin user created for ${adminEmail} (${allowOwnerRole ? 'OWNER' : 'ADMIN'})`);
+    if (generatedPassword) {
+      const credentialsFile = persistGeneratedPassword(adminEmail, generatedPassword);
+      const masked = generatedPassword.slice(-4).padStart(generatedPassword.length, '*');
+      console.log('   ⚠️  Generated password stored securely.');
+      console.log(`      File: ${credentialsFile}`);
+      console.log(`      Masked preview: ${masked}`);
+      console.log('      Please rotate or remove the file after storing the credentials elsewhere.');
+    }
+  }
 
   const c1 = await prisma.category.create({ data: { name: 'VÍ DA', organizationId: org.id } });
   const c2 = await prisma.category.create({ data: { name: 'Ví thiết kế', parentId: c1.id, organizationId: org.id } });
@@ -96,8 +128,18 @@ async function main() {
   });
 
   console.log('✅ Done!');
-  console.log('   Admin 1: admin@lanoleather.vn / Admin@123');
-  console.log('   Admin 2: admin / admin');
+}
+
+function persistGeneratedPassword(email: string, password: string): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'meocrm-seed-'));
+  const filePath = path.join(dir, `admin-${Date.now()}.txt`);
+  writeFileSync(
+    filePath,
+    `MeoCRM seed admin credentials\nEmail: ${email}\nPassword: ${password}\nGenerated: ${new Date().toISOString()}\n`,
+    { mode: 0o600 },
+  );
+  chmodSync(filePath, 0o600);
+  return filePath;
 }
 
 main().catch(e => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

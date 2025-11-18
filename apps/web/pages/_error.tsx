@@ -4,13 +4,13 @@
 // The actual error handling is done via App Router (app/error.tsx, app/global-error.tsx, app/not-found.tsx)
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-function Error({ statusCode }: { statusCode?: number }) {
+function AppError({ statusCode }: { statusCode?: number }) {
   return null; // App Router will handle all error rendering
 }
 
-Error.getInitialProps = ({ res, err }: any) => {
+AppError.getInitialProps = ({ res, err }: any) => {
   const statusCode = res ? res.statusCode : err ? err.statusCode : 404;
   return { statusCode };
 };
 
-export default Error;
+export default AppError;

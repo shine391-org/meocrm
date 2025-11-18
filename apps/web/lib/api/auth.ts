@@ -18,6 +18,7 @@ interface AuthResponse {
   user: AuthUser;
   accessToken: string;
   refreshToken: string;
+  refreshTokenMaxAgeMs: number;
 }
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
@@ -44,7 +45,7 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
   return data as T;
 };
 
-export async function loginApi(payload: { email: string; password: string }): Promise<AuthResponse> {
+export async function loginApi(payload: { email: string; password: string; remember?: boolean }): Promise<AuthResponse> {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -75,7 +76,7 @@ export async function refreshSessionApi() {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
   });
-  return handleResponse<{ accessToken: string; refreshToken: string }>(response);
+  return handleResponse<{ accessToken: string; refreshToken: string; refreshTokenMaxAgeMs: number }>(response);
 }
 
 export async function fetchCurrentUser() {

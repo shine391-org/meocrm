@@ -1,5 +1,6 @@
 'use client';
 
+import type { ElementType } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
@@ -10,13 +11,26 @@ export interface KPIData {
   trend?: 'up' | 'down';
   subtitle?: string;
   subtitleValue?: string;
-  icon?: React.ElementType;
+  icon?: ElementType;
   bgColor?: string;
+  iconColor?: string;
 }
 
 interface KPICardsProps {
   data: KPIData[];
 }
+
+const LIGHT_BACKGROUND_PATTERN = /(bg-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(50|100|200))|bg-white|bg-slate-50/;
+
+const resolveIconColor = (bgClass?: string, overrideColor?: string) => {
+  if (overrideColor) {
+    return overrideColor;
+  }
+  if (!bgClass || LIGHT_BACKGROUND_PATTERN.test(bgClass)) {
+    return 'text-slate-700';
+  }
+  return 'text-white';
+};
 
 export function KPICards({ data }: KPICardsProps) {
   return (
@@ -25,6 +39,8 @@ export function KPICards({ data }: KPICardsProps) {
         const TrendIcon = kpi.trend === 'up' ? ArrowUpRight : ArrowDownRight;
         const hasChange = kpi.change !== undefined && kpi.change !== null;
         const Icon = kpi.icon;
+        const iconBackground = kpi.bgColor || 'bg-blue-100';
+        const iconColor = resolveIconColor(iconBackground, kpi.iconColor);
 
         return (
           <Card key={index} className="hover:shadow-lg transition-shadow">
@@ -34,11 +50,9 @@ export function KPICards({ data }: KPICardsProps) {
                   <div className="flex items-center gap-2 mb-1">
                     {Icon && (
                       <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                          kpi.bgColor || 'bg-blue-100'
-                        }`}
+                        className={`flex h-10 w-10 items-center justify-center rounded-lg ${iconBackground}`}
                       >
-                        <Icon className="h-5 w-5 text-white" />
+                        <Icon className={`h-5 w-5 ${iconColor}`} />
                       </div>
                     )}
                   </div>

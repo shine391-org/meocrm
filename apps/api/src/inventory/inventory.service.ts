@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -12,6 +14,8 @@ import { CreateTransferDto } from './dto/create-transfer.dto';
 
 @Injectable()
 export class InventoryService {
+  private readonly logger = new Logger(InventoryService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -260,51 +264,54 @@ export class InventoryService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // Get or create inventory record
-      let inventory = await tx.inventory.findUnique({
-        where: {
-          productId_branchId: {
-            productId,
-            branchId,
+      if (quantity < 0) {
+        const existingInventory = await tx.inventory.findUnique({
+          where: {
+            productId_branchId: {
+              productId,
+              branchId,
+            },
           },
-        },
-      });
-
-      if (!inventory) {
-        inventory = await tx.inventory.create({
-          data: {
-            productId,
-            branchId,
-            quantity: 0,
-          },
+          select: { id: true },
         });
+
+        if (!existingInventory) {
+          throw new BadRequestException(
+            `Insufficient stock. Current: 0, Requested deduction: ${Math.abs(quantity)}`,
+          );
+        }
       }
 
-      const newQuantity = inventory.quantity + quantity;
-
-      // INV-007: Prevent negative stock
-      if (newQuantity < 0) {
-        throw new BadRequestException(
-          `Insufficient stock. Current: ${inventory.quantity}, Requested deduction: ${Math.abs(quantity)}`,
-        );
-      }
-
-      // Update inventory
-      const updatedInventory = await tx.inventory.update({
+      const updatedInventory = await tx.inventory.upsert({
         where: {
           productId_branchId: {
             productId,
             branchId,
           },
         },
-        data: {
-          quantity: newQuantity,
+        update: {
+          quantity: {
+            increment: quantity,
+          },
+        },
+        create: {
+          productId,
+          branchId,
+          quantity: Math.max(0, quantity),
         },
         include: {
           product: true,
           branch: true,
         },
       });
+
+      const oldQuantity = updatedInventory.quantity - quantity;
+
+      if (updatedInventory.quantity < 0) {
+        throw new BadRequestException(
+          `Insufficient stock. Current: ${oldQuantity}, Requested deduction: ${Math.abs(quantity)}`,
+        );
+      }
 
       // INV-008: Log inventory transaction using StockAdjustment
       const adjustmentType = quantity > 0 ? 'INCREASE' : 'DECREASE';
@@ -325,8 +332,8 @@ export class InventoryService {
             create: [
               {
                 productId,
-                oldQuantity: inventory.quantity,
-                newQuantity,
+                oldQuantity,
+                newQuantity: updatedInventory.quantity,
                 difference: quantity,
               },
             ],
@@ -437,153 +444,150 @@ export class InventoryService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // Get source inventory
-      let sourceInventory = await tx.inventory.findUnique({
-        where: {
-          productId_branchId: {
-            productId,
-            branchId: fromBranchId,
-          },
-        },
-      });
-
-      if (!sourceInventory) {
-        sourceInventory = await tx.inventory.create({
-          data: {
-            productId,
-            branchId: fromBranchId,
-            quantity: 0,
-          },
-        });
-      }
-
-      // INV-007: Prevent negative stock
-      if (sourceInventory.quantity < quantity) {
-        throw new BadRequestException(
-          `Insufficient stock at source branch. Available: ${sourceInventory.quantity}, Requested: ${quantity}`,
-        );
-      }
-
-      // Get or create destination inventory
-      let destInventory = await tx.inventory.findUnique({
-        where: {
-          productId_branchId: {
-            productId,
-            branchId: toBranchId,
-          },
-        },
-      });
-
-      if (!destInventory) {
-        destInventory = await tx.inventory.create({
-          data: {
-            productId,
-            branchId: toBranchId,
-            quantity: 0,
-          },
-        });
-      }
-
-      // Deduct from source
-      const updatedSource = await tx.inventory.update({
-        where: {
-          productId_branchId: {
-            productId,
-            branchId: fromBranchId,
-          },
-        },
-        data: {
-          quantity: sourceInventory.quantity - quantity,
-        },
-      });
-
-      // Add to destination
-      const updatedDest = await tx.inventory.update({
-        where: {
-          productId_branchId: {
-            productId,
-            branchId: toBranchId,
-          },
-        },
-        data: {
-          quantity: destInventory.quantity + quantity,
-        },
-      });
-
-      // Create transfer record
-      const transferValue = Number(product.sellPrice) * quantity;
-      const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
-
-      const transfer = await tx.transfer.create({
-        data: {
-          code: `TRF-${uniqueSuffix}`,
-          fromBranchId,
-          toBranchId,
-          value: transferValue,
-          status: 'RECEIVED', // For MVP, instant transfer. Can be extended for IN_TRANSIT status
-          transferredAt: new Date(),
-          receivedAt: new Date(),
-        },
-        include: {
-          fromBranch: true,
-          toBranch: true,
-        },
-      });
-
-      // Log transactions for both branches using StockAdjustment
-
-      await Promise.all([
-        // Source branch (OUT)
-        tx.stockAdjustment.create({
-          data: {
-            organizationId,
-            code: `ADJ-OUT-${transfer.id}-${uniqueSuffix}`,
-            branchId: fromBranchId,
-            type: 'DECREASE',
-            reason: `Transfer to ${toBranch.name}${notes ? `: ${notes}` : ''}`,
-            notes: `Transfer ID: ${transfer.id}`,
-            adjustedBy: userId,
-            adjustedAt: new Date(),
-            status: 'CONFIRMED',
-            items: {
-              create: [
-                {
-                  productId,
-                  oldQuantity: sourceInventory.quantity,
-                  newQuantity: updatedSource.quantity,
-                  difference: -quantity,
-                },
-              ],
+      try {
+        const sourceInventory = await tx.inventory.findUnique({
+          where: {
+            productId_branchId: {
+              productId,
+              branchId: fromBranchId,
             },
           },
-        }),
-        // Destination branch (IN)
-        tx.stockAdjustment.create({
-          data: {
-            organizationId,
-            code: `ADJ-IN-${transfer.id}-${uniqueSuffix}`,
-            branchId: toBranchId,
-            type: 'INCREASE',
-            reason: `Transfer from ${fromBranch.name}${notes ? `: ${notes}` : ''}`,
-            notes: `Transfer ID: ${transfer.id}`,
-            adjustedBy: userId,
-            adjustedAt: new Date(),
-            status: 'CONFIRMED',
-            items: {
-              create: [
-                {
-                  productId,
-                  oldQuantity: destInventory.quantity,
-                  newQuantity: updatedDest.quantity,
-                  difference: quantity,
-                },
-              ],
+        });
+
+        if (!sourceInventory) {
+          throw new BadRequestException('Source branch has no inventory for this product');
+        }
+
+        if (sourceInventory.quantity < quantity) {
+          throw new BadRequestException(
+            `Insufficient stock at source branch. Available: ${sourceInventory.quantity}, Requested: ${quantity}`,
+          );
+        }
+
+        const updatedSource = await tx.inventory.update({
+          where: {
+            productId_branchId: {
+              productId,
+              branchId: fromBranchId,
             },
           },
-        }),
-      ]);
+          data: {
+            quantity: {
+              decrement: quantity,
+            },
+          },
+        });
 
-      return { data: transfer };
+        const sourceOldQuantity = sourceInventory.quantity;
+
+        if (updatedSource.quantity < 0) {
+          throw new BadRequestException(
+            `Insufficient stock at source branch. Available: ${sourceOldQuantity}, Requested: ${quantity}`,
+          );
+        }
+
+        const updatedDest = await tx.inventory.upsert({
+          where: {
+            productId_branchId: {
+              productId,
+              branchId: toBranchId,
+            },
+          },
+          update: {
+            quantity: {
+              increment: quantity,
+            },
+          },
+          create: {
+            productId,
+            branchId: toBranchId,
+            quantity,
+          },
+        });
+
+        const destOldQuantity = updatedDest.quantity - quantity;
+
+        // Create transfer record
+        const transferValue = Number(product.sellPrice) * quantity;
+        const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
+
+        const transfer = await tx.transfer.create({
+          data: {
+            code: `TRF-${uniqueSuffix}`,
+            fromBranchId,
+            toBranchId,
+            value: transferValue,
+            status: 'RECEIVED', // For MVP, instant transfer. Can be extended for IN_TRANSIT status
+            transferredAt: new Date(),
+            receivedAt: new Date(),
+          },
+          include: {
+            fromBranch: true,
+            toBranch: true,
+          },
+        });
+
+        // Log transactions for both branches using StockAdjustment
+
+        await Promise.all([
+          // Source branch (OUT)
+          tx.stockAdjustment.create({
+            data: {
+              organizationId,
+              code: `ADJ-OUT-${transfer.id}-${uniqueSuffix}`,
+              branchId: fromBranchId,
+              type: 'DECREASE',
+              reason: `Transfer to ${toBranch.name}${notes ? `: ${notes}` : ''}`,
+              notes: `Transfer ID: ${transfer.id}`,
+              adjustedBy: userId,
+              adjustedAt: new Date(),
+              status: 'CONFIRMED',
+              items: {
+                create: [
+                  {
+                    productId,
+                    oldQuantity: sourceOldQuantity,
+                    newQuantity: updatedSource.quantity,
+                    difference: -quantity,
+                  },
+                ],
+              },
+            },
+          }),
+          // Destination branch (IN)
+          tx.stockAdjustment.create({
+            data: {
+              organizationId,
+              code: `ADJ-IN-${transfer.id}-${uniqueSuffix}`,
+              branchId: toBranchId,
+              type: 'INCREASE',
+              reason: `Transfer from ${fromBranch.name}${notes ? `: ${notes}` : ''}`,
+              notes: `Transfer ID: ${transfer.id}`,
+              adjustedBy: userId,
+              adjustedAt: new Date(),
+              status: 'CONFIRMED',
+              items: {
+                create: [
+                  {
+                    productId,
+                    oldQuantity: destOldQuantity,
+                    newQuantity: updatedDest.quantity,
+                    difference: quantity,
+                  },
+                ],
+              },
+            },
+          }),
+        ]);
+
+        return { data: transfer };
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+        this.logger.error('Failed to create transfer', error instanceof Error ? error.stack : error);
+        throw new InternalServerErrorException('Failed to create transfer');
+      }
     });
   }
 
