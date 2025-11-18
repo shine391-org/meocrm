@@ -5,9 +5,12 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RequestContextModule } from '../../common/context/request-context.module';
 
+const scheduleImports =
+  process.env.DISABLE_SCHEDULER === 'true' ? [] : [ScheduleModule.forRoot()];
+
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    ...scheduleImports,
     PrismaModule,
     NotificationsModule,
     RequestContextModule,

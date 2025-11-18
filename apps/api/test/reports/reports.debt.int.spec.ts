@@ -1,4 +1,4 @@
-import { Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import {
   cleanupDatabase,
@@ -18,9 +18,10 @@ describe('Reports /reports/debt (integration)', () => {
   let debtSnapshotService: DebtSnapshotService;
   let reportsService: ReportsService;
   let requestContext: RequestContextService;
+  let moduleRef: TestingModule;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
 
@@ -28,6 +29,10 @@ describe('Reports /reports/debt (integration)', () => {
     debtSnapshotService = moduleRef.get(DebtSnapshotService);
     reportsService = moduleRef.get(ReportsService);
     requestContext = moduleRef.get(RequestContextService);
+  });
+
+  afterAll(async () => {
+    await moduleRef?.close();
   });
 
   beforeEach(async () => {

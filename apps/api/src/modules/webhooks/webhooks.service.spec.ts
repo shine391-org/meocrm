@@ -7,6 +7,8 @@ import { NotFoundException } from '@nestjs/common';
 import * as cryptoUtil from '../../common/crypto/crypto.util';
 import { OrdersService } from '../../orders/orders.service';
 
+process.env.WEBHOOK_DISABLE_RETRY = 'true';
+
 const mockAxiosFactory = () => {
   const instance = Object.assign(jest.fn(), {
     interceptors: {

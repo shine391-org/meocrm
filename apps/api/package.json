@@ -5,6 +5,8 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "test": "jest --config ../../jest.config.js --runInBand --passWithNoTests",
+    "test:webhooks-int": "node -e \"process.env.WEBHOOK_DISABLE_RETRY='true'; require('child_process').execSync('jest --config ./jest.webhooks.config.js --runInBand --passWithNoTests test/webhooks/webhooks.service.int.spec.ts', { stdio: 'inherit', cwd: __dirname })\"",
+    "test:webhooks-unit": "node scripts/run-webhook-unit-test.js",
     "test:e2e": "jest --config ../../jest.config.js --runInBand --testRegex=.*\\.e2e-spec\\.ts$",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prisma": "prisma",

@@ -11,6 +11,7 @@ import { AppService } from './app.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { OrdersModule } from './orders/orders.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { ShippingModule } from './shipping/shipping.module';
 import { RequestContextModule } from './common/context/request-context.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { RedisModule } from './redis/redis.module';
@@ -49,6 +50,7 @@ import { RequestContextMiddleware } from './common/context/request-context.middl
     CustomersModule,
     OrdersModule,
     SuppliersModule,
+    ShippingModule,
     InventoryModule,
   ],
   controllers: [AppController],

@@ -145,6 +145,7 @@ describe('CustomersService', () => {
         where: { id: '1', organizationId, deletedAt: null },
         data: { name: 'Updated', phone: '222' },
       });
+      expect(segmentationService.updateSegment).toHaveBeenCalledWith('1', organizationId);
       expect(result).toEqual({ data: { id: '1', name: 'Updated' } });
     });
 

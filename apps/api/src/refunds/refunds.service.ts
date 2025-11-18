@@ -18,13 +18,9 @@ export class RefundsService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async requestRefund(
-    orderId: string,
-    dto: RefundRequestDto,
-    user: User,
-  ) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+  async requestRefund(orderId: string, dto: RefundRequestDto, user: User, organizationId: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, organizationId },
     });
 
     if (!order) {
@@ -50,14 +46,14 @@ export class RefundsService {
     return { message: 'Refund request submitted successfully.' };
   }
 
-  async approveRefund(orderId: string, user: User) {
+  async approveRefund(orderId: string, user: User, organizationId: string) {
     const windowDays =
       (await this.settings.get<number>('refund.windowDays')) ?? 7;
     const restockOnRefund =
       (await this.settings.get<boolean>('refund.restockOnRefund')) ?? true;
 
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, organizationId },
       include: {
         items: {
           include: {
@@ -123,7 +119,7 @@ export class RefundsService {
       const adjustmentsCreated = await this.createCommissionAdjustments(tx, order.commissions);
 
       const result = await tx.order.update({
-        where: { id: orderId },
+        where: { id: orderId, organizationId },
         data: { status: OrderStatus.CANCELLED },
       });
 
@@ -155,13 +151,9 @@ export class RefundsService {
     return updatedOrder;
   }
 
-  async rejectRefund(
-    orderId: string,
-    dto: RefundRejectDto,
-    user: User,
-  ) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
+  async rejectRefund(orderId: string, dto: RefundRejectDto, user: User, organizationId: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, organizationId },
     });
 
     if (!order) {

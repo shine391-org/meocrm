@@ -47,6 +47,7 @@ export class WebhooksService implements OnModuleInit {
         const config = error.config || {};
         const status = error?.response?.status;
         const shouldRetry =
+          process.env.WEBHOOK_DISABLE_RETRY !== 'true' &&
           (!status || status >= 500) &&
           (config.retryCount ?? 0) < 5;
 

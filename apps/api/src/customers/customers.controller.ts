@@ -13,10 +13,12 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OrganizationGuard } from '../common/guards/organization.guard';
+import { OrganizationId } from '../common/decorators/organization-id.decorator';
 
 @ApiTags('customers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, OrganizationGuard)
 @Controller('customers')
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
@@ -25,8 +27,12 @@ export class CustomersController {
   @ApiOperation({ summary: 'Create new customer' })
   @ApiResponse({ status: 201, description: 'Customer created successfully' })
   @ApiResponse({ status: 409, description: 'Phone number already exists' })
-  create(@CurrentUser() user: any, @Body() dto: CreateCustomerDto) {
-    return this.customersService.create(dto, user.organizationId, user.id);
+  create(
+    @CurrentUser() user: any,
+    @OrganizationId() organizationId: string,
+    @Body() dto: CreateCustomerDto,
+  ) {
+    return this.customersService.create(dto, organizationId, user.id);
   }
 
   @Get()
@@ -38,7 +44,7 @@ export class CustomersController {
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiQuery({ name: 'segment', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Customer list retrieved' })
-  findAll(@CurrentUser() user: any, @Query() query: QueryCustomersDto) {
+  findAll(@OrganizationId() organizationId: string, @Query() query: QueryCustomersDto) {
     const { page, limit, search, sortBy, sortOrder, segment } = query;
     const pageNumber = page ?? 1;
     const limitNumber = limit ?? 20;
@@ -47,7 +53,7 @@ export class CustomersController {
     return this.customersService.findAll(
       pageNumber,
       limitNumber,
-      user.organizationId,
+      organizationId,
       search,
       sortField,
       sortDirection,
@@ -59,8 +65,8 @@ export class CustomersController {
   @ApiOperation({ summary: 'Get customer by ID' })
   @ApiResponse({ status: 200, description: 'Customer found' })
   @ApiResponse({ status: 404, description: 'Customer not found' })
-  findOne(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.customersService.findOne(id, user.organizationId);
+  findOne(@OrganizationId() organizationId: string, @Param('id') id: string) {
+    return this.customersService.findOne(id, organizationId);
   }
 
   @Patch(':id')
@@ -69,11 +75,11 @@ export class CustomersController {
   @ApiResponse({ status: 404, description: 'Customer not found' })
   @ApiResponse({ status: 409, description: 'Phone number already exists' })
   update(
-    @CurrentUser() user: any,
+    @OrganizationId() organizationId: string,
     @Param('id') id: string,
     @Body() dto: UpdateCustomerDto,
   ) {
-    return this.customersService.update(id, dto, user.organizationId);
+    return this.customersService.update(id, dto, organizationId);
   }
 
   @Delete(':id')
@@ -81,7 +87,7 @@ export class CustomersController {
   @ApiResponse({ status: 200, description: 'Customer deleted' })
   @ApiResponse({ status: 400, description: 'Customer has orders' })
   @ApiResponse({ status: 404, description: 'Customer not found' })
-  remove(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.customersService.remove(id, user.organizationId);
+  remove(@OrganizationId() organizationId: string, @Param('id') id: string) {
+    return this.customersService.remove(id, organizationId);
   }
 }

@@ -179,6 +179,8 @@ export class CustomersService {
       },
     });
 
+    await this.segmentationService.updateSegment(id, organizationId);
+
     return this.findOne(id, organizationId);
   }
 

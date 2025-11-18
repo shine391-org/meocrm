@@ -1,4 +1,4 @@
-import { Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { cleanupDatabase, createCustomer } from '../../src/test-utils';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -43,8 +43,12 @@ describe('Refund approval integration', () => {
   let prisma: PrismaService;
   let refundsService: RefundsService;
   let notificationsMock: { sendToStaff: jest.Mock };
-  let eventEmitterMock: { emit: jest.Mock };
+let eventEmitterMock: {
+  emit: jest.Mock;
+  removeAllListeners: jest.Mock;
+};
   let requestContext: RequestContextService;
+  let moduleRef: TestingModule;
 
   beforeAll(async () => {
     process.env.WEBHOOK_SECRET_KEY =
@@ -53,9 +57,9 @@ describe('Refund approval integration', () => {
     notificationsMock = {
       sendToStaff: jest.fn().mockResolvedValue(undefined),
     };
-    eventEmitterMock = { emit: jest.fn() };
+    eventEmitterMock = { emit: jest.fn(), removeAllListeners: jest.fn() };
 
-    const moduleRef = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(NotificationsService)
@@ -67,6 +71,10 @@ describe('Refund approval integration', () => {
     prisma = moduleRef.get(PrismaService);
     refundsService = moduleRef.get(RefundsService);
     requestContext = moduleRef.get(RequestContextService);
+  });
+
+  afterAll(async () => {
+    await moduleRef?.close();
   });
 
   beforeEach(async () => {
@@ -217,7 +225,9 @@ describe('Refund approval integration', () => {
   it('restocks inventory, creates adjustment commissions, and emits events on approval', async () => {
     const seed = await seedRefundScenario();
 
-    await runAs(seed.organizationId, seed.user, () => refundsService.approveRefund(seed.orderId, seed.user));
+    await runAs(seed.organizationId, seed.user, () =>
+      refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+    );
 
     const product = await prisma.product.findUnique({ where: { id: seed.productId } });
     const variant = await prisma.productVariant.findUnique({ where: { id: seed.variantId } });
@@ -302,7 +312,7 @@ describe('Refund approval integration', () => {
         userId: user.id,
         roles: [user.role],
       });
-      await refundsService.approveRefund(order.id, user);
+      await refundsService.approveRefund(order.id, user, organizationId);
     });
 
     const updatedProduct = await prisma.product.findUnique({ where: { id: product.id } });
@@ -313,7 +323,7 @@ describe('Refund approval integration', () => {
     const seed = await seedRefundScenario({ createCommission: false });
 
     await expect(
-      refundsService.requestRefund('missing-order', { reason: 'dup' } as any, seed.user),
+      refundsService.requestRefund('missing-order', { reason: 'dup' } as any, seed.user, seed.organizationId),
     ).rejects.toThrow('Order with ID missing-order not found.');
   });
 
@@ -321,7 +331,9 @@ describe('Refund approval integration', () => {
     const seed = await seedRefundScenario();
 
     await expect(
-      runAs(seed.organizationId, seed.user, () => refundsService.approveRefund('missing-order', seed.user)),
+      runAs(seed.organizationId, seed.user, () =>
+        refundsService.approveRefund('missing-order', seed.user, seed.organizationId),
+      ),
     ).rejects.toThrow('Order with ID missing-order not found.');
   });
 
@@ -332,7 +344,9 @@ describe('Refund approval integration', () => {
     });
 
     await expect(
-      runAs(seed.organizationId, seed.user, () => refundsService.approveRefund(seed.orderId, seed.user)),
+      runAs(seed.organizationId, seed.user, () =>
+        refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+      ),
     ).rejects.toThrow('Cannot refund an order that has not been completed.');
   });
 
@@ -344,7 +358,9 @@ describe('Refund approval integration', () => {
     });
 
     await expect(
-      runAs(seed.organizationId, seed.user, () => refundsService.approveRefund(seed.orderId, seed.user)),
+      runAs(seed.organizationId, seed.user, () =>
+        refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+      ),
     ).rejects.toThrow('Refund window of 7 days has expired.');
   });
 
@@ -353,7 +369,7 @@ describe('Refund approval integration', () => {
     const reason = 'Duplicate request';
 
     const response = await runAs(seed.organizationId, seed.user, () =>
-      refundsService.rejectRefund(seed.orderId, { reason }, seed.user),
+      refundsService.rejectRefund(seed.orderId, { reason }, seed.user, seed.organizationId),
     );
 
     expect(response.message).toContain('rejected');
@@ -369,7 +385,7 @@ describe('Refund approval integration', () => {
 
     await expect(
       runAs(seed.organizationId, seed.user, () =>
-        refundsService.rejectRefund('missing-order', { reason: 'n/a' }, seed.user),
+        refundsService.rejectRefund('missing-order', { reason: 'n/a' }, seed.user, seed.organizationId),
       ),
     ).rejects.toThrow('Order with ID missing-order not found.');
   });
@@ -377,11 +393,15 @@ describe('Refund approval integration', () => {
   it('is idempotent when approveRefund is called twice', async () => {
     const seed = await seedRefundScenario();
 
-    await runAs(seed.organizationId, seed.user, () => refundsService.approveRefund(seed.orderId, seed.user));
+    await runAs(seed.organizationId, seed.user, () =>
+      refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+    );
     const productAfterFirst = await prisma.product.findUnique({ where: { id: seed.productId } });
     const variantAfterFirst = await prisma.productVariant.findUnique({ where: { id: seed.variantId } });
 
-    await runAs(seed.organizationId, seed.user, () => refundsService.approveRefund(seed.orderId, seed.user));
+    await runAs(seed.organizationId, seed.user, () =>
+      refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+    );
 
     const productAfterSecond = await prisma.product.findUnique({ where: { id: seed.productId } });
     const variantAfterSecond = await prisma.productVariant.findUnique({ where: { id: seed.variantId } });
@@ -425,7 +445,9 @@ describe('Refund approval integration', () => {
 
     try {
       await expect(
-        runAs(seed.organizationId, seed.user, () => refundsService.approveRefund(seed.orderId, seed.user)),
+        runAs(seed.organizationId, seed.user, () =>
+          refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+        ),
       ).rejects.toThrow('forced variant failure');
     } finally {
       transactionSpy.mockRestore();

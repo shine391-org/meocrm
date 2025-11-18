@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ExecutionContext, INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { User, UserRole } from '@prisma/client';
+import { OrganizationGuard } from '../common/guards/organization.guard';
 
 describe('RefundsController (Integration)', () => {
   let app: INestApplication;
@@ -56,6 +57,14 @@ describe('RefundsController (Integration)', () => {
           } else {
             req.user = mockUser;
           }
+          return true;
+        },
+      })
+      .overrideGuard(OrganizationGuard)
+      .useValue({
+        canActivate: (context: ExecutionContext) => {
+          const req = context.switchToHttp().getRequest();
+          req.organizationId = mockUser.organizationId;
           return true;
         },
       })

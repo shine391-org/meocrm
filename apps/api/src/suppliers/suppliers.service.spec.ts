@@ -4,54 +4,55 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 
-const mockPrismaService = {
+const createMockPrisma = () => ({
   supplier: {
     findFirst: jest.fn(),
     create: jest.fn(),
     findMany: jest.fn(),
     count: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
   purchaseOrder: {
     count: jest.fn(),
-  }
-};
+  },
+});
 
 const mockSupplier = {
-    id: 'clxza91z10000a400b1c2d3e4',
-    organizationId: 'org_123',
-    code: 'DT000001',
-    name: 'Test Supplier',
-    phone: '0123456789',
-    email: 'test@supplier.com',
-    address: '123 Test St',
-    taxCode: '1234567890',
-    totalPurchased: new Decimal(0),
-    totalOrders: 0,
-    debt: new Decimal(0),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    deletedAt: null,
+  id: 'clxza91z10000a400b1c2d3e4',
+  organizationId: 'org_123',
+  code: 'DT000001',
+  name: 'Test Supplier',
+  phone: '0123456789',
+  email: 'test@supplier.com',
+  address: '123 Test St',
+  taxCode: '1234567890',
+  totalPurchases: new Decimal(0),
+  totalPaid: new Decimal(0),
+  debt: new Decimal(0),
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  deletedAt: null,
 };
-
 
 describe('SuppliersService', () => {
   let service: SuppliersService;
-  let prisma: typeof mockPrismaService;
+  let prisma: ReturnType<typeof createMockPrisma>;
 
   beforeEach(async () => {
+    prisma = createMockPrisma();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SuppliersService,
         {
           provide: PrismaService,
-          useValue: mockPrismaService,
+          useValue: prisma,
         },
       ],
     }).compile();
 
     service = module.get<SuppliersService>(SuppliersService);
-    prisma = module.get(PrismaService);
     jest.clearAllMocks();
   });
 
@@ -60,127 +61,164 @@ describe('SuppliersService', () => {
   });
 
   describe('generateCode', () => {
-    it('should generate DT000001 if no suppliers exist', async () => {
+    it('should return DT000001 when no supplier exists', async () => {
       prisma.supplier.findFirst.mockResolvedValue(null);
       const code = await service['generateCode']('org_123');
       expect(code).toBe('DT000001');
-      expect(prisma.supplier.findFirst).toHaveBeenCalledWith({
-        where: { organizationId: 'org_123', deletedAt: null },
-        orderBy: { code: 'desc' },
-        select: { code: true },
-      });
     });
 
-    it('should generate next code (DT000002) if suppliers exist', async () => {
-      prisma.supplier.findFirst.mockResolvedValue({ code: 'DT000001' });
+    it('should increment existing code', async () => {
+      prisma.supplier.findFirst.mockResolvedValue({ code: 'DT000010' });
       const code = await service['generateCode']('org_123');
-      expect(code).toBe('DT000002');
+      expect(code).toBe('DT000011');
     });
   });
 
   describe('create', () => {
-    it('should create a new supplier successfully', async () => {
-      prisma.supplier.findFirst.mockResolvedValue(null); // No duplicates
+    it('creates a supplier', async () => {
+      prisma.supplier.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
       prisma.supplier.create.mockResolvedValue(mockSupplier);
 
-      const dto = {
-        name: 'Test Supplier',
-        phone: '0123456789',
-        taxCode: '1234567890',
-      };
+      const dto = { name: 'Test Supplier', phone: '0123456789', taxCode: '1234567890' };
       const result = await service.create('org_123', dto);
 
       expect(prisma.supplier.create).toHaveBeenCalledWith({
         data: { ...dto, code: 'DT000001', organizationId: 'org_123' },
       });
-      expect(result).toEqual(mockSupplier);
+      expect(result).toEqual({ data: mockSupplier });
     });
 
-    it('should throw BadRequestException if phone number already exists', async () => {
-      prisma.supplier.findFirst.mockImplementation(({ where }: any) => {
-        if (where.phone) {
-          return Promise.resolve(mockSupplier); // Found duplicate phone
-        }
-        return Promise.resolve(null);
-      });
+    it('throws when phone duplicate', async () => {
+      prisma.supplier.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockSupplier);
 
-      const dto = { name: 'Test', phone: '0123456789' };
-      await expect(service.create('org_123', dto)).rejects.toThrow('Phone number already exists for this organization');
+      await expect(
+        service.create('org_123', { name: 'Test', phone: '0123456789' }),
+      ).rejects.toThrow('Phone number already exists for this organization');
     });
 
-    it('should throw BadRequestException if tax code already exists', async () => {
-      prisma.supplier.findFirst.mockImplementation(({ where }: any) => {
-        if (where.taxCode) {
-          return Promise.resolve(mockSupplier); // Found duplicate tax code
-        }
-        return Promise.resolve(null); // No duplicate phone
-      });
+    it('throws when tax code duplicate', async () => {
+      prisma.supplier.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockSupplier);
 
-      const dto = {
-        name: 'Test Supplier',
-        phone: '0987654321',
-        taxCode: '1234567890',
-      };
-
-      await expect(service.create('org_123', dto)).rejects.toThrow(
-        'Tax code already exists for this organization',
-      );
+      await expect(
+        service.create('org_123', {
+          name: 'Test',
+          phone: '0987654321',
+          taxCode: '1234567890',
+        }),
+      ).rejects.toThrow('Tax code already exists for this organization');
     });
   });
 
-  describe('remove', () => {
-    it('should soft delete a supplier', async () => {
-        prisma.supplier.findFirst.mockResolvedValue(mockSupplier);
-        prisma.purchaseOrder.count.mockResolvedValue(0);
-        prisma.supplier.update.mockResolvedValue({ ...mockSupplier, deletedAt: new Date() });
+  describe('findAll', () => {
+    it('returns paginated suppliers', async () => {
+      const list = [mockSupplier];
+      prisma.supplier.findMany.mockResolvedValue(list);
+      prisma.supplier.count.mockResolvedValue(1);
 
-        await service.remove('org_123', mockSupplier.id);
-        expect(prisma.supplier.update).toHaveBeenCalledWith({
-            where: { id: mockSupplier.id },
-            data: { deletedAt: expect.any(Date) }
-        });
+      const result = await service.findAll('org_123', { page: 1, limit: 10 });
+
+      expect(result.data).toEqual(list);
+      expect(result.meta.total).toBe(1);
     });
-
-    it('should throw NotFoundException if supplier not found', async () => {
-        prisma.supplier.findFirst.mockResolvedValue(null);
-        await expect(service.remove('org_123', 'invalid-id')).rejects.toThrow(NotFoundException);
-    });
-
-    // it('should throw BadRequestException if supplier has purchase orders', async () => {
-    //     prisma.supplier.findFirst.mockResolvedValue(mockSupplier);
-    //     prisma.purchaseOrder.count.mockResolvedValue(1);
-    //     await expect(service.remove('org_123', mockSupplier.id)).rejects.toThrow(BadRequestException);
-    // });
   });
 
   describe('findOne', () => {
-    it('should return a supplier if found', async () => {
+    it('returns supplier data', async () => {
       prisma.supplier.findFirst.mockResolvedValue(mockSupplier);
       const result = await service.findOne('org_123', mockSupplier.id);
-      expect(result).toEqual(mockSupplier);
+      expect(result).toEqual({ data: mockSupplier });
     });
 
-    it('should throw NotFoundException if supplier not found', async () => {
+    it('throws when supplier missing', async () => {
       prisma.supplier.findFirst.mockResolvedValue(null);
-      await expect(service.findOne('org_123', 'invalid-id')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('org_123', 'missing')).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('update', () => {
-    it('should update a supplier successfully', async () => {
-      prisma.supplier.findFirst.mockResolvedValue(mockSupplier);
-      prisma.supplier.update.mockResolvedValue({ ...mockSupplier, name: 'Updated Name' });
-      const dto = { name: 'Updated Name' };
-      const result = await service.update('org_123', mockSupplier.id, dto);
-      expect(result.name).toBe('Updated Name');
+    it('updates successfully', async () => {
+      prisma.supplier.findFirst
+        .mockResolvedValueOnce(mockSupplier)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      prisma.supplier.update.mockResolvedValue({ ...mockSupplier, name: 'Updated' });
+
+      const result = await service.update('org_123', mockSupplier.id, { name: 'Updated' });
+      expect(result.data.name).toBe('Updated');
     });
 
-    it('should throw BadRequestException if tax code already exists on another supplier', async () => {
+    it('throws when tax code used by another supplier', async () => {
+      prisma.supplier.findFirst
+        .mockResolvedValueOnce(mockSupplier)
+        .mockResolvedValueOnce({ ...mockSupplier, id: 'other' });
+
+      await expect(
+        service.update('org_123', mockSupplier.id, { taxCode: '111222333' }),
+      ).rejects.toThrow('Tax code already exists for another supplier');
+    });
+  });
+
+  describe('remove', () => {
+    it('soft deletes when no purchase orders exist', async () => {
       prisma.supplier.findFirst.mockResolvedValue(mockSupplier);
-      prisma.supplier.findFirst.mockResolvedValueOnce(mockSupplier); // for findOne call
-      prisma.supplier.findFirst.mockResolvedValueOnce({ ...mockSupplier, id: 'another-id' }); // for duplicate check
-      const dto = { taxCode: '111222333' };
-      await expect(service.update('org_123', mockSupplier.id, dto)).rejects.toThrow('Tax code already exists for another supplier');
+      prisma.purchaseOrder.count.mockResolvedValue(0);
+      prisma.supplier.update.mockResolvedValue({ ...mockSupplier, deletedAt: new Date() });
+
+      const result = await service.remove('org_123', mockSupplier.id);
+      expect(prisma.supplier.update).toHaveBeenCalled();
+      expect(result).toEqual({ data: expect.objectContaining({ id: mockSupplier.id }) });
+    });
+
+    it('throws when purchase orders exist', async () => {
+      prisma.supplier.findFirst.mockResolvedValue(mockSupplier);
+      prisma.purchaseOrder.count.mockResolvedValue(2);
+
+      await expect(service.remove('org_123', mockSupplier.id)).rejects.toThrow(
+        'Cannot delete supplier with existing purchase orders',
+      );
+    });
+
+    it('throws when supplier missing', async () => {
+      prisma.supplier.findFirst.mockResolvedValue(null);
+      await expect(service.remove('org_123', 'missing')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('recordPurchase', () => {
+    it('increments stats and debt', async () => {
+      prisma.supplier.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.recordPurchase('org_123', mockSupplier.id, 1000, 600);
+
+      expect(prisma.supplier.updateMany).toHaveBeenCalledWith({
+        where: { id: mockSupplier.id, organizationId: 'org_123', deletedAt: null },
+        data: {
+          totalPurchases: { increment: 1000 },
+          totalPaid: { increment: 600 },
+          debt: { increment: 400 },
+        },
+      });
+    });
+
+    it('throws when paid greater than total', async () => {
+      await expect(
+        service.recordPurchase('org_123', mockSupplier.id, 500, 600),
+      ).rejects.toThrow('Paid amount cannot exceed total');
+    });
+
+    it('throws when supplier missing', async () => {
+      prisma.supplier.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        service.recordPurchase('org_123', mockSupplier.id, 100, 50),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

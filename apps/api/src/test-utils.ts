@@ -2,7 +2,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthService } from './auth/auth.service';
 import { Organization, User, UserRole } from '@prisma/client';
@@ -72,6 +71,7 @@ type SetupTestAppResult = {
 };
 
 export async function setupTestApp(options: { skipCleanup?: boolean } = {}): Promise<SetupTestAppResult> {
+  const { AppModule } = await import('./app.module');
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
@@ -194,6 +194,7 @@ export async function cleanupDatabase(prisma: PrismaService) {
   await prisma.category.deleteMany({});
   await prisma.branch.deleteMany({});
   await prisma.supplier.deleteMany({});
+  await prisma.shippingPartner.deleteMany({});
   await prisma.webhook.deleteMany({});
   await prisma.setting.deleteMany({});
   await prisma.auditLog.deleteMany({});
@@ -283,4 +284,3 @@ export async function createCustomer(prisma: PrismaService, organizationId: stri
     },
   });
 }
-

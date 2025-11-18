@@ -7,6 +7,7 @@ import { Prisma, PrismaClient, OrderStatus } from '@prisma/client';
 import { PricingService } from './pricing.service';
 import { SettingsService } from '../modules/settings/settings.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CustomerStatsService } from '../customers/services/customer-stats.service';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 
@@ -14,6 +15,11 @@ describe('OrdersService', () => {
   let service: OrdersService;
   let prisma: DeepMockProxy<PrismaClient>;
   let eventEmitter: { emit: jest.Mock };
+  let customerStatsService: {
+    updateStatsOnOrderComplete: jest.Mock;
+    revertStatsOnOrderCancel: jest.Mock;
+    updateDebt: jest.Mock;
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -42,6 +48,14 @@ describe('OrdersService', () => {
           provide: EventEmitter2,
           useValue: { emit: jest.fn() },
         },
+        {
+          provide: CustomerStatsService,
+          useValue: {
+            updateStatsOnOrderComplete: jest.fn().mockResolvedValue(undefined),
+            revertStatsOnOrderCancel: jest.fn().mockResolvedValue(undefined),
+            updateDebt: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 
@@ -49,6 +63,7 @@ describe('OrdersService', () => {
     prisma = module.get(PrismaService) as DeepMockProxy<PrismaClient>;
     eventEmitter = module.get(EventEmitter2) as any;
     eventEmitter.emit.mockReset();
+    customerStatsService = module.get(CustomerStatsService) as any;
 
     (prisma.$transaction as unknown as jest.Mock).mockImplementation(
       async (callback: (tx: PrismaTransactionalClient) => Promise<any>) =>
@@ -165,10 +180,10 @@ describe('OrdersService', () => {
       code: 'ORD-001',
       customerId: 'customer-1',
       subtotal: 200,
-      tax: 20,
-      shipping: 0,
+      tax: 5,
+      shipping: 10,
       discount: 0,
-      total: 200,
+      total: 215,
       isPaid: false,
       paidAmount: 0,
       status: OrderStatus.PENDING,
@@ -238,6 +253,21 @@ describe('OrdersService', () => {
 
       // Verify transaction was called
       expect(prisma.$transaction).toHaveBeenCalled();
+
+      expect(customerStatsService.updateStatsOnOrderComplete).toHaveBeenCalled();
+      const [[createdCustomerId, createdTotal, createdTx, createdOrg]] =
+        customerStatsService.updateStatsOnOrderComplete.mock.calls;
+      expect(createdCustomerId).toBe(mockCreateDto.customerId);
+      expect(createdTotal).toBe(result.data.total);
+      expect(createdTx).toBeDefined();
+      expect(createdOrg).toBe('org-1');
+
+      expect(customerStatsService.updateDebt).toHaveBeenCalled();
+      const [[debtCustomerId, debtAmount, debtTx, debtOrg]] = customerStatsService.updateDebt.mock.calls;
+      expect(debtCustomerId).toBe(mockCreateDto.customerId);
+      expect(debtAmount).toBe(result.data.total);
+      expect(debtTx).toBeDefined();
+      expect(debtOrg).toBe('org-1');
     });
 
     it('respects immediate payment when allowed', async () => {
@@ -277,6 +307,15 @@ describe('OrdersService', () => {
       );
 
       expect(result.data.isPaid).toBe(true);
+
+      expect(customerStatsService.updateStatsOnOrderComplete).toHaveBeenCalled();
+      const [[createdCustomerId, createdTotal, createdTx, createdOrg]] =
+        customerStatsService.updateStatsOnOrderComplete.mock.calls;
+      expect(createdCustomerId).toBe(mockCreateDto.customerId);
+      expect(createdTotal).toBe(result.data.total);
+      expect(createdTx).toBeDefined();
+      expect(createdOrg).toBe('org-1');
+      expect(customerStatsService.updateDebt).not.toHaveBeenCalled();
     });
 
     it('should throw error if product not found', async () => {
@@ -341,7 +380,7 @@ describe('OrdersService', () => {
           }),
         },
         customer: {
-          update: jest.fn().mockResolvedValue({ id: baseOrder.customerId }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         },
       };
 
@@ -364,8 +403,12 @@ describe('OrdersService', () => {
         }),
       );
 
-      expect(transactionContext.customer.update).toHaveBeenCalledWith({
-        where: { id: baseOrder.customerId },
+      expect(transactionContext.customer.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: baseOrder.customerId,
+          organizationId: 'org-1',
+          deletedAt: null,
+        },
         data: expect.objectContaining({
           debt: { increment: 10 },
         }),
@@ -394,9 +437,6 @@ describe('OrdersService', () => {
 
     it('reverts customer debt using computed totals', async () => {
       const transactionContext = {
-        customer: {
-          update: jest.fn(),
-        },
         order: {
           update: jest.fn().mockResolvedValue({ id: removableOrder.id }),
         },
@@ -408,14 +448,20 @@ describe('OrdersService', () => {
 
       await service.remove(removableOrder.id, 'org-1');
 
-      expect(transactionContext.customer.update).toHaveBeenCalledWith({
-        where: { id: removableOrder.customerId },
-        data: {
-          totalSpent: { decrement: 130 },
-          totalOrders: { decrement: 1 },
-          debt: { decrement: 80 },
-        },
-      });
+      expect(customerStatsService.revertStatsOnOrderCancel).toHaveBeenCalled();
+      const [[revertCustomerId, revertAmount, revertTx, revertOrg]] =
+        customerStatsService.revertStatsOnOrderCancel.mock.calls;
+      expect(revertCustomerId).toBe(removableOrder.customerId);
+      expect(revertAmount).toBe(130);
+      expect(revertTx).toBeDefined();
+      expect(revertOrg).toBe('org-1');
+
+      expect(customerStatsService.updateDebt).toHaveBeenCalled();
+      const [[debtCustomerId, debtAmount, debtTx, debtOrg]] = customerStatsService.updateDebt.mock.calls;
+      expect(debtCustomerId).toBe(removableOrder.customerId);
+      expect(debtAmount).toBe(-80);
+      expect(debtTx).toBeDefined();
+      expect(debtOrg).toBe('org-1');
     });
   });
 
@@ -547,6 +593,46 @@ describe('OrdersService', () => {
       await expect(
         service.updateStatus('order-1', { status: OrderStatus.CONFIRMED } as any, 'org-id'),
       ).rejects.toThrow('Order with ID order-1 not found');
+    });
+
+    it('reverts stats via service when cancelling order', async () => {
+      const cancelOrder = {
+        ...order,
+        customer: { id: order.customerId, debt: 70 },
+      } as any;
+
+      prisma.order.findFirst.mockResolvedValue(cancelOrder);
+      prisma.order.update.mockResolvedValue({
+        ...cancelOrder,
+        status: OrderStatus.CANCELLED,
+      } as any);
+
+      await service.updateStatus(
+        'order-1',
+        { status: OrderStatus.CANCELLED } as any,
+        'org-id',
+      );
+
+      const outstanding = Math.max(
+        Number(cancelOrder.total) - Number(cancelOrder.paidAmount),
+        0,
+      );
+      const expectedDebt = -Math.min(outstanding, cancelOrder.customer.debt);
+
+      expect(customerStatsService.revertStatsOnOrderCancel).toHaveBeenCalled();
+      const [[revertCustomerId, revertTotal, revertTx, revertOrg]] =
+        customerStatsService.revertStatsOnOrderCancel.mock.calls;
+      expect(revertCustomerId).toBe(cancelOrder.customerId);
+      expect(revertTotal).toBe(Number(cancelOrder.total));
+      expect(revertTx).toBeDefined();
+      expect(revertOrg).toBe('org-id');
+
+      expect(customerStatsService.updateDebt).toHaveBeenCalled();
+      const [[debtCustomerId, debtAmount, debtTx, debtOrg]] = customerStatsService.updateDebt.mock.calls;
+      expect(debtCustomerId).toBe(cancelOrder.customerId);
+      expect(debtAmount).toBe(expectedDebt);
+      expect(debtTx).toBeDefined();
+      expect(debtOrg).toBe('org-id');
     });
   });
 });

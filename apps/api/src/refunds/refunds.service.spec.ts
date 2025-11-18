@@ -113,14 +113,14 @@ describe('RefundsService', () => {
     settings = module.get(SettingsService);
     eventEmitter = module.get(EventEmitter2);
 
-    prisma.order.findUnique.mockResolvedValue(buildOrder());
+    prisma.order.findFirst.mockResolvedValue(buildOrder());
     settings.get.calledWith('refund.windowDays').mockResolvedValue(7);
     settings.get.calledWith('refund.restockOnRefund').mockResolvedValue(true);
   });
 
   describe('requestRefund', () => {
     it('should create an audit log and send a notification', async () => {
-      await service.requestRefund('order-1', { reason: 'test' }, mockUser);
+      await service.requestRefund('order-1', { reason: 'test' }, mockUser, mockUser.organizationId);
       expect(auditLog.log).toHaveBeenCalledWith(
         expect.objectContaining({
           user: mockUser,
@@ -134,18 +134,18 @@ describe('RefundsService', () => {
     });
 
     it('throws NotFoundException if order is missing', async () => {
-      prisma.order.findUnique.mockResolvedValueOnce(null as any);
+      prisma.order.findFirst.mockResolvedValueOnce(null as any);
 
-      await expect(service.requestRefund('missing', { reason: 'no-order' }, mockUser)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.requestRefund('missing', { reason: 'no-order' }, mockUser, mockUser.organizationId),
+      ).rejects.toThrow(NotFoundException);
       expect(auditLog.log).not.toHaveBeenCalled();
     });
   });
 
   describe('rejectRefund', () => {
     it('should create an audit log and send a notification', async () => {
-      await service.rejectRefund('order-1', { reason: 'test reject' }, mockUser);
+      await service.rejectRefund('order-1', { reason: 'test reject' }, mockUser, mockUser.organizationId);
       expect(auditLog.log).toHaveBeenCalledWith(
         expect.objectContaining({
           user: mockUser,
@@ -159,11 +159,11 @@ describe('RefundsService', () => {
     });
 
     it('throws NotFoundException if order not found during reject', async () => {
-      prisma.order.findUnique.mockResolvedValueOnce(null as any);
+      prisma.order.findFirst.mockResolvedValueOnce(null as any);
 
-      await expect(service.rejectRefund('missing', { reason: 'fail' }, mockUser)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.rejectRefund('missing', { reason: 'fail' }, mockUser, mockUser.organizationId),
+      ).rejects.toThrow(NotFoundException);
       expect(auditLog.log).not.toHaveBeenCalled();
     });
   });
@@ -171,30 +171,36 @@ describe('RefundsService', () => {
   describe('approveRefund', () => {
     it('should throw BadRequestException if refund window is exceeded', async () => {
       const oldOrder = buildOrder({ completedAt: new Date('2023-01-01') }) as any;
-      prisma.order.findUnique.mockResolvedValue(oldOrder);
-      await expect(service.approveRefund('order-1', mockUser)).rejects.toThrow(BadRequestException);
+      prisma.order.findFirst.mockResolvedValue(oldOrder);
+      await expect(service.approveRefund('order-1', mockUser, mockUser.organizationId)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws when order is missing', async () => {
-      prisma.order.findUnique.mockResolvedValueOnce(null as any);
-      await expect(service.approveRefund('missing', mockUser)).rejects.toThrow(NotFoundException);
+      prisma.order.findFirst.mockResolvedValueOnce(null as any);
+      await expect(service.approveRefund('missing', mockUser, mockUser.organizationId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws when order is not completed yet', async () => {
-      prisma.order.findUnique.mockResolvedValueOnce(
+      prisma.order.findFirst.mockResolvedValueOnce(
         buildOrder({
           completedAt: null,
           status: OrderStatus.SHIPPED,
         }) as any,
       );
 
-      await expect(service.approveRefund('order-1', mockUser)).rejects.toThrow(BadRequestException);
+      await expect(service.approveRefund('order-1', mockUser, mockUser.organizationId)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should successfully process a refund, update stock, and emit event', async () => {
       prisma.$transaction.mockImplementation(async (callback: any) => callback(prisma));
 
-      await service.approveRefund('order-1', mockUser);
+      await service.approveRefund('order-1', mockUser, mockUser.organizationId);
 
       expect(prisma.productVariant.update).toHaveBeenCalledWith({
         where: { id: 'variant-1' },
@@ -206,7 +212,7 @@ describe('RefundsService', () => {
       });
 
       expect(prisma.order.update).toHaveBeenCalledWith({
-        where: { id: 'order-1' },
+        where: { id: 'order-1', organizationId: mockUser.organizationId },
         data: { status: OrderStatus.CANCELLED },
       });
 
@@ -240,14 +246,14 @@ describe('RefundsService', () => {
         source: CommissionSource.POS,
         split: {},
       } as any;
-      prisma.order.findUnique.mockResolvedValueOnce(
+      prisma.order.findFirst.mockResolvedValueOnce(
         buildOrder({
           commissions: [commission],
         }) as any,
       );
       prisma.$transaction.mockImplementation(async (callback: any) => callback(prisma));
 
-      await service.approveRefund('order-1', mockUser);
+      await service.approveRefund('order-1', mockUser, mockUser.organizationId);
 
       expect(prisma.commission.create).toHaveBeenCalled();
       const adjustmentPayload = prisma.commission.create.mock.calls[0][0].data;
@@ -265,7 +271,7 @@ describe('RefundsService', () => {
       prisma.product.update.mockClear();
       prisma.productVariant.update.mockClear();
 
-      await service.approveRefund('order-1', mockUser);
+      await service.approveRefund('order-1', mockUser, mockUser.organizationId);
 
       expect(prisma.product.update).not.toHaveBeenCalled();
       expect(prisma.productVariant.update).not.toHaveBeenCalled();

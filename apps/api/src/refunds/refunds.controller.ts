@@ -7,10 +7,12 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RefundsRolesGuard } from './guards/refunds-roles.guard';
+import { OrganizationGuard } from '../common/guards/organization.guard';
+import { OrganizationId } from '../common/decorators/organization-id.decorator';
 
 @ApiTags('Refunds')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, OrganizationGuard)
 @Controller('orders/:orderId')
 export class RefundsController {
   constructor(private readonly refundsService: RefundsService) {}
@@ -21,11 +23,13 @@ export class RefundsController {
     @Param('orderId') orderId: string,
     @Body() refundRequestDto: RefundRequestDto,
     @CurrentUser() user: User,
+    @OrganizationId() organizationId: string,
   ) {
     return this.refundsService.requestRefund(
       orderId,
       refundRequestDto,
       user,
+      organizationId,
     );
   }
 
@@ -35,8 +39,9 @@ export class RefundsController {
   async approveRefund(
     @Param('orderId') orderId: string,
     @CurrentUser() user: User,
+    @OrganizationId() organizationId: string,
   ) {
-    return this.refundsService.approveRefund(orderId, user);
+    return this.refundsService.approveRefund(orderId, user, organizationId);
   }
 
   @Post('refund-reject')
@@ -46,11 +51,13 @@ export class RefundsController {
     @Param('orderId') orderId: string,
     @Body() refundRejectDto: RefundRejectDto,
     @CurrentUser() user: User,
+    @OrganizationId() organizationId: string,
   ) {
     return this.refundsService.rejectRefund(
       orderId,
       refundRejectDto,
       user,
+      organizationId,
     );
   }
 }

@@ -1,26 +1,71 @@
-import { Test } from '@nestjs/testing';
-import { AppModule } from '../../src/app.module';
+import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigModule } from '@nestjs/config';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { cleanupDatabase } from '../../src/test-utils';
 import { WebhooksService } from '../../src/modules/webhooks/webhooks.service';
 import { WebhookHMACGuard } from '../../src/modules/webhooks/webhook-hmac.guard';
 import { ExecutionContext, NotFoundException } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
+import { WebhooksModule } from '../../src/modules/webhooks/webhooks.module';
+
+const axiosMockFactory = () => ({
+  post: jest.fn().mockResolvedValue({ status: 200 }),
+  interceptors: {
+    response: {
+      use: jest.fn((success, error) => ({ success, error })),
+    },
+  },
+});
+
+jest.mock('axios', () => ({
+  create: jest.fn(() => axiosMockFactory()),
+}));
 
 const SECRET = 'test-webhook-secret';
+
+async function resetDatabase(prisma: PrismaService) {
+  await prisma.customerDebtSnapshot.deleteMany({});
+  await prisma.commission.deleteMany({});
+  await prisma.orderReturnItem.deleteMany({});
+  await prisma.orderReturn.deleteMany({});
+  await prisma.shippingOrder.deleteMany({});
+  await prisma.shippingPartner.deleteMany({});
+  await prisma.orderItem.deleteMany({});
+  await prisma.order.deleteMany({});
+  await prisma.inventory.deleteMany({});
+  await prisma.productVariant.deleteMany({});
+  await prisma.product.deleteMany({});
+  await prisma.category.deleteMany({});
+  await prisma.branch.deleteMany({});
+  await prisma.supplier.deleteMany({});
+  await prisma.webhook.deleteMany({});
+  await prisma.setting.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.customer.deleteMany({});
+  await prisma.refreshToken.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.organization.deleteMany({});
+}
 
 describe('WebhooksService + HMAC guard integration', () => {
   let prisma: PrismaService;
   let webhooksService: WebhooksService;
   let guard: WebhookHMACGuard;
+  let moduleRef: TestingModule;
 
   beforeAll(async () => {
     process.env.WEBHOOK_SECRET = SECRET;
     process.env.WEBHOOK_SECRET_KEY =
       '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
+    process.env.WEBHOOK_DISABLE_RETRY = 'true';
+    moduleRef = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          isGlobal: true,
+          envFilePath: ['apps/api/.env.test', 'apps/api/.env'],
+        }),
+        WebhooksModule,
+      ],
     }).compile();
 
     prisma = moduleRef.get(PrismaService);
@@ -28,8 +73,13 @@ describe('WebhooksService + HMAC guard integration', () => {
     guard = moduleRef.get(WebhookHMACGuard);
   });
 
+  afterAll(async () => {
+    await prisma.$disconnect();
+    await moduleRef.close();
+  });
+
   beforeEach(async () => {
-    await cleanupDatabase(prisma);
+    await resetDatabase(prisma);
   });
 
   const seedOrder = async (code: string, overrides: Partial<{ status: OrderStatus }> = {}) => {

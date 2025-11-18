@@ -13,12 +13,21 @@ export class CustomerStatsService {
   async updateStatsOnOrderComplete(
     customerId: string,
     orderTotal: number,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
+    organizationId?: string,
   ): Promise<void> {
     const prisma = tx || this.prisma;
 
+    const baseWhere: Prisma.CustomerWhereInput = {
+      id: customerId,
+      deletedAt: null,
+    };
+    if (organizationId) {
+      baseWhere.organizationId = organizationId;
+    }
+
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, deletedAt: null },
+      where: baseWhere,
       select: { organizationId: true },
     });
 
@@ -27,11 +36,7 @@ export class CustomerStatsService {
     }
 
     const result = await prisma.customer.updateMany({
-      where: {
-        id: customerId,
-        organizationId: customer.organizationId,
-        deletedAt: null,
-      },
+      where: baseWhere,
       data: {
         totalSpent: { increment: orderTotal },
         totalOrders: { increment: 1 },
@@ -51,12 +56,21 @@ export class CustomerStatsService {
   async revertStatsOnOrderCancel(
     customerId: string,
     orderTotal: number,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
+    organizationId?: string,
   ): Promise<void> {
     const prisma = tx || this.prisma;
 
+    const baseWhere: Prisma.CustomerWhereInput = {
+      id: customerId,
+      deletedAt: null,
+    };
+    if (organizationId) {
+      baseWhere.organizationId = organizationId;
+    }
+
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, deletedAt: null },
+      where: baseWhere,
       select: { organizationId: true, totalSpent: true, totalOrders: true },
     });
 
@@ -67,9 +81,7 @@ export class CustomerStatsService {
     // Try decrement with guards first
     const result = await prisma.customer.updateMany({
       where: {
-        id: customerId,
-        organizationId: customer.organizationId,
-        deletedAt: null,
+        ...baseWhere,
         totalSpent: { gte: orderTotal },
         totalOrders: { gte: 1 },
       },
@@ -85,11 +97,7 @@ export class CustomerStatsService {
       const safeOrders = Math.max(0, (customer.totalOrders ?? 0) - 1);
 
       await prisma.customer.updateMany({
-        where: {
-          id: customerId,
-          organizationId: customer.organizationId,
-          deletedAt: null,
-        },
+        where: baseWhere,
         data: {
           totalSpent: safeSpent,
           totalOrders: safeOrders,
@@ -105,12 +113,21 @@ export class CustomerStatsService {
   async updateDebt(
     customerId: string,
     amount: number,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
+    organizationId?: string,
   ): Promise<void> {
     const prisma = tx || this.prisma;
 
+    const baseWhere: Prisma.CustomerWhereInput = {
+      id: customerId,
+      deletedAt: null,
+    };
+    if (organizationId) {
+      baseWhere.organizationId = organizationId;
+    }
+
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, deletedAt: null },
+      where: baseWhere,
       select: { organizationId: true },
     });
 
@@ -120,11 +137,7 @@ export class CustomerStatsService {
 
     try {
       await prisma.customer.updateMany({
-        where: {
-          id: customerId,
-          organizationId: customer.organizationId,
-          deletedAt: null,
-        },
+        where: baseWhere,
         data: {
           debt: { increment: amount },
         },

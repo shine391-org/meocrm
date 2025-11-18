@@ -11,6 +11,7 @@ import { Prisma, OrderStatus, PaymentMethod, User } from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { PricingService } from './pricing.service';
+import { CustomerStatsService } from '../customers/services/customer-stats.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderWarning, OrderStatusChangedEvent } from './orders.types';
 
@@ -67,6 +68,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly pricingService: PricingService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly customerStatsService: CustomerStatsService,
   ) {}
 
   private readonly logger = new Logger(OrdersService.name);
@@ -201,17 +203,24 @@ export class OrdersService {
         },
       });
 
-      await prisma.customer.update({
-        where: { id: dto.customerId },
-        data: {
-          totalSpent: { increment: total },
-          totalOrders: { increment: 1 },
-          debt: {
-            increment: isPaid ? 0 : Math.max(total - paidAmount, 0),
-          },
-          lastOrderAt: new Date(),
-        },
-      });
+      if (dto.customerId) {
+        await this.customerStatsService.updateStatsOnOrderComplete(
+          dto.customerId,
+          total,
+          prisma,
+          organizationId,
+        );
+
+        const outstanding = Math.max(total - paidAmount, 0);
+        if (outstanding > 0) {
+          await this.customerStatsService.updateDebt(
+            dto.customerId,
+            outstanding,
+            prisma,
+            organizationId,
+          );
+        }
+      }
 
       const normalized = this.mapOrderResponse(order);
 
@@ -308,8 +317,12 @@ export class OrdersService {
         : nextFinancials.outstanding - previousFinancials.outstanding;
 
       if (totalDelta !== 0 || debtDelta !== 0) {
-        await prisma.customer.update({
-          where: { id: order.customerId! },
+        await prisma.customer.updateMany({
+          where: {
+            id: order.customerId!,
+            organizationId,
+            deletedAt: null,
+          },
           data: {
             ...(totalDelta !== 0 && {
               totalSpent: { increment: totalDelta },
@@ -354,20 +367,22 @@ export class OrdersService {
         const debtDecrement = order.isPaid
           ? 0
           : Math.min(outstanding, debtBefore);
-        const totalSpentDecrement = Math.max(totalAmount, 0);
 
-        await prisma.customer.update({
-          where: { id: order.customerId },
-          data: {
-            ...(totalSpentDecrement > 0 && {
-              totalSpent: { decrement: totalSpentDecrement },
-            }),
-            totalOrders: { decrement: 1 },
-            ...(debtDecrement > 0 && {
-              debt: { decrement: debtDecrement },
-            }),
-          },
-        });
+        await this.customerStatsService.revertStatsOnOrderCancel(
+          order.customerId,
+          totalAmount,
+          prisma,
+          organizationId,
+        );
+
+        if (debtDecrement > 0) {
+          await this.customerStatsService.updateDebt(
+            order.customerId,
+            -debtDecrement,
+            prisma,
+            organizationId,
+          );
+        }
       }
 
       // Soft delete
@@ -661,16 +676,23 @@ export class OrdersService {
           paidAmount: order.paidAmount,
         });
 
-        await prisma.customer.update({
-          where: { id: order.customerId },
-          data: {
-            totalOrders: { decrement: 1 },
-            totalSpent: { decrement: totalAmount },
-            ...(outstanding > 0 && {
-              debt: { decrement: outstanding },
-            }),
-          },
-        });
+        await this.customerStatsService.revertStatsOnOrderCancel(
+          order.customerId,
+          totalAmount,
+          prisma,
+          organizationId,
+        );
+
+        const debtBefore = Number(order.customer?.debt ?? 0);
+        const debtDecrement = Math.min(outstanding, debtBefore);
+        if (debtDecrement > 0) {
+          await this.customerStatsService.updateDebt(
+            order.customerId,
+            -debtDecrement,
+            prisma,
+            organizationId,
+          );
+        }
       }
 
       if (
@@ -679,12 +701,12 @@ export class OrdersService {
         !order.isPaid &&
         order.customerId
       ) {
-        await prisma.customer.update({
-          where: { id: order.customerId },
-          data: {
-            debt: { decrement: Number(order.total) },
-          },
-        });
+        await this.customerStatsService.updateDebt(
+          order.customerId,
+          -Number(order.total),
+          prisma,
+          organizationId,
+        );
       }
 
       return {

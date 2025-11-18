@@ -71,7 +71,12 @@ describe('Customers E2E', () => {
 
     expect(customer.segment).toBe('Regular');
 
-    await statsService.updateStatsOnOrderComplete(customer.id, 12_000_000);
+    await statsService.updateStatsOnOrderComplete(
+      customer.id,
+      12_000_000,
+      undefined,
+      organization.id,
+    );
 
     const { body: updated } = await request(app.getHttpServer())
         .get(`/customers/${customer.id}`)
