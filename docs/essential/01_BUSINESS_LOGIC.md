@@ -147,6 +147,7 @@ async createShippingOrder(orderId, shippingData) {
 - [x]  ✅ PENDING → **COMPLETED ngay lập tức** (skip PROCESSING)
 - [x]  ✅ Trigger: Khi customer thanh toán xong tại quầy
 - [x]  ✅ Không có shipping order
+- [x]  ✅ FE POS buộc nhân viên chọn `branchId` (GET `/branches`) + gán `customerId` trước khi gọi `POST /orders` với `channel = POS`, `isPaid = true`; thông tin này được cache theo tổ chức để đảm bảo đơn luôn gắn đúng chi nhánh.
 
 **Workflow 2: Đơn COD ship đi**
 

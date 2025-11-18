@@ -24,6 +24,7 @@ import { RefundsApiModule } from './refunds/refunds.module';
 import { CronModule } from './modules/cron/cron.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { BranchesModule } from './branches/branches.module';
 import { RequestContextMiddleware } from './common/context/request-context.middleware';
 
 @Module({
@@ -49,6 +50,7 @@ import { RequestContextMiddleware } from './common/context/request-context.middl
     ProductsModule,
     CustomersModule,
     OrdersModule,
+    BranchesModule,
     SuppliersModule,
     ShippingModule,
     InventoryModule,

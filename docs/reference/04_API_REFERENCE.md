@@ -326,6 +326,40 @@ Create customer
 
 ---
 
+## 🏬 Branches
+
+### GET /branches
+
+Liệt kê danh sách chi nhánh thuộc tổ chức hiện tại (sử dụng `OrganizationGuard` nên cần header `x-organization-id`). POS FE dùng endpoint này để người bán chọn “quầy” trước khi thanh toán.
+
+**Headers**
+
+- `Authorization: Bearer <token>`
+- `x-organization-id: <organization uuid>`
+
+**Response:** `200 OK`
+
+```json
+[
+  {
+    "id": "br_01J5R4S9MXQJ92X6FZC6V4E3P5",
+    "name": "Lano HN - Main Branch",
+    "address": "123 Hoàn Kiếm, Hà Nội",
+    "phone": "024-1234-5678"
+  },
+  {
+    "id": "br_01J5R4SAPGJE2NEV6G7NE38R1V",
+    "name": "Lano HCM - District 7",
+    "address": "321 Phú Mỹ Hưng, Quận 7, TP.HCM",
+    "phone": "028-8765-4321"
+  }
+]
+```
+
+> Không phân trang: BE trả toàn bộ chi nhánh của tenant để FE cache cục bộ. Nếu org không có chi nhánh nào sẽ trả mảng rỗng.
+
+---
+
 ## 🛒 Orders
 
 ### GET /orders

@@ -348,6 +348,8 @@ See Critical Path section above for details.
 - [ ] FE-018 - Frontend: Payment flow in POS 🔴 Critical (2 pts)
 - [ ] FE-019 - Frontend: Order completion 🔴 Critical (2 pts)
 
+> 2025-11-18 — Branch `feature/pos-frontend`: POS workspace now hooked to real Products/Customers/Branches APIs, persistent invoice tabs + checkout posting to `/orders`. Pending: finalize API-driven price books & discounts before marking FE-014 → FE-019 complete.
+
 ---
 
 ## 💰 Phase 5: Finance - PLANNED

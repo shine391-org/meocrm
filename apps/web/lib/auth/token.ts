@@ -19,6 +19,10 @@ export const getBrowserToken = (): string | null => {
     return accessTokenMemory;
   }
   const storedToken = window.sessionStorage?.getItem(ACCESS_TOKEN_KEY) ?? null;
+  if (!storedToken || storedToken === 'null' || storedToken === 'undefined') {
+    accessTokenMemory = null;
+    return null;
+  }
   accessTokenMemory = storedToken;
   return storedToken;
 };
