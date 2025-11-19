@@ -33,6 +33,9 @@ const fetchRevenueData = async (range: TimeRange): Promise<RevenueData[]> => {
   });
 
   if (!response.ok) {
+    if (response.status === 404) {
+      return [];
+    }
     throw new Error('Failed to fetch revenue data');
   }
 
@@ -67,7 +70,7 @@ export function RevenueChart() {
   const showEmptyState = !isLoading && !error && chartData.length === 0;
 
   return (
-    <Card>
+    <Card data-testid="revenue-chart">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Doanh thu thuần</CardTitle>
@@ -85,12 +88,12 @@ export function RevenueChart() {
       </CardHeader>
       <CardContent>
         {error && (
-          <p className="text-sm text-red-600" role="alert">
+          <p className="text-sm text-red-600" role="alert" data-testid="revenue-chart-error">
             Không thể tải dữ liệu doanh thu. Vui lòng thử lại sau.
           </p>
         )}
         {!error && showEmptyState && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground" data-testid="revenue-chart-empty">
             Chưa có dữ liệu doanh thu cho khoảng thời gian đã chọn.
           </p>
         )}

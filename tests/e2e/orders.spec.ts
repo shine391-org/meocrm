@@ -1,4 +1,5 @@
 import { test, expect, Route, Page } from '@playwright/test';
+import { loginAsAdmin } from './utils/ui-auth';
 
 const stripTrailingSlash = (value: string) => value.replace(/\/$/, '');
 
@@ -26,9 +27,7 @@ test.describe('Orders Page', () => {
   test.beforeEach(async ({ page }) => {
     // Login first
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
 
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
@@ -40,7 +39,7 @@ test.describe('Orders Page', () => {
 
   test('should display orders page heading', async ({ page }) => {
     await expect(
-      page.getByRole('heading', { name: /^orders$/i }),
+      page.getByRole('heading', { name: /quản lý đơn hàng/i }),
     ).toBeVisible();
   });
 

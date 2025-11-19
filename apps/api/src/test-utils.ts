@@ -257,14 +257,23 @@ export async function createOrder(
 ) {
   const quantity = 2;
   const unitPrice = data.total ? data.total / quantity : 150000;
+  const lineSubtotal = data.total || 300000;
 
   return prisma.order.create({
     data: {
       organizationId,
       customerId,
       code: `ORD-TEST-${Date.now()}`,
-      subtotal: data.total || 300000,
-      total: data.total || 300000,
+      subtotal: lineSubtotal,
+      total: lineSubtotal,
+      tax: 0,
+      shipping: 0,
+      discount: 0,
+      taxableSubtotal: lineSubtotal,
+      taxBreakdown: {
+        taxableAmount: lineSubtotal,
+        rate: 0,
+      },
       paidAmount: data.paidAmount || 0,
       isPaid: data.isPaid || false,
       paymentMethod: 'CASH',
@@ -274,7 +283,10 @@ export async function createOrder(
           productId,
           quantity,
           unitPrice,
-          subtotal: data.total || 300000,
+          subtotal: lineSubtotal,
+          discountAmount: 0,
+          netTotal: lineSubtotal,
+          isTaxExempt: false,
         },
       },
     },

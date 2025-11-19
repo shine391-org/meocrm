@@ -23,6 +23,13 @@ interface InventoryReservationActor {
   traceId?: string;
 }
 
+interface OrderStockAdjustmentItemInput {
+  productId: string;
+  oldQuantity: number;
+  newQuantity: number;
+  difference: number;
+}
+
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
@@ -688,7 +695,7 @@ export class InventoryService {
         return { data: { restoredItems: 0 } };
       }
 
-      const adjustmentItems: Prisma.StockAdjustmentItemCreateWithoutAdjustmentInput[] = [];
+      const adjustmentItems: OrderStockAdjustmentItemInput[] = [];
       for (const reservation of reservations) {
         const { oldQuantity, newQuantity } = await this.applyInventoryIncrement(
           tx,
@@ -777,7 +784,7 @@ export class InventoryService {
         throw new BadRequestException('Order has no items to reserve');
       }
 
-      const adjustmentItems: Prisma.StockAdjustmentItemCreateWithoutAdjustmentInput[] = [];
+      const adjustmentItems: OrderStockAdjustmentItemInput[] = [];
       const reservations: Prisma.OrderInventoryReservationCreateManyInput[] = [];
 
       for (const item of order.items) {
@@ -1032,16 +1039,16 @@ export class InventoryService {
     traceId?: string;
     reason: StockAdjustmentReason;
     type: AdjustmentType;
-    items: Prisma.StockAdjustmentItemCreateWithoutAdjustmentInput[];
+    items: OrderStockAdjustmentItemInput[];
   }): Prisma.StockAdjustmentCreateInput {
     const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
     const traceSegment = params.traceId ? ` trace:${params.traceId}` : '';
     const actionLabel = params.type === 'DECREASE' ? 'reservation' : 'restock';
 
     return {
-      organizationId: params.organizationId,
+      organization: { connect: { id: params.organizationId } },
       code: `ADJ-ORD-${uniqueSuffix}`,
-      branchId: params.branchId,
+      branch: { connect: { id: params.branchId } },
       type: params.type,
       reason: this.mapReasonToAdjustmentReason(params.reason),
       notes: `Order ${params.orderCode} ${actionLabel} by ${params.actorId}${traceSegment}`,
@@ -1049,7 +1056,12 @@ export class InventoryService {
       adjustedAt: new Date(),
       status: 'CONFIRMED',
       items: {
-        create: params.items,
+        create: params.items.map((item) => ({
+          product: { connect: { id: item.productId } },
+          oldQuantity: item.oldQuantity,
+          newQuantity: item.newQuantity,
+          difference: item.difference,
+        })),
       },
     };
   }

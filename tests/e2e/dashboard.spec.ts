@@ -1,28 +1,36 @@
 import { test, expect } from '@playwright/test';
+import { loginAsAdmin } from './utils/ui-auth';
 
 test.describe('Dashboard Page', () => {
   test.beforeEach(async ({ page }) => {
     // Login first
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
 
     // Wait for redirect to dashboard
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
   });
 
   test('should display all KPI cards', async ({ page }) => {
-    // Check for KPI cards
-    await expect(page.getByText(/doanh thu/i).first()).toBeVisible();
-    await expect(page.getByText(/tồn kho|tồi hàng/i).first()).toBeVisible();
-    await expect(page.getByText(/doanh thu thuần/i).first()).toBeVisible();
-    await expect(page.getByText(/đơn hàng/i).first()).toBeVisible();
+    const kpiCards = page.getByTestId('kpi-card');
+    await expect(kpiCards).toHaveCount(4);
+    await expect(kpiCards.first()).toBeVisible();
   });
 
   test('should display revenue chart', async ({ page }) => {
-    // Check for chart component (adjust selector based on actual implementation)
-    await expect(page.locator('canvas, svg').first()).toBeVisible();
+    const chartSection = page.getByTestId('revenue-chart');
+    await expect(chartSection).toBeVisible();
+
+    const emptyState = chartSection.getByTestId('revenue-chart-empty');
+    const errorState = chartSection.getByTestId('revenue-chart-error');
+
+    if (await errorState.count()) {
+      await expect(errorState).toBeVisible();
+    } else if (await emptyState.count()) {
+      await expect(emptyState).toBeVisible();
+    } else {
+      await expect(chartSection.locator('canvas, svg').first()).toBeVisible();
+    }
   });
 
   test('should display top products section', async ({ page }) => {

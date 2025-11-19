@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { loginAsAdmin, fillLoginForm } from './utils/ui-auth';
+import { getTestCredentials } from './utils/credentials';
 
 test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -42,11 +44,7 @@ test.describe('Authentication Flow', () => {
 
   test('should successfully login with valid credentials', async ({ page }) => {
     // Fill in valid credentials from seed data
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-
-    // Submit form
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
 
     // Should redirect to dashboard
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
@@ -59,9 +57,7 @@ test.describe('Authentication Flow', () => {
 
   test('should persist session after page reload', async ({ page }) => {
     // Login first
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
 
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
@@ -75,9 +71,7 @@ test.describe('Authentication Flow', () => {
 
   test('should logout successfully', async ({ page }) => {
     // Login first
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
 
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
@@ -130,8 +124,7 @@ test.describe('Authentication Flow', () => {
 
   test('should show loading state during login', async ({ page }) => {
     // Fill in credentials
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
+    await fillLoginForm(page);
 
     // Submit form
     const submitButton = page.getByRole('button', { name: /quản lý/i });
@@ -146,8 +139,7 @@ test.describe('Authentication Flow', () => {
     await context.route('**/auth/login', (route) => route.abort());
 
     // Fill in credentials
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
+    await fillLoginForm(page);
 
     // Submit form
     await page.getByRole('button', { name: /quản lý/i }).click();
@@ -160,9 +152,7 @@ test.describe('Authentication Flow', () => {
 
   test('should set authentication cookie on successful login', async ({ page, context }) => {
     // Login
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
 
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });

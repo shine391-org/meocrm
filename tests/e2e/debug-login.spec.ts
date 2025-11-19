@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { getTestCredentials } from './utils/credentials';
 
 test('Debug login flow', async ({ page }) => {
   const consoleMessages: string[] = [];
@@ -41,8 +42,9 @@ test('Debug login flow', async ({ page }) => {
   console.log('Navigated to login page');
 
   // Fill in credentials
-  await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-  await page.getByLabel(/password/i).fill('Admin@123');
+  const creds = getTestCredentials();
+  await page.getByLabel(/email/i).fill(creds.email);
+  await page.getByLabel(/password/i).fill(creds.password);
   console.log('Filled credentials');
 
   // Wait a bit before clicking

@@ -95,6 +95,9 @@ export type CreatePosOrderPayload = {
     productId: string;
     quantity: number;
     variantId?: string;
+    discountType?: 'PERCENT' | 'FIXED';
+    discountValue?: number;
+    taxExempt?: boolean;
   }>;
   paymentMethod: 'CASH' | 'CARD' | 'E_WALLET' | 'BANK_TRANSFER' | 'COD';
   channel?: string;

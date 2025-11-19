@@ -1,4 +1,5 @@
 import { test, expect, Route } from '@playwright/test';
+import { loginAsAdmin } from './utils/ui-auth';
 
 test.describe('Error Pages', () => {
   test('should display custom 404 page for non-existent routes', async ({ page }) => {
@@ -48,14 +49,11 @@ test.describe('Error Pages', () => {
   test('should handle network errors gracefully', async ({ page, context }) => {
     // Login first
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
 
-    const blockApi = (route: Route) => route.abort();
-    await context.route('**/api/**', blockApi);
-    await context.route('**localhost:2003/**', blockApi);
+    const blockOrders = (route: Route) => route.abort();
+    await context.route('**/orders**', blockOrders);
 
     try {
       await page.getByRole('link', { name: /đơn hàng/i }).first().click();
@@ -64,17 +62,14 @@ test.describe('Error Pages', () => {
         page.getByText(/không thể tải|failed to load|error/i),
       ).toBeVisible({ timeout: 5000 });
     } finally {
-      await context.unroute('**/api/**', blockApi);
-      await context.unroute('**localhost:2003/**', blockApi);
+      await context.unroute('**/orders**', blockOrders);
     }
   });
 
   test('should keep recovery actions available on authenticated error pages', async ({ page }) => {
     // Login first
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
 
     // Navigate to a non-existent dashboard page via the nav link (client-side navigation keeps session)

@@ -64,6 +64,15 @@ export class ShippingService {
         overrideFee: dto.shippingFee,
       });
 
+      const breakdown: Prisma.JsonObject = {
+        baseFee: computedFee.breakdown.baseFee,
+        weightSurcharge: computedFee.breakdown.weightSurcharge,
+        distanceFee: computedFee.breakdown.distanceFee,
+        serviceMultiplier: computedFee.breakdown.serviceMultiplier,
+        channelMultiplier: computedFee.breakdown.channelMultiplier,
+        partnerId: computedFee.breakdown.partnerId ?? null,
+      };
+
       const shippingOrder = await tx.shippingOrder.create({
         data: {
           orderId: dto.orderId,
@@ -81,7 +90,7 @@ export class ShippingService {
           notes: dto.notes,
           serviceType: dto.serviceType,
           distanceKm: dto.distanceKm ? Math.round(dto.distanceKm) : null,
-          feeBreakdown: computedFee.breakdown,
+          feeBreakdown: breakdown,
         },
         include: { partner: true, order: true },
       });
@@ -312,21 +321,25 @@ export class ShippingService {
       return;
     }
 
-    const actor = { id: 'shipping-automation', organizationId };
+    const automationActor = { id: 'shipping-automation', organizationId };
+    const reservationActor = {
+      userId: 'shipping-automation',
+      traceId: this.requestContext.getTraceId(),
+    };
 
     if (dto.status === ShippingStatus.DELIVERED) {
       await this.ordersService.updateStatus(
         shippingOrder.orderId,
         { status: OrderStatus.DELIVERED },
         organizationId,
-        actor,
+        automationActor,
       );
 
       await this.ordersService.updateStatus(
         shippingOrder.orderId,
         { status: OrderStatus.COMPLETED },
         organizationId,
-        actor,
+        automationActor,
       );
 
       if (shippingOrder.order.paymentMethod === PaymentMethod.COD) {
@@ -334,7 +347,7 @@ export class ShippingService {
           shippingOrder.orderId,
           organizationId,
           dto.collectedCodAmount,
-          actor,
+          automationActor,
         );
       }
 
@@ -349,13 +362,13 @@ export class ShippingService {
         shippingOrder.orderId,
         { status: OrderStatus.PENDING },
         organizationId,
-        actor,
+        automationActor,
       );
 
       await this.inventoryService.returnStockOnOrderCancel(
         shippingOrder.orderId,
         organizationId,
-        actor,
+        reservationActor,
       );
     }
   }

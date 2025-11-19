@@ -6,6 +6,7 @@ const CONTEXT_TOKEN = Symbol('OrganizationScopedModelContext');
 type WithRequestContext = {
   requestContextService?: RequestContextService;
   requestContext?: RequestContextService;
+  [CONTEXT_TOKEN]?: RequestContextService;
 };
 
 export function OrganizationScopedModel(...models: Prisma.ModelName[]) {
@@ -26,8 +27,8 @@ export function OrganizationScopedModel(...models: Prisma.ModelName[]) {
 }
 
 function resolveRequestContext(instance: WithRequestContext): RequestContextService | undefined {
-  if (instance[CONTEXT_TOKEN as keyof WithRequestContext]) {
-    return instance[CONTEXT_TOKEN as keyof WithRequestContext] as RequestContextService;
+  if (instance[CONTEXT_TOKEN]) {
+    return instance[CONTEXT_TOKEN];
   }
 
   const direct = instance.requestContextService ?? instance.requestContext;

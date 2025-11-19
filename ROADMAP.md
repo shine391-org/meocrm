@@ -77,8 +77,8 @@
 - **Tình trạng:** Hầu hết là `Todo`.
 - **Vấn đề:**
   - `FIN-002` (Partial Payment): Đã được "hoàn thành" theo hướng **KHÔNG hỗ trợ**.
-  - `DISC-003` (Item-level Discount): ❶ `CreateOrderItemDto.discountType/value` + `order_items.discountAmount/netTotal` + cảnh báo LOSS_SALE đã có. (Cần tiếp tục nối vào POS UI).
-  - `DISC-006` (Tax Calculation): Thuế dựa trên `taxableSubtotal` (tự động loại item `taxExempt`, discount app). `PricingService` trả `taxBreakdown` để API trả ra một cách chuẩn.
+- `DISC-003` (Item-level Discount): DTO + Prisma fields đã hoàn thiện và POS Workspace hiện cho phép pick loại chiết khấu + giá trị/đơn vị + cảnh báo LOSS_SALE.
+- `DISC-006` (Tax Calculation): Thuế dựa trên `taxableSubtotal` (tự động loại item `taxExempt`, discount app). `PricingService` trả `taxBreakdown`, POS cũng có toggle `Miễn VAT` để đồng bộ dữ liệu lên API.
   - `RPT-001` (Sales Dashboard): Bị block do dữ liệu order chưa chính xác.
 
 ### 4.5 Integrations & Notifications

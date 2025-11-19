@@ -1,31 +1,24 @@
 import { test, expect } from '@playwright/test';
+import { loginViaApi, apiGet } from './utils/api';
+import { loginAsAdmin } from './utils/ui-auth';
 
 test.describe.configure({ mode: 'serial' });
 
-async function login(page) {
-  await page.goto('/login');
-  await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-  await page.getByLabel(/password/i).fill('Admin@123');
-  await page.getByRole('button', { name: /quản lý/i }).click();
-  await expect(page).toHaveURL(/dashboard|\/$/i, { timeout: 10000 });
-}
-
 test.describe('POS workspace', () => {
-  test('can create a POS order', async ({ page }) => {
-    await login(page);
+  test('can create a POS order', async ({ page, request }) => {
+    const auth = await loginViaApi(request);
+    const token = auth.accessToken;
+    const branches = await apiGet<{ id: string; name: string }[]>(request, '/branches', token);
+    const branch = branches[0];
+
+    await page.goto('/login');
+    await loginAsAdmin(page);
     await page.goto('/pos');
 
     await expect(page.getByTestId('pos-search-products')).toBeVisible();
 
-    const branchSelect = page.getByTestId('pos-branch-select');
-    if (await branchSelect.isEnabled()) {
-      await branchSelect.click();
-      const option = page.getByRole('option').first();
-      if (await option.isVisible()) {
-        await option.click();
-      }
-    } else {
-      await page.getByTestId('pos-branch-id-input').fill('manual-branch');
+    if (branch) {
+      await page.getByTestId('pos-branch-id-input').fill(branch.id);
       await page.getByRole('button', { name: /lưu chi nhánh/i }).click();
     }
 

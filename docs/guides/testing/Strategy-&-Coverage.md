@@ -77,7 +77,7 @@ pnpm -w test -- --coverage
 # Specific suite
 pnpm --filter @meocrm/api test -- lead-priority-commission
 
-# E2E tests
+# E2E tests (UI + order automation)
 pnpm test:playwright
 
 # Watch mode
@@ -124,7 +124,11 @@ pnpm --filter @meocrm/api prisma:migrate
 pnpm --filter @meocrm/api prisma db seed
 ```
 
-### Environment Variables:
+### Environment Variables & Data Seeding:
+- `tests/e2e/global-setup.ts` tự động `migrate reset` + seed user `seed@example.com / Passw0rd!` trước khi Playwright chạy.
+- Mặc định suite boot 2 server (API 2003, Web 2004) và thực thi luồng `order → PROCESSING → shipping DELIVERED/FAILED` để bảo đảm automation hoạt động.
+- Đặt `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD` nếu cần user khác.
+
 Tests use ports 2001-2004:
 - Database: `localhost:2001`
 - Redis: `localhost:2002`

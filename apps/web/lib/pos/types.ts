@@ -24,6 +24,10 @@ export interface CartLine {
   quantity: number;
   unit: string;
   variant?: string;
+  variantId?: string;
+  discountType?: 'PERCENT' | 'FIXED';
+  discountValue?: number;
+  taxExempt?: boolean;
 }
 
 export interface CustomerSummary {

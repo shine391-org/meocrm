@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { subDays } from 'date-fns';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequestContextService } from '../../common/context/request-context.service';
 
@@ -18,7 +17,7 @@ export class AuditLogArchiveService {
   })
   async archiveExpiredLogs() {
     const retentionDays = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 90);
-    const cutoffDate = subDays(new Date(), retentionDays);
+    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
     await this.requestContext.run(async () => {
       await this.requestContext.withOrganizationBypass(['AuditLog'], async () => {

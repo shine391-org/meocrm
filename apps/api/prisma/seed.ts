@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { mkdtempSync, writeFileSync, chmodSync } from 'fs';
@@ -13,6 +13,7 @@ async function main() {
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.shippingOrder.deleteMany();
+  await prisma.shippingPartner.deleteMany();
   await prisma.inventory.deleteMany();
   await prisma.transfer.deleteMany();
   await prisma.productVariant.deleteMany();
@@ -20,6 +21,7 @@ async function main() {
   await prisma.category.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.supplier.deleteMany();
+  await prisma.auditLog.deleteMany();
   await prisma.user.deleteMany();
   await prisma.branch.deleteMany();
   await prisma.organization.deleteMany();
@@ -36,6 +38,43 @@ async function main() {
     data: [
       { name: 'HN', address: '456 Hoàng Diệu, Ba Đình, HN', phone: '024123', organizationId: org.id },
       { name: 'HCM', address: '789 Nguyễn Huệ, Q1, HCM', phone: '028123', organizationId: org.id },
+    ],
+  });
+  const branches = await prisma.branch.findMany({ where: { organizationId: org.id } });
+
+  const shippingPartnerSeeds = [
+    { id: '11111111-1111-4111-8111-111111111111', code: 'GHTK', name: 'Giao Hàng Tiết Kiệm', phone: '19001001', email: 'support@ghtk.vn', organizationId: org.id },
+    { id: '22222222-2222-4222-8222-222222222222', code: 'GHN', name: 'Giao Hàng Nhanh', phone: '19006464', email: 'support@ghn.vn', organizationId: org.id },
+  ];
+  await prisma.shippingPartner.createMany({
+    data: shippingPartnerSeeds,
+    skipDuplicates: true,
+  });
+  const shippingPartners = await prisma.shippingPartner.findMany({
+    where: { id: { in: shippingPartnerSeeds.map((partner) => partner.id) }, organizationId: org.id },
+  });
+
+  const partnerSettings = shippingPartners.reduce<Record<string, Prisma.JsonObject>>((acc, partner, index) => {
+    acc[partner.id] = {
+      baseFee: 28000 + index * 2000,
+      weightRate: 8000 + index * 1500,
+      distanceRate: 1500 + index * 500,
+      serviceTypes: {
+        standard: { multiplier: 1 },
+        express: { multiplier: 1.2 + index * 0.1 },
+      },
+    } satisfies Prisma.JsonObject;
+    return acc;
+  }, {} as Record<string, Prisma.JsonObject>);
+
+  await prisma.setting.createMany({
+    data: [
+      { organizationId: org.id, key: 'pricing.taxRate', value: 0.1 },
+      { organizationId: org.id, key: 'pricing.allowLossSaleWarning', value: true },
+      { organizationId: org.id, key: 'shipping.baseFee', value: 30000 },
+      { organizationId: org.id, key: 'shipping.weightRate', value: 10000 },
+      { organizationId: org.id, key: 'shipping.channelMultipliers', value: { POS: 1, ONLINE: 1.1 } },
+      { organizationId: org.id, key: 'shipping.partners', value: partnerSettings },
     ],
   });
 
@@ -94,7 +133,7 @@ async function main() {
 
   for (let i = 1; i <= 10; i++) {
     const sku = `VDNT${String(i).padStart(2, '0')}`;
-    await prisma.product.create({
+    const product = await prisma.product.create({
       data: {
         name: `Ví da ${i}`,
         sku,
@@ -111,6 +150,14 @@ async function main() {
           ],
         },
       },
+    });
+
+    await prisma.inventory.createMany({
+      data: branches.map((branch, index) => ({
+        productId: product.id,
+        branchId: branch.id,
+        quantity: 20 + i * 3 + index * 5,
+      })),
     });
   }
 

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
+import type { CheckedState } from '@radix-ui/react-checkbox';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { useDebounce } from 'use-debounce';
@@ -235,6 +237,7 @@ export function PosWorkspace() {
           price: unitPrice,
           quantity: 1,
           unit: product.unit ?? product.unitOfMeasure ?? 'đơn vị',
+          taxExempt: false,
         };
 
         return {
@@ -265,6 +268,72 @@ export function PosWorkspace() {
       cart: invoice.cart.filter((line) => line.id !== lineId),
     }));
   };
+
+  const handleLineDiscountTypeChange = useCallback(
+    (lineId: string, type: 'none' | 'PERCENT' | 'FIXED') => {
+      updateActiveInvoice((invoice) => ({
+        ...invoice,
+        cart: invoice.cart.map((line) => {
+          if (line.id !== lineId) {
+            return line;
+          }
+
+          if (type === 'none') {
+            return {
+              ...line,
+              discountType: undefined,
+              discountValue: undefined,
+            };
+          }
+
+          return {
+            ...line,
+            discountType: type,
+            discountValue:
+              line.discountValue !== undefined ? line.discountValue : 0,
+          };
+        }),
+      }));
+    },
+    [updateActiveInvoice],
+  );
+
+  const handleLineDiscountValueChange = useCallback(
+    (lineId: string, rawValue: string) => {
+      updateActiveInvoice((invoice) => ({
+        ...invoice,
+        cart: invoice.cart.map((line) => {
+          if (line.id !== lineId || !line.discountType) {
+            return line;
+          }
+          const parsed = Number(rawValue);
+          if (Number.isNaN(parsed)) {
+            return { ...line, discountValue: undefined };
+          }
+          const sanitized =
+            line.discountType === 'PERCENT'
+              ? Math.min(Math.max(parsed, 0), 100)
+              : Math.min(Math.max(parsed, 0), line.price);
+          return { ...line, discountValue: sanitized };
+        }),
+      }));
+    },
+    [updateActiveInvoice],
+  );
+
+  const handleLineTaxToggle = useCallback(
+    (lineId: string, checked: CheckedState) => {
+      updateActiveInvoice((invoice) => ({
+        ...invoice,
+        cart: invoice.cart.map((line) =>
+          line.id === lineId
+            ? { ...line, taxExempt: checked === true }
+            : line,
+        ),
+      }));
+    },
+    [updateActiveInvoice],
+  );
 
   const handleInvoiceAdd = () => addInvoice();
 
@@ -318,6 +387,10 @@ export function PosWorkspace() {
         items: activeInvoice.cart.map((line) => ({
           productId: line.productId,
           quantity: line.quantity,
+          variantId: line.variantId,
+          discountType: line.discountType,
+          discountValue: line.discountValue,
+          taxExempt: line.taxExempt,
         })),
         paymentMethod: isDelivery ? 'COD' : 'CASH',
         channel: 'POS',
@@ -667,52 +740,141 @@ export function PosWorkspace() {
                       thêm nhanh.
                     </p>
                   )}
-                  {activeInvoice.cart.map((line) => (
-                    <div
-                      key={line.id}
-                      className="flex items-center gap-3 rounded-xl border px-3 py-2"
-                      data-testid="pos-cart-line"
-                    >
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold">{line.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {line.sku} · {line.unit}
-                        </p>
+                  {activeInvoice.cart.map((line) => {
+                    const baseTotal = line.price * line.quantity;
+                    const percentValue =
+                      line.discountType === 'PERCENT'
+                        ? Math.min(Math.max(line.discountValue ?? 0, 0), 100)
+                        : 0;
+                    const fixedValue =
+                      line.discountType === 'FIXED'
+                        ? Math.max(line.discountValue ?? 0, 0)
+                        : 0;
+                    const discountPerUnit =
+                      line.discountType === 'PERCENT'
+                        ? (line.price * percentValue) / 100
+                        : line.discountType === 'FIXED'
+                          ? Math.min(line.price, fixedValue)
+                          : 0;
+                    const netUnitPrice = Math.max(0, line.price - discountPerUnit);
+                    const netTotal = netUnitPrice * line.quantity;
+                    const discountSummary =
+                      line.discountType === 'PERCENT'
+                        ? `${percentValue}% /sp`
+                        : line.discountType === 'FIXED'
+                          ? `${formatCurrency(fixedValue)} /sp`
+                          : null;
+
+                    return (
+                      <div
+                        key={line.id}
+                        className="flex items-center gap-3 rounded-xl border px-3 py-2"
+                        data-testid="pos-cart-line"
+                      >
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-semibold">{line.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {line.sku} · {line.unit}
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                            <Select
+                              value={line.discountType ?? 'none'}
+                              onValueChange={(value) =>
+                                handleLineDiscountTypeChange(
+                                  line.id,
+                                  value as 'none' | 'PERCENT' | 'FIXED',
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-32 rounded-lg border-slate-200 text-xs">
+                                <SelectValue placeholder="Chiết khấu" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Không chiết khấu</SelectItem>
+                                <SelectItem value="PERCENT">% / sản phẩm</SelectItem>
+                                <SelectItem value="FIXED">VND / sản phẩm</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {line.discountType && (
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                value={
+                                  line.discountValue !== undefined
+                                    ? String(line.discountValue)
+                                    : ''
+                                }
+                                onChange={(event) =>
+                                  handleLineDiscountValueChange(
+                                    line.id,
+                                    event.target.value,
+                                  )
+                                }
+                                className="h-8 w-24 rounded-lg border-slate-200 text-xs"
+                                min={0}
+                                max={line.discountType === 'PERCENT' ? 100 : undefined}
+                                placeholder={
+                                  line.discountType === 'PERCENT' ? '%/sp' : 'VND/sp'
+                                }
+                              />
+                            )}
+                            <label className="inline-flex items-center gap-1 font-medium">
+                              <Checkbox
+                                checked={line.taxExempt ?? false}
+                                onCheckedChange={(checked) =>
+                                  handleLineTaxToggle(line.id, checked)
+                                }
+                                className="h-3.5 w-3.5"
+                              />
+                              Miễn VAT
+                            </label>
+                            {discountSummary && (
+                              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
+                                Giảm {discountSummary}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 rounded-full border bg-slate-50 px-2 py-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleQuantityChange(line.id, -1)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="w-6 text-center text-sm font-semibold">
+                            {line.quantity}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleQuantityChange(line.id, 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="w-28 text-right">
+                          {discountPerUnit > 0 && (
+                            <p className="text-xs text-muted-foreground line-through">
+                              {formatCurrency(baseTotal)}
+                            </p>
+                          )}
+                          <p className="text-sm font-semibold">
+                            {formatCurrency(netTotal)}
+                          </p>
+                          <button
+                            className="text-xs text-red-500"
+                            onClick={() => handleRemoveLine(line.id)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 rounded-full border bg-slate-50 px-2 py-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => handleQuantityChange(line.id, -1)}
-                        >
-                          <Minus className="h-4 w-4" />
-                        </Button>
-                        <span className="w-6 text-center text-sm font-semibold">
-                          {line.quantity}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => handleQuantityChange(line.id, 1)}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="w-24 text-right">
-                        <p className="text-sm font-semibold">
-                          {formatCurrency(line.price * line.quantity)}
-                        </p>
-                        <button
-                          className="text-xs text-red-500"
-                          onClick={() => handleRemoveLine(line.id)}
-                        >
-                          Xóa
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </ScrollArea>
             </div>

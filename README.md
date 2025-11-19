@@ -270,8 +270,9 @@ docs/
 - TanStack Query for server state
 
 ### Testing
-- Jest 30.2.0 + Supertest 7.1.4 for API
-- Playwright 1.56.1 for end-to-end web
+- Jest 30.2.0 + Supertest 7.1.4 cho API, bao phủ inventory/orders/shipping logic.
+- Playwright 1.56.1 cho E2E web **và** API: suite mặc định chạy login UI, dashboard/POS smoke tests và luồng automation `order → shipping → delivery/failed`.
+- Chạy `pnpm test:playwright` để khởi tạo DB (seed `seed@example.com/Passw0rd!`), boot API + web rồi thực hiện toàn bộ kịch bản.
 - Coverage 85.25% statements (goal ≥80%)
 
 ### DevOps

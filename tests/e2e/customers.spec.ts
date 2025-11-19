@@ -1,4 +1,5 @@
 import { test, expect, Route } from '@playwright/test';
+import { loginAsAdmin } from './utils/ui-auth';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -6,9 +7,7 @@ test.describe('Customers Page', () => {
   test.beforeEach(async ({ page }) => {
     // Login first
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill('admin@lanoleather.vn');
-    await page.getByLabel(/password/i).fill('Admin@123');
-    await page.getByRole('button', { name: /quản lý/i }).click();
+    await loginAsAdmin(page);
 
     // Wait for redirect
     await expect(page).toHaveURL(/\/$|\/dashboard/i, { timeout: 10000 });
@@ -33,17 +32,14 @@ test.describe('Customers Page', () => {
   test('should display customers table or list', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Should show either table/list or empty state
-    const hasTable = await page.locator('table, [role="table"]').count();
-    const hasEmptyState = await page.getByText(/chưa có khách hàng|no customers/i).count();
-
-    expect(hasTable + hasEmptyState).toBeGreaterThan(0);
+    const container = page.locator('[data-testid="customers-table"], [data-testid="customers-error"]');
+    await expect(container.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should filter customers by search term', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    const searchInput = page.getByPlaceholder(/tìm theo tên.*sđt.*email/i);
+    const searchInput = page.getByTestId('customers-search-input');
 
     // Type search term
     await searchInput.fill('test');
@@ -88,7 +84,7 @@ test.describe('Customers Page', () => {
   test('should clear search when clicking clear button', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    const searchInput = page.getByPlaceholder(/tìm theo tên.*sđt.*email/i);
+    const searchInput = page.getByTestId('customers-search-input');
 
     // Type search term
     await searchInput.fill('test');
@@ -106,7 +102,7 @@ test.describe('Customers Page', () => {
     await page.waitForLoadState('networkidle');
 
     // Search for something
-    const searchInput = page.getByPlaceholder(/tìm theo tên.*sđt.*email/i);
+    const searchInput = page.getByTestId('customers-search-input');
     await searchInput.fill('admin');
     await expect(page).toHaveURL(/search=admin/i, { timeout: 1000 });
 

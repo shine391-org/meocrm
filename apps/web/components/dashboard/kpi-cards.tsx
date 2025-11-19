@@ -34,7 +34,7 @@ const resolveIconColor = (bgClass?: string, overrideColor?: string) => {
 
 export function KPICards({ data }: KPICardsProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" data-testid="kpi-cards">
       {data.map((kpi, index) => {
         const TrendIcon = kpi.trend === 'up' ? ArrowUpRight : ArrowDownRight;
         const hasChange = kpi.change !== undefined && kpi.change !== null;
@@ -43,7 +43,11 @@ export function KPICards({ data }: KPICardsProps) {
         const iconColor = resolveIconColor(iconBackground, kpi.iconColor);
 
         return (
-          <Card key={index} className="hover:shadow-lg transition-shadow">
+          <Card
+            key={index}
+            className="hover:shadow-lg transition-shadow"
+            data-testid="kpi-card"
+          >
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
                 <div className="flex-1">

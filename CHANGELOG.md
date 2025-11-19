@@ -12,3 +12,7 @@
 - chore(frontend): nâng Next.js lên 16.0.3 + React 19, Tailwind CSS 4, chuyển lint sang cấu hình ESLint 9 dạng flat và loại bỏ Pages Router fallback `_error.tsx`.
 - chore(api): bump NestJS 11.1.9, uuid 13 và cập nhật toàn bộ devDependencies (Jest 30, TypeScript 5.9) cho phù hợp với pnpm workspace.
 - docs: README nêu rõ stack mới (Next.js 16 / React 19 / Prisma 6) và changelog ghi chú upgrade.
+- chore(prisma): loại bỏ migration thử nghiệm `20251119082136_*` và tạo lại `20251119095500_p1_full_schema` để gom OrderInventoryReservation + taxableSubtotal + shipping retry fields vào một snapshot rõ ràng.
+- feat(pos): POS Workspace hỗ trợ chiết khấu theo dòng (PERCENT/FIXED), toggle `Miễn VAT`, hiển thị net total và gửi payload đồng nhất với DTO `/orders`.
+- chore(seed): seed script thêm shipping partners, inventory theo chi nhánh và settings (`pricing.taxRate`, `shipping.partners`) để frontend có dữ liệu mẫu ngay sau `scripts/seed-dev.sh`.
+- test(e2e): Playwright global setup reset + seed DB, cập nhật tất cả spec dùng shared credentials và thêm kịch bản `order → shipping → delivery/failed` kiểm chứng automation & COD settlement.

@@ -354,6 +354,16 @@ List orders with pagination and filters.
 
 Create a new order.
 
+**Request body highlights:**
+- `branchId` **bắt buộc** để automation inventory biết chi nhánh deduct stock.
+- `items[]` gồm `productId`, `quantity`, `variantId?`, `discountType? (PERCENT|FIXED)`, `discountValue?` (theo **đơn vị**), `taxExempt?`.
+- `channel`, `shipping`, `discount`, `notes`, `isPaid`, `paidAmount` phản ánh workflow POS/COD mới.
+
+**Response payload bổ sung:**
+- `taxableSubtotal`, `taxBreakdown { taxableAmount, rate }`.
+- `items[].discountAmount`, `items[].netTotal`, `items[].isTaxExempt`.
+- `warnings[]` (LOW_STOCK, LOSS_SALE, v.v.) phục vụ POS.
+
 **Response:** `201 Created`
 
 ### GET /orders/:id
@@ -418,6 +428,12 @@ List shipping orders with pagination and filters.
 
 Create a new shipping order for an existing MeoCRM order.
 
+**Request body highlights:**
+- `partnerId`, `trackingCode`, thông tin người nhận + địa chỉ bắt buộc.
+- `serviceType`, `distanceKm`, `weight` dùng cho `ShippingFeeService`.
+- `codAmount` (mặc định 0) sẽ được auto settle khi status chuyển `DELIVERED`.
+- `shippingFee` có thể override; nếu bỏ trống sẽ tự tính (settings `shipping.*` + `shipping.partners`).
+
 **Response:** `201 Created`
 
 ### GET /shipping/orders/:id
@@ -429,6 +445,11 @@ Get a single shipping order by ID.
 ### PATCH /shipping/orders/:id/status
 
 Update the status of a shipping order (e.g., from IN_TRANSIT to DELIVERED). This can be called by a webhook from the shipping partner.
+
+**Behavior:**
+- `DELIVERED` → tự động cập nhật `OrderStatus` = `DELIVERED` rồi `COMPLETED`, gọi `OrdersService.markCodPaid`.
+- `FAILED` hoặc `RETURNED` → đẩy `OrderStatus` về `PENDING`, gọi `InventoryService.returnStockOnOrderCancel`, tăng `retryCount`, lưu `failedReason/returnReason`.
+- Mọi thay đổi status đều ghi audit `shipping.status.changed` + `order.status.changed`.
 
 **Response:** `200 OK`
 

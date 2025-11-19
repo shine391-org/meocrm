@@ -17,22 +17,20 @@ graph TD
     A[PENDING] --> B(CONFIRMED)
     A --> C(CANCELLED)
     B --> D(PROCESSING)
-    D --> E(SHIPPED)
     D --> C
+    D --> E(SHIPPED)
+    E --> A
+    E --> C
     E --> F(DELIVERED)
     F --> G(COMPLETED)
-    F --> D
-    G --> H(RETURNING)
-    H --> C
 ```
-*   **PENDING (Đang xử lý):** Trạng thái khởi tạo của đơn hàng.
+*   **PENDING (Đang xử lý):** Trạng thái khởi tạo của đơn hàng hoặc trạng thái được rollback khi vận chuyển thất bại.
 *   **CONFIRMED (Đã xác nhận):** Đơn hàng đã được xác nhận.
-*   **PROCESSING (Đang thực hiện):** Đơn hàng đang được chuẩn bị/xử lý.
-*   **SHIPPED (Đang vận chuyển):** Đơn hàng đã được bàn giao cho đối tác vận chuyển.
+*   **PROCESSING (Đang thực hiện):** Đơn hàng đang được chuẩn bị/xử lý (đồng thời diễn ra trừ kho + ghi `OrderInventoryReservation`).
+*   **SHIPPED (Đang vận chuyển):** Đơn hàng đã được bàn giao cho đối tác vận chuyển, có thể quay lại `PENDING` nếu Shipping báo `FAILED/RETURNED`.
 *   **DELIVERED (Đã giao hàng):** Đơn hàng đã được giao thành công cho khách hàng.
 *   **COMPLETED (Hoàn thành):** Đơn hàng đã hoàn tất, tiền đã được thu.
-*   **CANCELLED (Đã hủy):** Đơn hàng bị hủy.
-*   **RETURNING (Đang hoàn hàng):** Đơn hàng đang trong quá trình được trả về kho.
+*   **CANCELLED (Đã hủy):** Đơn hàng bị hủy, kích hoạt hoàn kho và audit log tương ứng.
 
 ### PENDING (Đang xử lý)
 
@@ -50,7 +48,7 @@ graph TD
 
 - **Quy tắc chuyển trạng thái:** Thường được kích hoạt khi Admin tạo một vận đơn cho đơn hàng.
 - **Actions tự động (Decision #1):**
-    - **Trừ stock:** Tự động trừ tồn kho khi đơn hàng chuyển sang trạng thái `PROCESSING`. Thao tác này phải được thực hiện trong một giao dịch database đồng nhất.
+    - **Trừ stock + Reservation:** Tự động trừ tồn kho khi đơn hàng chuyển sang trạng thái `PROCESSING`. Thao tác này phải được thực hiện trong một giao dịch database đồng nhất, ghi `StockAdjustment` với lý do `ORDER_RESERVATION` và lưu `OrderInventoryReservation` (chống double-deduct + làm căn cứ hoàn kho).
     - Gửi notification cho khách hàng: Code phải phát ra sự kiện `orders.status.changed`, việc gửi thông báo thực tế sẽ được triển khai sau.
 
 ### COMPLETED (Hoàn thành)
@@ -70,15 +68,16 @@ graph TD
     - KHÔNG được phép chuyển từ `COMPLETED` → `CANCELLED` (phải thông qua quy trình refund).
 - **Actions tự động (Decision #1):**
     - Cập nhật công nợ của khách hàng: Trừ lại công nợ đã tăng.
-    - **Hoàn stock:** Tự động hoàn trả tồn kho về cho chi nhánh tương ứng nếu đơn hàng bị hủy từ trạng thái `PROCESSING`. Thao tác này phải là một phần của giao dịch đồng nhất.
+    - **Hoàn stock:** Tự động hoàn trả tồn kho về cho chi nhánh tương ứng (dựa trên `OrderInventoryReservation`). Thao tác này phải là một phần của giao dịch đồng nhất và ghi audit `inventory.adjustment`.
 
-### RETURNING (Đang hoàn hàng)
+### Shipping FAILED / RETURNED
 
-- **Quy tắc chuyển trạng thái:** Khi một đơn hàng đang vận chuyển bị báo `RETURNED` bởi đối tác vận chuyển.
+- **Điều kiện:** Khi `ShippingService` nhận trạng thái `FAILED` hoặc `RETURNED`.
 - **Actions tự động:**
-    - Cập nhật trạng thái đơn hàng thành `RETURNING`.
-    - **KHÔNG thay đổi tồn kho** ở bước này.
-- **Quy tắc kết thúc:** Cần có một hành động xác nhận thủ công từ admin ("Đã nhận hàng hoàn") để chuyển đơn hàng từ `RETURNING` sang `CANCELLED`. Việc này sẽ kích hoạt logic hoàn stock.
+    - Đưa `OrderStatus` từ `SHIPPED` về `PENDING` để tiếp tục xử lý lại.
+    - Gọi `InventoryService.returnStockOnOrderCancel` để giải phóng các reservation đang giữ.
+    - Ghi audit log `shipping.status.changed` kèm `failedReason/returnReason`, cập nhật `retryCount`.
+    - `shipping_orders` tăng `retryCount`, giữ lại `returnReason` để hiển thị tại UI.
 
 ### 1.2 Refund Policy
 
@@ -149,12 +148,13 @@ graph TD
 
 - **Quy tắc:**
     - Hỗ trợ giảm giá cấp độ đơn hàng.
-    - **Giảm giá cấp độ mặt hàng (item-level discount)** phải được triển khai thông qua trường `discountAmount` trên từng `OrderItem`. Logic tính toán phải tính tổng phụ sau khi áp dụng chiết khấu từng mặt hàng.
+    - **Giảm giá cấp độ mặt hàng (item-level discount)** phải được triển khai thông qua trường `discountAmount` trên từng `OrderItem`. Logic tính toán phải tính tổng phụ sau khi áp dụng chiết khấu từng mặt hàng (`discountType = PERCENT/FIXED`, `discountValue` theo đơn vị).
+    - POS Workspace cho phép thao tác trực tiếp các trường nói trên (chọn loại chiết khấu, nhập giá trị theo đơn vị, toggle `Miễn VAT`). Payload gửi lên `/orders` sẽ đồng nhất với DTO backend.
 
 ### 4.4 Tax Calculation (Decision #XX - cần định nghĩa rõ hơn)
 
-- **Quy tắc:** VAT phải được tính trên `(subtotal - totalItemDiscounts - totalOrderDiscount)` (giá trị sau khi đã áp dụng tất cả chiết khấu).
-- Logic cho `isVatExempt` (miễn VAT) cần được triển khai và tính vào `taxableSubtotal`.
+- **Quy tắc:** VAT phải được tính trên `(subtotal - totalItemDiscounts - totalOrderDiscount)` (giá trị sau khi đã áp dụng tất cả chiết khấu). Hệ thống expose `taxableSubtotal` + `taxBreakdown` trong response và lưu để phục vụ báo cáo.
+- Logic cho `isVatExempt` (miễn VAT) đã được triển khai: mỗi item có thể bật/tắt `taxExempt`, POS cũng hỗ trợ toggle tương ứng → ảnh hưởng trực tiếp tới `taxableSubtotal`.
 
 ---
 

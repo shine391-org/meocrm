@@ -73,6 +73,7 @@ function CustomersPageContent() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
+          data-testid="customers-search-input"
         />
       </div>
 

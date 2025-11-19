@@ -84,7 +84,7 @@ const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableP
   };
 
   if (isLoading) {
-    return <div>Loading...</div>; // Replace with Skeleton
+    return <div data-testid="customers-loading">Loading...</div>; // Replace with Skeleton
   }
 
   if (error) {
@@ -92,7 +92,9 @@ const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableP
       error instanceof Error
         ? error.message
         : 'Không thể tải danh sách khách hàng.';
-    return <div>{message}</div>; // Replace with Error component
+    return (
+      <div data-testid="customers-error">{message}</div> // Replace with Error component
+    );
   }
 
   const customers: CustomerListItem[] = data?.data || [];
@@ -100,7 +102,7 @@ const CustomerTable = ({ data, isLoading, error, page, setPage }: CustomerTableP
 
   return (
     <>
-      <div className="border rounded-lg">
+      <div className="border rounded-lg" data-testid="customers-table">
         <Table>
           <TableHeader>
             <TableRow>
