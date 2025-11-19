@@ -169,6 +169,36 @@ return this.prisma.supplier.update({
 });
 }
 
+/**
+ * TODO: Implement when PurchaseOrder model is available
+ * - This should be called when a PO is confirmed or paid
+ */
+async updateSupplierStats(
+  supplierId: string,
+  amount: number,
+  organizationId: string
+) {
+  const supplier = await this.prisma.supplier.findFirst({
+    where: { id: supplierId, organizationId },
+  });
+
+  if (!supplier) {
+    // Fail silently if supplier not found, as this is an internal stat update
+    console.warn(`[SuppliersService] Supplier not found for stats update: ${supplierId}`);
+    return;
+  }
+
+  await this.prisma.supplier.update({
+    where: { id: supplierId },
+    data: {
+      totalPurchases: {
+        increment: amount,
+      },
+      lastPurchaseDate: new Date(),
+    },
+  });
+}
+
 private async generateCode(organizationId: string): Promise<string> {
 const lastSupplier = await this.prisma.supplier.findFirst({
 where: {

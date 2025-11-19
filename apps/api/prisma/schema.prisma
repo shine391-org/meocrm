@@ -769,6 +769,7 @@ model Supplier {
   totalPurchases Decimal @default(0) @db.Decimal(12, 2)
   totalPaid      Decimal @default(0) @db.Decimal(12, 2)
   debt           Decimal @default(0) @db.Decimal(12, 2)
+  lastPurchaseDate DateTime?
 
   purchaseOrders PurchaseOrder[]
 

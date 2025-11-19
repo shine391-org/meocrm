@@ -91,6 +91,18 @@ export class ProductsService {
 
     if (filters?.inStock === true) {
       where.stock = { gt: 0 };
+    } else if (filters?.inStock === false) {
+      where.stock = { lte: 0 };
+    }
+
+    if (typeof filters?.isActive === 'boolean') {
+      where.isActive = filters.isActive;
+    }
+
+    if (filters?.hasImages === true) {
+      where.images = { isEmpty: false };
+    } else if (filters?.hasImages === false) {
+      where.images = { isEmpty: true };
     }
 
     // Task 3: Search
@@ -152,19 +164,83 @@ export class ProductsService {
   }
 
   async update(id: string, dto: UpdateProductDto, organizationId: string) {
-    await this.findOne(id, organizationId);
-    const updateData: any = {};
-    if (dto.name) updateData.name = dto.name;
-    if (dto.description !== undefined) updateData.description = dto.description;
-    if (dto.basePrice !== undefined) updateData.sellPrice = dto.basePrice;
-    if (dto.costPrice !== undefined) updateData.costPrice = dto.costPrice;
-    if (dto.minStock !== undefined) updateData.minStock = dto.minStock;
-    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
-    if (dto.categoryId !== undefined) updateData.categoryId = dto.categoryId;
-    return this.prisma.product.update({
-      where: { id },
-      data: updateData,
-      include: { category: true, variants: true },
+    const product = await this.findOne(id, organizationId);
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Update basic product fields
+      const { variants, ...productData } = dto;
+      const updateData: any = {};
+      if (productData.name) updateData.name = productData.name;
+      if (productData.description !== undefined) updateData.description = productData.description;
+      if (productData.basePrice !== undefined) updateData.sellPrice = productData.basePrice;
+      if (productData.costPrice !== undefined) updateData.costPrice = productData.costPrice;
+      if (productData.minStock !== undefined) updateData.minStock = productData.minStock;
+      if (productData.isActive !== undefined) updateData.isActive = productData.isActive;
+      if (productData.categoryId !== undefined) updateData.categoryId = productData.categoryId;
+
+      await tx.product.update({
+        where: { id },
+        data: updateData,
+      });
+
+      // 2. Handle variants if provided
+      if (variants) {
+        const existingVariantIds = product.variants.map((v) => v.id);
+        const incomingVariantIds = variants.map((v) => v.id).filter(Boolean);
+
+        // Variants to delete
+        const variantsToDelete = existingVariantIds.filter(
+          (id) => !incomingVariantIds.includes(id)
+        );
+        if (variantsToDelete.length > 0) {
+          await tx.productVariant.updateMany({
+            where: { id: { in: variantsToDelete } },
+            data: { deletedAt: new Date(), isActive: false },
+          });
+        }
+
+        for (const variantDto of variants) {
+          if (variantDto.id) {
+            // Update existing variant
+            const { id: variantId, ...variantUpdateData } = variantDto;
+            await tx.productVariant.update({
+              where: { id: variantId },
+              data: {
+                ...variantUpdateData,
+                sellPrice: variantDto.price,
+                stock: variantDto.inStock,
+                attributes: (variantDto.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
+              },
+            });
+          } else {
+            // Create new variant
+            const sku = await this.generateVariantSKU(product.sku, organizationId);
+            await tx.productVariant.create({
+              data: {
+                sku,
+                productId: id,
+                organizationId,
+                name: variantDto.name,
+                sellPrice: variantDto.price,
+                stock: variantDto.inStock ?? 0,
+                isActive: variantDto.isActive ?? true,
+                attributes: (variantDto.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
+              },
+            });
+          }
+        }
+      }
+
+      // 3. Return the updated product with variants
+      return tx.product.findFirst({
+        where: { id, organizationId, deletedAt: null },
+        include: {
+          category: true,
+          variants: {
+            where: { deletedAt: null },
+          },
+        },
+      });
     });
   }
 
