@@ -258,7 +258,6 @@ export class ProductsService {
     if (count === 0) {
       throw new NotFoundException(`Product with ID "${id}" not found`);
     }
-    await this.prisma.product.update({ where: { id }, data: { deletedAt: new Date() } });
     return { message: 'Product deleted successfully' };
   }
 

@@ -758,6 +758,10 @@ export class OrdersService {
         },
       });
 
+      if (dto.status === OrderStatus.COMPLETED) {
+        await this.finalizeOrderCompletion(updated.id, organizationId, prisma);
+      }
+
       if (
         dto.status === OrderStatus.CANCELLED &&
         order.customerId &&

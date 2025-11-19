@@ -74,8 +74,11 @@
 ### 🔄 In Progress
 - **Frontend Auth**
   - `FE-001`: Frontend: Login page
+    - **Trạng thái 2025-11-19:** ✅ Completed — File `apps/web/app/(auth)/login/page.tsx` đã tồn tại.
   - `FE-002`: Frontend: Register page
+    - **Trạng thái 2025-11-19:** ✅ Completed — File `apps/web/app/(auth)/register/page.tsx` đã tồn tại.
   - `FE-003`: Frontend: Auth context & hooks
+    - **Trạng thái 2025-11-19:** ✅ Completed — Files `apps/web/context/auth-context.tsx` và `apps/web/hooks/use-auth.ts` đã tồn tại.
   - `FE-004`: Frontend: Layout component
   - `FE-005`: Frontend: Sidebar navigation
   - `FE-006`: Frontend: Header component
@@ -522,7 +525,7 @@
   - `CUST-002`: Customers CRUD endpoints
   - `CUST-003`: Auto-generate customer code
 - **`CUST-006`: Customer Auto-Segmentation Service (CRITICAL)**
-  - **Vấn đề:** Danh sách các phân khúc khách hàng mặc định trong tài liệu không khớp với những gì có trong code.
+  - **Vấn đề:** Danh sách các phân khúc khách hàng mặc định trong tài liệu không khớp với những gì có trong code. **LƯU Ý:** Tài liệu nghiệp vụ (`01_BUSINESS_LOGIC.md`) hiện không định nghĩa rõ ràng các `Default segments` cần được đồng bộ.
   - **Acceptance Criteria:**
     ```markdown
     - Cập nhật tệp `prisma/seed.ts`.
@@ -531,7 +534,18 @@
   - **📚 Business Logic liên quan (từ `01_BUSINESS_LOGIC.md`):**
     - Mục 6: `Customer Management Rules`
 - **`CUST-007`: Customer Stats Auto-Update Service (CRITICAL)**
-    - *(Đã được định nghĩa trong `SHIP-007`)*
+  - **Trạng thái 2025-11-19:** ✅ Completed — Đã sửa lỗi trong `orders.service.ts` để đảm bảo `finalizeOrderCompletion` được gọi khi trạng thái đơn hàng chuyển sang `COMPLETED`, cập nhật chính xác các số liệu thống kê khách hàng.
+  - **Vấn đề:** Dịch vụ tự động cập nhật số liệu thống kê khách hàng (tổng chi tiêu, tổng đơn hàng, công nợ) còn thiếu hoặc chưa chính xác. Liên kết tới `SHIP-007` là không đúng.
+  - **Acceptance Criteria:**
+    ```markdown
+    - Khi một đơn hàng hoàn thành (COMPLETED), dịch vụ phải cập nhật `totalSpent` và `totalOrders` của khách hàng.
+    - Khi công nợ khách hàng thay đổi (do đặt hàng, thanh toán COD), `Customer.debt` phải được cập nhật tương ứng.
+    - Mọi cập nhật phải đảm bảo tính toàn vẹn dữ liệu thông qua giao dịch đồng nhất.
+    ```
+  - **📚 Business Logic liên quan (từ `01_BUSINESS_LOGIC.md`):**
+    - Mục 2.1: `Customer Debt Calculation`
+    - Mục 1.1: `COMPLETED` (Workflow đơn hàng)
+- **`CUST-008`: [MISSING - Task ID không có trong tài liệu]**
 
 ---
 
@@ -548,7 +562,9 @@
   - `SUP-001`: Setup SuppliersModule
   - `SUP-002`: Suppliers CRUD endpoints
   - `SUP-003`: Supplier stats tracking
+    - **Trạng thái 2025-11-19:** 🔄 In Progress — Schema có các trường `totalPurchases`, `totalPaid`, `debt`, và `SuppliersService` có phương thức `recordPurchase` để cập nhật. **Tuy nhiên, tính năng này hiện không hoạt động do thiếu module `purchase-orders` để gọi `recordPurchase`.** Ngoài ra, `lastPurchaseDate` còn thiếu trong schema.
   - `SUP-004`: Suppliers tests
+    - **Trạng thái 2025-11-19:** ✅ Completed — Đã có unit tests (`suppliers.service.spec.ts`) và E2E tests (`suppliers.e2e-spec.ts`).
 
 ---
 
