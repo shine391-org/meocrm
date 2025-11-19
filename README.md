@@ -255,30 +255,31 @@ docs/
 
 ## 13. Tech Stack Overview
 ### Backend
-- NestJS 10
-- Prisma ORM 5+
-- PostgreSQL 15
+- NestJS 11.1.9
+- Prisma ORM 6.19.0
+- PostgreSQL 17
 - JWT Auth (15m access / 7d refresh)
 - bcrypt hashing (10 rounds)
 - class-validator for DTOs
 
 ### Frontend
-- Next.js 14 (App Router)
-- React 18
-- Tailwind CSS + Shadcn components
+- Next.js 16.0.3 (App Router)
+- React 19.2.0
+- Tailwind CSS 4.1.17 + Shadcn components
 - Zustand for client-side state
 - TanStack Query for server state
 
 ### Testing
-- Jest + Supertest for API
-- Playwright for end-to-end web
+- Jest 30.2.0 + Supertest 7.1.4 for API
+- Playwright 1.56.1 for end-to-end web
 - Coverage 85.25% statements (goal ≥80%)
 
 ### DevOps
-- pnpm workspaces
+- pnpm 10.20.0 workspaces
 - Docker (services)
 - GitHub Actions pipelines
 - ESLint + Prettier
+- TypeScript 5.9.3
 
 ## 14. Multi-Tenant Security Highlights
 - RequestContext middleware captures `organizationId` once.
@@ -744,7 +745,7 @@ JWT_REFRESH_EXPIRES_IN="7d"
 ## 40. Appendix C: ASCII Architecture Diagram
 ```
 +-----------------+       +-----------------+       +------------------+
-|   Browser UI    | <---> |  Next.js 14 Web | <---> |   NestJS API     |
+|   Browser UI    | <---> |  Next.js 16 Web | <---> |   NestJS API     |
 +-----------------+       +-----------------+       +------------------+
                                                         |
                                                         v

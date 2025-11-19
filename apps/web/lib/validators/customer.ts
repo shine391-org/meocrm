@@ -8,7 +8,8 @@ export const customerFormSchema = z.object({
   ward: z.string().optional(),
   district: z.string().optional(),
   province: z.string().min(1, 'Vui lòng chọn tỉnh/thành phố'),
-  segment: z.enum(['Regular', 'VIP', 'Wholesale']).default('Regular'),
+  segment: z.enum(['Regular', 'VIP', 'Wholesale']).optional().default('Regular'),
 });
 
-export type CustomerFormData = z.infer<typeof customerFormSchema>;
+export type CustomerFormInput = z.input<typeof customerFormSchema>;
+export type CustomerFormData = z.output<typeof customerFormSchema>;

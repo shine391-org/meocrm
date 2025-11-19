@@ -45,7 +45,7 @@ async function bootstrap() {
       const parsed = JSON.parse(req.body.toString('utf8'));
       req.body = parsed;
       return next();
-    } catch (error) {
+    } catch (_error) {
       return next(new BadRequestException('Invalid webhook payload JSON.'));
     }
   });
@@ -169,9 +169,9 @@ function logRegisteredRoutes(app: INestApplication) {
     if (routes.length) {
       routeLogger.debug(`Registered routes (${routes.length}):\n${routes.join('\n')}`);
     }
-  } catch (error) {
+  } catch (_error) {
     routeLogger.warn(
-      `Route logging skipped: ${error instanceof Error ? error.message : String(error)}`,
+      `Route logging skipped: ${_error instanceof Error ? _error.message : String(_error)}`,
     );
   }
 }

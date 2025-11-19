@@ -33,19 +33,6 @@ type OrderFinancialInput = {
   paidAmount: Prisma.Decimal | number;
 };
 
-type OrderWithRelations = Prisma.OrderGetPayload<{
-  include: {
-    customer: true;
-    items: {
-      include: {
-        product: true;
-        variant: true;
-      };
-    };
-    branch: true;
-  };
-}>;
-
 type OrderActor = Pick<User, 'id' | 'organizationId'> | undefined;
 
 const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -578,7 +565,6 @@ export class OrdersService {
       paymentMethod,
       branchId,
     } = query;
-      query;
     const where: Prisma.OrderWhereInput = {
       organizationId,
       deletedAt: null,

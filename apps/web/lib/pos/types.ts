@@ -5,9 +5,11 @@ export interface Product {
   name: string;
   sku: string;
   price: number;
+  sellPrice?: number;
   stock: number;
-  category: string;
+  category?: string | { name: string };
   unit: string;
+  unitOfMeasure?: string;
   variant?: string;
   accent?: string;
   tags?: string[];

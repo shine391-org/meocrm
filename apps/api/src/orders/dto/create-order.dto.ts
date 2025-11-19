@@ -9,7 +9,6 @@ import {
   Min,
   ValidateNested,
   IsBoolean,
-  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';

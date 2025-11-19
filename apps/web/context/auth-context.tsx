@@ -61,17 +61,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [logout]);
 
-  const login = useCallback(
-    async (data: { email: string; password: string; remember?: boolean }) => {
-      const response = await loginApi(data);
-      persistSession({
-        accessToken: response.accessToken,
-        organizationId: response.user.organization.id,
-      });
-      setUser(response.user);
-    },
-    [router],
-  );
+  const login = useCallback(async (data: {
+    email: string;
+    password: string;
+    remember?: boolean;
+  }) => {
+    const response = await loginApi(data);
+    persistSession({
+      accessToken: response.accessToken,
+      organizationId: response.user.organization.id,
+    });
+    setUser(response.user);
+  }, []);
 
   const register = useCallback(async (data: {
     name: string;
@@ -85,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       organizationId: response.user.organization.id,
     });
     setUser(response.user);
-  }, [router]);
+  }, []);
 
   const refreshToken = useCallback(async () => {
     try {
@@ -127,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [refreshToken]);
+  }, [refreshToken, logout]);
 
   return (
     <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>

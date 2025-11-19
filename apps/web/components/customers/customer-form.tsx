@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import {
   CustomerFormData,
+  CustomerFormInput,
   customerFormSchema,
 } from '@/lib/validators/customer';
 import {
@@ -38,7 +39,7 @@ export function CustomerForm({
   submitLabel,
 }: CustomerFormProps) {
   const router = useRouter();
-  const form = useForm<CustomerFormData>({
+  const form = useForm<CustomerFormInput>({
     resolver: zodResolver(customerFormSchema),
     defaultValues: initialData || {
       name: '',
@@ -56,7 +57,12 @@ export function CustomerForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form
+        onSubmit={form.handleSubmit((values) =>
+          onSubmit(customerFormSchema.parse(values)),
+        )}
+        className="space-y-6"
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Name */}
           <FormField

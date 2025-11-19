@@ -88,6 +88,23 @@ type OrderDetailResponse = {
 
 export type OrderDetail = OrderDetailResponse['data'];
 
+export type CreatePosOrderPayload = {
+  branchId: string;
+  customerId: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    variantId?: string;
+  }>;
+  paymentMethod: 'CASH' | 'CARD' | 'E_WALLET' | 'BANK_TRANSFER' | 'COD';
+  channel?: string;
+  discount?: number;
+  shipping?: number;
+  notes?: string;
+  isPaid?: boolean;
+  paidAmount?: number;
+};
+
 const buildQuery = (query: OrdersQuery = {}) => {
   const params = new URLSearchParams();
   Object.entries(query).forEach(([key, value]) => {
@@ -174,4 +191,22 @@ export async function rejectOrderRefund(id: string) {
     throw new Error('Không thể từ chối hoàn tiền');
   }
   return response.json();
+}
+
+export async function createPosOrder(payload: CreatePosOrderPayload) {
+  const response = await fetch(`${API_BASE_URL}/orders`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    const message =
+      (error as { message?: string })?.message ?? 'Không thể tạo đơn POS';
+    throw new Error(message);
+  }
+
+  const payloadResponse = (await response.json()) as OrderDetailResponse;
+  return payloadResponse.data;
 }

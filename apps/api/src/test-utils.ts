@@ -99,7 +99,7 @@ export async function setupTestApp(options: { skipCleanup?: boolean } = {}): Pro
       try {
         req.rawBody = req.body.toString('utf8');
         req.body = JSON.parse(req.rawBody);
-      } catch (error) {
+      } catch (_error) {
         return next(new BadRequestException('Invalid webhook payload JSON.'));
       }
     }

@@ -440,7 +440,9 @@ export function PosWorkspace() {
                         'from-slate-100 via-slate-50 to-white',
                       )}
                     >
-                      {product.category?.name ?? 'Danh mục'}
+                      {typeof product.category === 'string'
+                        ? product.category
+                        : product.category?.name ?? 'Danh mục'}
                     </div>
                     <div className="mt-3 flex flex-1 flex-col gap-1">
                       <p className="line-clamp-2 font-semibold text-slate-900">

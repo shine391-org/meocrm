@@ -31,10 +31,10 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.11.0",
     "@playwright/test": "^1.56.1",
-    "@types/uuid": "^9.0.8",
-    "@typescript-eslint/eslint-plugin": "^8.46.3",
-    "@typescript-eslint/parser": "^8.46.3",
-    "concurrently": "^8.2.2",
+    "@types/uuid": "^11.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "concurrently": "^9.2.1",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "jest-mock-extended": "^4.0.0",
@@ -48,6 +48,6 @@
     "@nestjs/schedule": "^6.0.1",
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
-    "uuid": "^9.0.1"
+    "uuid": "^13.0.0"
   }
 }
