@@ -161,6 +161,7 @@ export class ProductsService {
 
     const where: Prisma.ProductWhereInput = {
       organizationId,
+      deletedAt: null,
     };
 
     if (search) {
@@ -218,6 +219,7 @@ export class ProductsService {
       where: {
         id,
         organizationId,
+        deletedAt: null,
       },
       include: {
         category: true,
