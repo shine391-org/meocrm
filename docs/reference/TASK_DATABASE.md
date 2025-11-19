@@ -191,8 +191,36 @@
 ## 🛍️ Phase 2 - Products & Inventory (39 tasks)
 
 ### ✅ Completed
+- **Categories**
+  - `CAT-001`: Setup CategoriesModule
+    - **Trạng thái 2025-11-19:** ✅ Completed — Module wiring (controller + service + Prisma) khớp với triển khai thực.
+    - **Cập nhật 2025-11-19:**
+      - **Hành động:** Rà soát `CategoriesModule`/controller/service, xác nhận các endpoint CRUD + tree dùng multi-tenant guard và Prisma `$extends` đã sẵn sàng cho các module Products/Inventory.
+      - **Kiểm thử:** `pnpm --filter @meocrm/api test -- categories.service.spec.ts`.
+      - **Commit:** `f03ac84` (branch `feature/CAT-001-004-verification`).
+      - **Trạng thái:** Sẵn sàng chờ review.
+  - `CAT-002`: Categories CRUD with parentId
+    - **Trạng thái 2025-11-19:** ✅ Completed — CRUD đã enforce `parentId`, kiểm tra tồn tại và soft delete.
+    - **Cập nhật 2025-11-19:**
+      - **Hành động:** Kiểm tra logic create/update/remove để đảm bảo validate cha cùng organization, cấm tự tham chiếu và bảo vệ dữ liệu con/sản phẩm.
+      - **Kiểm thử:** `pnpm --filter @meocrm/api test -- categories.service.spec.ts`.
+      - **Commit:** `f03ac84` (branch `feature/CAT-001-004-verification`).
+      - **Trạng thái:** Sẵn sàng chờ review.
+  - `CAT-003`: GET /categories nested tree
+    - **Trạng thái 2025-11-19:** ✅ Completed — endpoint `/categories/tree` trả về cấu trúc 3 tầng với `_count` đúng theo tài liệu.
+    - **Cập nhật 2025-11-19:**
+      - **Hành động:** Xác nhận `findTree` lọc theo `organizationId`, include `_count.products`, và controller expose `GET /categories/tree`.
+      - **Kiểm thử:** `pnpm --filter @meocrm/api test:e2e -- --runTestsByPath test/categories.e2e-spec.ts`.
+      - **Commit:** `f03ac84` (branch `feature/CAT-001-004-verification`).
+      - **Trạng thái:** Sẵn sàng chờ review.
+  - `CAT-004`: Prevent circular references
+    - **Trạng thái 2025-11-19:** ✅ Completed — áp dụng giới hạn 3 cấp + chặn move category xuống descendant.
+    - **Cập nhật 2025-11-19:**
+      - **Hành động:** Review `getCategoryLevel` + `isDescendant` và các guard trong `create`/`update` để ngăn vòng lặp & cảnh báo khi delete.
+      - **Kiểm thử:** `pnpm --filter @meocrm/api test:e2e -- --runTestsByPath test/categories.e2e-spec.ts`.
+      - **Commit:** `f03ac84` (branch `feature/CAT-001-004-verification`).
+      - **Trạng thái:** Sẵn sàng chờ review.
 - **Products**
-  - `CAT-001`: CategoriesModule - Tree CRUD
   - `PROD-BUG-001`: Fix ProductsModule Schema Mismatch
   - `PROD-BUG-002`: Fix Missing Soft Delete Logic in Products
 
@@ -210,11 +238,6 @@
   - `PROD-010`: Add sorting
   - `PROD-011`: Products unit + E2E tests
   - `PROD-ADV-001`: Products Advanced Filtering - Backend
-- **Categories**
-  - `CAT-001`: Setup CategoriesModule
-  - `CAT-002`: Categories CRUD with parentId
-  - `CAT-003`: GET /categories nested tree
-  - `CAT-004`: Prevent circular references
 - **Product Variants**
   - `PROD-012`: Support variants in POST/PATCH products
   - `PROD-013`: SKU generation for variants
