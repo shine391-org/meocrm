@@ -197,28 +197,28 @@
     - **Cập nhật 2025-11-19:**
       - **Hành động:** Rà soát `CategoriesModule`/controller/service, xác nhận các endpoint CRUD + tree dùng multi-tenant guard và Prisma `$extends` đã sẵn sàng cho các module Products/Inventory.
       - **Kiểm thử:** `pnpm --filter @meocrm/api test -- categories.service.spec.ts`.
-      - **Commit:** (pending — branch `feature/CAT-001-004-verification`).
+      - **Commit:** `f03ac84` (branch `feature/CAT-001-004-verification`).
       - **Trạng thái:** Sẵn sàng chờ review.
   - `CAT-002`: Categories CRUD with parentId
     - **Trạng thái 2025-11-19:** ✅ Completed — CRUD đã enforce `parentId`, kiểm tra tồn tại và soft delete.
     - **Cập nhật 2025-11-19:**
       - **Hành động:** Kiểm tra logic create/update/remove để đảm bảo validate cha cùng organization, cấm tự tham chiếu và bảo vệ dữ liệu con/sản phẩm.
       - **Kiểm thử:** `pnpm --filter @meocrm/api test -- categories.service.spec.ts`.
-      - **Commit:** (pending — branch `feature/CAT-001-004-verification`).
+      - **Commit:** `f03ac84` (branch `feature/CAT-001-004-verification`).
       - **Trạng thái:** Sẵn sàng chờ review.
   - `CAT-003`: GET /categories nested tree
     - **Trạng thái 2025-11-19:** ✅ Completed — endpoint `/categories/tree` trả về cấu trúc 3 tầng với `_count` đúng theo tài liệu.
     - **Cập nhật 2025-11-19:**
       - **Hành động:** Xác nhận `findTree` lọc theo `organizationId`, include `_count.products`, và controller expose `GET /categories/tree`.
       - **Kiểm thử:** `pnpm --filter @meocrm/api test:e2e -- --runTestsByPath test/categories.e2e-spec.ts`.
-      - **Commit:** (pending — branch `feature/CAT-001-004-verification`).
+      - **Commit:** `f03ac84` (branch `feature/CAT-001-004-verification`).
       - **Trạng thái:** Sẵn sàng chờ review.
   - `CAT-004`: Prevent circular references
     - **Trạng thái 2025-11-19:** ✅ Completed — áp dụng giới hạn 3 cấp + chặn move category xuống descendant.
     - **Cập nhật 2025-11-19:**
       - **Hành động:** Review `getCategoryLevel` + `isDescendant` và các guard trong `create`/`update` để ngăn vòng lặp & cảnh báo khi delete.
       - **Kiểm thử:** `pnpm --filter @meocrm/api test:e2e -- --runTestsByPath test/categories.e2e-spec.ts`.
-      - **Commit:** (pending — branch `feature/CAT-001-004-verification`).
+      - **Commit:** `f03ac84` (branch `feature/CAT-001-004-verification`).
       - **Trạng thái:** Sẵn sàng chờ review.
 - **Products**
   - `PROD-BUG-001`: Fix ProductsModule Schema Mismatch
