@@ -18,5 +18,9 @@
 | Testing | [docs/testing/Strategy-&-Coverage.md](./testing/Strategy-&-Coverage.md) | Target coverage ≥80%, golden E2E, Jest skeleton instructions. |
 | Environment | [docs/ENVIRONMENT.md](./ENVIRONMENT.md) | Local setup, ports, Prisma workflows, rollback/seed cautions. |
 | Troubleshooting | [docs/06_TROUBLESHOOTING.md](./06_TROUBLESHOOTING.md) | Các lỗi môi trường phổ biến. |
+| UI Reference | [docs/reference/07_UI_REFERENCE.md](./07_UI_REFERENCE.md) | Screenshot + interaction spec cho Login, Dashboard, POS, Inventory, Orders, Invoice, Printouts. |
+| Retail Ops | [docs/reference/08_RETAIL_OPERATIONS.md](./08_RETAIL_OPERATIONS.md) | Luồng nghiệp vụ nhập/bán/trả hàng; bảng mapping API cho từng giai đoạn. |
+| POS Playbook | [docs/guides/operations/pos-playbook.md](../docs/guides/operations/pos-playbook.md) | Checklist thao tác POS (bán nhanh, giao hàng, trả hàng, in phiếu). |
+| Tasks Map | [docs/reference/09_TASKS_TO_DOCS_MAP.md](./09_TASKS_TO_DOCS_MAP.md) | Bảng mapping 83 task (POS/Products/Orders/Shipping/…) tới docs nghiệp vụ, UI, schema. |
 | Code Review | [docs/code-review/coderabbit-final-followups.md](./code-review/coderabbit-final-followups.md) | Checklist + MEOW context for CodeRabbit 'Final Follow-ups' branch. |
 | ~~Agent Supplements~~ | ~~[docs/agents/jules-guide.md](./agents/jules-guide.md)~~ | ⚠️ **DEPRECATED** - Replaced by AGENTS-QUICKSTART.md. Archive on 2025-12-01. |
