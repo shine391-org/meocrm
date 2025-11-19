@@ -1,167 +1,154 @@
-# Start Here - Fast Context Loading Guide
+# AGENT_START_HERE.md - Hướng dẫn tải ngữ cảnh nhanh
 
-**For Claude/AI Agents working on MeoCRM**
+**Dành cho AGENT làm việc trên dự án MeoCRM**
 
-This guide helps you load the minimum context needed for each task type, reducing token usage by 20-60%.
-
----
-
-## 🚀 Quick Start (Every Session)
-
-**Always read first:**
-1. [WORKFLOW-SIMPLE.md](../WORKFLOW-SIMPLE.md) (59 KB) - Core workflow
-2. [ROADMAP.md](../ROADMAP.md) (23 KB) - Current tasks & status
-
-**Total:** ~82 KB base context
+Hướng dẫn này giúp bạn (AGENT) tải ngữ cảnh tối thiểu cần thiết cho từng loại nhiệm vụ, nhằm tăng hiệu suất và tiết kiệm token.
 
 ---
 
-## 📊 Task-Based Context Loading
+## 🚀 Bắt đầu nhanh (Mỗi phiên làm việc)
 
-### 1️⃣ New UI Feature (Screenshot-Driven)
-
-**Read (in order):**
-1. ✅ [WORKFLOW-SIMPLE.md](../WORKFLOW-SIMPLE.md) - Workflow
-2. ✅ [ROADMAP.md](../ROADMAP.md) - Current phase
-3. ✅ Screenshot from user
-4. ✅ Similar existing component (if exists)
-
-**Skip:** Full business logic, API docs, database schema
-
-**Estimated context:** 82 KB + screenshot
-**Time saved:** 60% (skip 120+ KB)
+**Luôn đọc đầu tiên:**
+1.  [AGENTS.md](../AGENTS.md) - Quy trình làm việc giữa Bạn và AGENT.
+2.  [ROADMAP.md](../ROADMAP.md) - Các nhiệm vụ và trạng thái hiện tại của dự án.
+3.  [reference/TASK_DATABASE.md](./reference/TASK_DATABASE.md) - Danh sách nhiệm vụ chi tiết (AC, liên kết BL).
+4.  Nếu cần dữ liệu demo để test frontend/API nhanh: xem `docs/guides/frontend-development.md` → mục **Seed dữ liệu cho Frontend** và chạy `./scripts/seed-dev.sh`.
 
 ---
 
-### 2️⃣ Backend API Development
+## 📊 Tải ngữ cảnh theo nhiệm vụ
 
-**Read (in order):**
-1. ✅ [WORKFLOW-SIMPLE.md](../WORKFLOW-SIMPLE.md) - Workflow
-2. ✅ [essential/01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md) - Business rules (58 KB)
-3. ✅ [essential/03_DATABASE_SCHEMA.md](essential/03_DATABASE_SCHEMA.md) - Schema (45 KB)
-4. ✅ [DEVELOPMENT_LESSONS_LEARNED.md](../DEVELOPMENT_LESSONS_LEARNED.md) - Coding rules (8 KB)
-5. ✅ [AGENTS.md](../AGENTS.md) - Multi-tenant rules & testing
+### 1️⃣ P0 - Sửa lỗi nghiêm trọng (Critical Bug Fix)
 
-**Skip:** Frontend docs, integration APIs
+**Đọc (theo thứ tự):**
+1.  ✅ [AGENTS.md](../AGENTS.md) - Quy trình làm việc.
+2.  ✅ [ROADMAP.md](../ROADMAP.md) - Mục 3: Kế hoạch ưu tiên (để hiểu vấn đề P0).
+3.  ✅ [essential/01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md) - Quy tắc nghiệp vụ liên quan đến lỗi.
+4.  ✅ [essential/03_DATABASE_SCHEMA.md](essential/03_DATABASE_SCHEMA.md) - Schema database liên quan đến lỗi.
+5.  ✅ [reference/04_API_REFERENCE.md](reference/04_API_REFERENCE.md) - Các endpoint API liên quan đến lỗi.
+6.  ✅ Mã nguồn liên quan:
+    *   `apps/api/src/orders/orders.service.ts` (ví dụ cho lỗi tồn kho)
+    *   `apps/api/src/inventory/inventory.service.ts` (ví dụ cho lỗi tồn kho)
+    *   `apps/api/src/prisma/prisma.service.ts` (nếu liên quan đến transaction/middleware)
+7.  ✅ Các tệp test liên quan (để hiểu cách viết và chạy test).
 
-**Estimated context:** 170 KB
-**Time saved:** 30% (skip 70+ KB)
-
----
-
-### 3️⃣ Frontend Component Development
-
-**Read (in order):**
-1. ✅ [WORKFLOW-SIMPLE.md](../WORKFLOW-SIMPLE.md) - Workflow
-2. ✅ [AGENTS.md](../AGENTS.md) - Frontend context (Section 4.2)
-3. ✅ Similar existing component
-4. ✅ [reference/04_API_REFERENCE.md](reference/04_API_REFERENCE.md) - API endpoints (if needed)
-
-**Skip:** Backend implementation, database schema, business logic
-
-**Estimated context:** 90 KB
-**Time saved:** 50% (skip 100+ KB)
+**Bỏ qua:** Frontend docs, tài liệu tích hợp không liên quan.
 
 ---
 
-### 4️⃣ Bug Fix
+### 2️⃣ Phát triển Backend API mới
 
-**Read (in order):**
-1. ✅ Error message/stack trace
-2. ✅ Relevant source file
-3. ✅ Related test file
-4. ✅ [reference/06_TROUBLESHOOTING.md](reference/06_TROUBLESHOOTING.md) (if similar issue)
+**Đọc (theo thứ tự):**
+1.  ✅ [AGENTS.md](../AGENTS.md) - Quy trình làm việc.
+2.  ✅ [essential/01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md) - Quy tắc nghiệp vụ.
+3.  ✅ [essential/03_DATABASE_SCHEMA.md](essential/03_DATABASE_SCHEMA.md) - Schema database.
+4.  ✅ [DEVELOPMENT_LESSONS_LEARNED.md](../DEVELOPMENT_LESSONS_LEARNED.md) - Các quy tắc mã hóa.
+5.  ✅ [essential/01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md) - Mục 7.1: Quy tắc multi-tenant.
 
-**Skip:** Workflow, business logic, unrelated modules
-
-**Estimated context:** <50 KB
-**Time saved:** 75% (skip 150+ KB)
+**Bỏ qua:** Frontend docs, tài liệu tích hợp không liên quan.
 
 ---
 
-### 5️⃣ Test Writing
+### 3️⃣ Phát triển Frontend Component mới
 
-**Read (in order):**
-1. ✅ [guides/testing/Strategy-&-Coverage.md](guides/testing/Strategy-&-Coverage.md) - Test strategy & E2E status
-2. ✅ Similar existing test (50 E2E tests in tests/e2e/)
-3. ✅ Code being tested
-4. ✅ [AGENTS.md](../AGENTS.md) - Testing commands
+**Đọc (theo thứ tự):**
+1.  ✅ [AGENTS.md](../AGENTS.md) - Quy trình làm việc.
+2.  ✅ [guides/frontend-development.md](guides/frontend-development.md) - Hướng dẫn phát triển Frontend.
+3.  ✅ Screenshot từ người dùng.
+4.  ✅ Component hiện có tương tự (nếu có).
+5.  ✅ [reference/04_API_REFERENCE.md](reference/04_API_REFERENCE.md) - Các endpoint API (nếu cần).
 
-**Skip:** Full business logic, API docs
-
-**Estimated context:** <40 KB
-**Time saved:** 80% (skip 160+ KB)
-
-**E2E Test Status:**
-- **50 tests total:** 22 passing (44%), 28 pending UI implementation
-- **Run:** `pnpm test:playwright`
-- **Files:** auth, dashboard, customers, orders, navigation, error-pages
+**Bỏ qua:** Triển khai Backend, schema database, logic nghiệp vụ.
 
 ---
 
-### 6️⃣ Integration with External API
+### 4️⃣ Sửa lỗi (không phải P0 Critical)
 
-**Read (in order):**
-1. ✅ [WORKFLOW-SIMPLE.md](../WORKFLOW-SIMPLE.md) - Workflow
-2. ✅ [reference/05_INTEGRATION_APIS.md](reference/05_INTEGRATION_APIS.md) - External APIs
-3. ✅ [essential/ENVIRONMENT.md](essential/ENVIRONMENT.md) - Env vars
-4. ✅ [AGENTS.md](../AGENTS.md) - Settings module usage
+**Đọc (theo thứ tự):**
+1.  ✅ Thông báo lỗi/stack trace.
+2.  ✅ Tệp mã nguồn liên quan.
+3.  ✅ Tệp test liên quan.
+4.  ✅ [reference/06_TROUBLESHOOTING.md](reference/06_TROUBLESHOOTING.md) (nếu là vấn đề tương tự).
 
-**Skip:** Frontend docs, database schema
-
-**Estimated context:** 100 KB
-**Time saved:** 40% (skip 100+ KB)
+**Bỏ qua:** Workflow, logic nghiệp vụ, các module không liên quan.
 
 ---
 
-### 7️⃣ Database Schema Change
+### 5️⃣ Viết Test
 
-**Read (in order):**
-1. ✅ [essential/03_DATABASE_SCHEMA.md](essential/03_DATABASE_SCHEMA.md) - Current schema
-2. ✅ [essential/01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md) - Business rules
-3. ✅ [AGENTS.md](../AGENTS.md) - Multi-tenant rules
-4. ✅ Existing migrations
+**Đọc (theo thứ tự):**
+1.  ✅ [guides/testing/Strategy-&-Coverage.md](guides/testing/Strategy-&-Coverage.md) - Chiến lược test & trạng thái E2E.
+2.  ✅ Test hiện có tương tự.
+3.  ✅ Mã nguồn đang được test.
 
-**Skip:** Frontend docs, integration APIs
 
-**Estimated context:** 120 KB
-**Time saved:** 35% (skip 80+ KB)
+**Bỏ qua:** Logic nghiệp vụ đầy đủ, tài liệu API.
 
----
-
-## 📁 Documentation Structure
-
-### Essential (Read Often)
-- **[WORKFLOW-SIMPLE.md](../WORKFLOW-SIMPLE.md)** - 5-phase workflow (59 KB)
-- **[ROADMAP.md](../ROADMAP.md)** - Task tracking (23 KB)
-- **[AGENTS.md](../AGENTS.md)** - Operations manual (~300 lines)
-- **[DEVELOPMENT_LESSONS_LEARNED.md](../DEVELOPMENT_LESSONS_LEARNED.md)** - 10 coding rules (8 KB)
-
-### Essential Docs (docs/essential/)
-- **[ENVIRONMENT.md](essential/ENVIRONMENT.md)** - Setup & env vars
-- **[01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md)** - Business rules (58 KB)
-- **[03_DATABASE_SCHEMA.md](essential/03_DATABASE_SCHEMA.md)** - Database design (45 KB)
-
-### Reference Docs (docs/reference/)
-- **[04_API_REFERENCE.md](reference/04_API_REFERENCE.md)** - API endpoints (21 KB)
-- **[05_INTEGRATION_APIS.md](reference/05_INTEGRATION_APIS.md)** - External APIs
-- **[06_TROUBLESHOOTING.md](reference/06_TROUBLESHOOTING.md)** - Common issues
-- **[Documentation-Map.md](reference/Documentation-Map.md)** - Doc index
-
-### Guides (docs/guides/)
-- **[testing/Strategy-&-Coverage.md](guides/testing/Strategy-&-Coverage.md)** - Test strategy
-- **[integration/README.md](guides/integration/README.md)** - Integration guide
-- **[settings/README.md](guides/settings/README.md)** - Settings module
-- **[architecture/README.md](guides/architecture/README.md)** - Architecture overview
-
-### Archive (Rarely Needed)
-- **[archive/WORKFLOW.md](archive/WORKFLOW.md)** - Detailed workflow (legacy)
-- **[archive/02_IMPLEMENTATION_PLAN.md](archive/02_IMPLEMENTATION_PLAN.md)** - Original plan
-- **[archive/00_PROJECT_OVERVIEW.md](archive/00_PROJECT_OVERVIEW.md)** - Outdated overview
+**Trạng thái Test E2E:**
+-   **Tổng cộng 50 test:** 22 test pass (44%), 28 test đang chờ triển khai UI.
+-   **Chạy:** `pnpm test:playwright`
+-   **Tệp:** auth, dashboard, customers, orders, navigation, error-pages
 
 ---
 
-## ⚡ Quick Commands
+### 6️⃣ Tích hợp với External API
+
+**Đọc (theo thứ tự):**
+1.  ✅ [AGENTS.md](../AGENTS.md) - Quy trình làm việc.
+2.  ✅ [reference/05_INTEGRATION_APIS.md](reference/05_INTEGRATION_APIS.md) - Các API bên ngoài.
+3.  ✅ [essential/ENVIRONMENT.md](essential/ENVIRONMENT.md) - Biến môi trường.
+4.  ✅ [guides/settings/README.md](guides/settings/README.md) - Hướng dẫn sử dụng module Settings.
+
+**Bỏ qua:** Frontend docs, schema database.
+
+---
+
+### 7️⃣ Thay đổi Schema Database
+
+**Đọc (theo thứ tự):**
+1.  ✅ [essential/03_DATABASE_SCHEMA.md](essential/03_DATABASE_SCHEMA.md) - Schema hiện tại.
+2.  ✅ [essential/01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md) - Quy tắc nghiệp vụ.
+3.  ✅ [essential/01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md) - Mục 7.1: Quy tắc multi-tenant.
+4.  ✅ Các migration hiện có.
+
+**Bỏ qua:** Frontend docs, tài liệu tích hợp.
+
+---
+
+## 📁 Cấu trúc tài liệu
+
+### Thiết yếu (Đọc thường xuyên)
+-   **[AGENTS.md](../AGENTS.md)** - Quy trình làm việc của AGENT.
+-   **[ROADMAP.md](../ROADMAP.md)** - Theo dõi nhiệm vụ.
+-   **[DEVELOPMENT_LESSONS_LEARNED.md](../DEVELOPMENT_LESSONS_LEARNED.md)** - 10 quy tắc mã hóa.
+
+### Tài liệu thiết yếu (docs/essential/)
+-   **[ENVIRONMENT.md](essential/ENVIRONMENT.md)** - Thiết lập & biến môi trường.
+-   **[01_BUSINESS_LOGIC.md](essential/01_BUSINESS_LOGIC.md)** - Quy tắc nghiệp vụ.
+-   **[03_DATABASE_SCHEMA.md](essential/03_DATABASE_SCHEMA.md)** - Thiết kế database.
+
+### Tài liệu tham khảo (docs/reference/)
+-   **[04_API_REFERENCE.md](reference/04_API_REFERENCE.md)** - Các endpoint API.
+-   **[05_INTEGRATION_APIS.md](reference/05_INTEGRATION_APIS.md)** - Các API bên ngoài.
+-   **[06_TROUBLESHOOTING.md](reference/06_TROUBLESHOOTING.md)** - Các vấn đề phổ biến.
+-   **[Documentation-Map.md](reference/Documentation-Map.md)** - Mục lục tài liệu.
+
+### Hướng dẫn (docs/guides/)
+-   **[testing/Strategy-&-Coverage.md](guides/testing/Strategy-&-Coverage.md)** - Chiến lược test.
+-   **[integration/README.md](guides/integration/README.md)** - Hướng dẫn tích hợp.
+-   **[settings/README.md](guides/settings/README.md)** - Module Settings.
+-   **[architecture/README.md](guides/architecture/README.md)** - Tổng quan kiến trúc.
+
+### Lưu trữ (Hiếm khi cần)
+-   **[archive/AGENTS.md](../AGENTS.md)** - Hướng dẫn vận hành AI (Đã lỗi thời, sẽ chuyển vào archive).
+-   **[archive/WORKFLOW-SIMPLE.md](../WORKFLOW-SIMPLE.md)** - Quy trình làm việc đơn giản (Đã lỗi thời, sẽ chuyển vào archive).
+-   **[archive/WORKFLOW.md](archive/WORKFLOW.md)** - Quy trình làm việc chi tiết (legacy).
+-   **[archive/02_IMPLEMENTATION_PLAN.md](archive/02_IMPLEMENTATION_PLAN.md)** - Kế hoạch triển khai gốc.
+-   **[archive/00_PROJECT_OVERVIEW.md](archive/00_PROJECT_OVERVIEW.md)** - Tổng quan dự án lỗi thời.
+
+---
+
+## ⚡ Lệnh nhanh
 
 ```bash
 # Development
@@ -170,7 +157,7 @@ pnpm --filter @meocrm/web dev     # Frontend dev server
 
 # Testing
 pnpm --filter @meocrm/api test    # Backend unit tests
-pnpm test:playwright               # E2E tests (50 tests, 22 passing)
+pnpm test:playwright               # E2E tests
 
 # Database
 pnpm --filter @meocrm/api prisma:generate  # Generate Prisma client
@@ -182,76 +169,62 @@ pnpm build                         # Build all packages
 
 ---
 
-## 🎯 Context Loading Examples
+## 🎯 Ví dụ tải ngữ cảnh
 
-### Example 1: "Implement customer search feature from screenshot"
+### Ví dụ 1: "Sửa lỗi không trừ tồn kho khi đơn hàng được xử lý"
 ```
-✅ Read: WORKFLOW-SIMPLE.md (59 KB)
-✅ Read: ROADMAP.md (23 KB)
-✅ Load: User's screenshot
-✅ Find: Similar search component
-❌ Skip: Business logic, database schema, API docs
-
-Total: ~90 KB
-```
-
-### Example 2: "Add order discount calculation API"
-```
-✅ Read: WORKFLOW-SIMPLE.md (59 KB)
-✅ Read: essential/01_BUSINESS_LOGIC.md (58 KB)
-✅ Read: essential/03_DATABASE_SCHEMA.md (45 KB)
-✅ Read: AGENTS.md (multi-tenant rules)
-❌ Skip: Frontend docs, integration APIs
-
-Total: ~170 KB
+✅ Đọc: AGENTS.md (để hiểu quy trình)
+✅ Đọc: ROADMAP.md (Mục 3, P0 - Critical)
+✅ Đọc: essential/01_BUSINESS_LOGIC.md (Mục 1.1: PROCESSING & 3.1: Stock Deduction)
+✅ Đọc: essential/03_DATABASE_SCHEMA.md (Order, OrderItem, Inventory, OrderInventoryReservation models)
+✅ Đọc: reference/04_API_REFERENCE.md (PATCH /orders/:id/status endpoint)
+✅ Tải: apps/api/src/orders/orders.service.ts
+✅ Tải: apps/api/src/inventory/inventory.service.ts
+❌ Bỏ qua: Frontend docs, tài liệu tích hợp không liên quan.
 ```
 
-### Example 3: "Fix login redirect error"
+### Ví dụ 2: "Thêm API tính toán chiết khấu đơn hàng mới"
 ```
-✅ Read: Error stack trace
-✅ Read: auth/login/page.tsx
-✅ Read: auth.test.tsx
-✅ Check: reference/06_TROUBLESHOOTING.md
-❌ Skip: All workflow and business logic docs
+✅ Đọc: AGENTS.md (để hiểu quy trình)
+✅ Đọc: essential/01_BUSINESS_LOGIC.md (Mục 4: Pricing & Discount Rules)
+✅ Đọc: essential/03_DATABASE_SCHEMA.md (Order, OrderItem models)
+✅ Đọc: DEVELOPMENT_LESSONS_LEARNED.md (Các quy tắc mã hóa)
+❌ Bỏ qua: Frontend docs, tài liệu tích hợp không liên quan.
+```
 
-Total: <50 KB
+### Ví dụ 3: "Fix lỗi chuyển hướng đăng nhập"
 ```
+✅ Đọc: AGENTS.md (để hiểu quy trình)
+✅ Đọc: Thông báo lỗi/stack trace
+✅ Tải: auth/login/page.tsx
+✅ Tải: auth.test.tsx
+✅ Kiểm tra: reference/06_TROUBLESHOOTING.md
+❌ Bỏ qua: Tất cả tài liệu workflow và logic nghiệp vụ không liên quan.
+```
+
+
 
 ---
 
-## 📈 Context Usage Savings
+## 🔄 Quản lý phiên làm việc
 
-| Task Type | Before | After | Savings |
-|-----------|--------|-------|---------|
-| UI Feature | 200 KB | 90 KB | 55% ↓ |
-| Backend API | 240 KB | 170 KB | 29% ↓ |
-| Bug Fix | 200 KB | 50 KB | 75% ↓ |
-| Test Writing | 200 KB | 40 KB | 80% ↓ |
-| Integration | 180 KB | 100 KB | 44% ↓ |
+### Bắt đầu phiên
+1.  Tải: [AGENTS.md](../AGENTS.md) + [ROADMAP.md](../ROADMAP.md)
+2.  Nhận: Nhiệm vụ từ người dùng (kèm screenshot nếu có)
+3.  Tải: Các tài liệu bổ sung dựa trên loại nhiệm vụ (xem ở trên)
+4.  Xác nhận: Hiểu và kế hoạch
 
-**Average savings:** 20-60% per task
+### Trong phiên làm việc
+-   Tải tài liệu **chỉ khi cần**
+-   Tham chiếu [DEVELOPMENT_LESSONS_LEARNED.md](../DEVELOPMENT_LESSONS_LEARNED.md) cho các quy tắc mã hóa.
+-   Cập nhật trạng thái nhiệm vụ trong [ROADMAP.md](../ROADMAP.md).
 
----
-
-## 🔄 Session Management
-
-### Start of Session
-1. Load: [WORKFLOW-SIMPLE.md](../WORKFLOW-SIMPLE.md) + [ROADMAP.md](../ROADMAP.md)
-2. Get: Task + screenshot from user
-3. Load: Additional docs based on task type (see above)
-4. Confirm: Understanding + plan
-
-### During Session
-- Load docs **only when needed**
-- Reference AGENTS.md for coding rules
-- Update ROADMAP.md task status
-
-### End of Session
-- Commit: Code + tests
-- Update: ROADMAP.md
-- Summarize: What's complete, what's next
+### Kết thúc phiên
+-   Commit: Code + test (sau khi tất cả test đã pass).
+-   Cập nhật: [ROADMAP.md](../ROADMAP.md).
+-   Tóm tắt: Những gì đã hoàn thành, những gì tiếp theo.
 
 ---
 
-**Last updated:** 2025-01-16
-**Maintained by:** MeoCRM Development Team
+**Cập nhật lần cuối:** 2025-11-19
+**Duy trì bởi:** AGENT + MeoCRM Development Team

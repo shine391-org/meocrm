@@ -63,6 +63,17 @@ export class CreateShippingOrderDto {
   @IsString()
   channel?: string;
 
+  @ApiPropertyOptional({ description: 'Service type defined by partner (e.g., express, standard)' })
+  @IsOptional()
+  @IsString()
+  serviceType?: string;
+
+  @ApiPropertyOptional({ description: 'Estimated distance in kilometers' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  distanceKm?: number;
+
   @ApiPropertyOptional({ description: 'COD amount' })
   @IsOptional()
   @IsNumber()

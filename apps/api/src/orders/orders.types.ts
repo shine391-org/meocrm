@@ -1,6 +1,6 @@
 import { OrderStatus } from '@prisma/client';
 
-export type OrderWarningType = 'LOW_STOCK' | 'OUT_OF_STOCK';
+export type OrderWarningType = 'LOW_STOCK' | 'OUT_OF_STOCK' | 'LOSS_SALE';
 
 export interface OrderWarning {
   type: OrderWarningType;
@@ -18,6 +18,7 @@ export interface OrderStatusChangedEvent {
   previousStatus: OrderStatus;
   nextStatus: OrderStatus;
   userId?: string;
+  traceId?: string;
 }
 
 export interface OrderCreatedEvent {

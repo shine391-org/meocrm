@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import { OrderInventoryReservationStatus } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import {
   createOrganization,
@@ -26,6 +27,7 @@ describe('Orders Shipping (e2e)', () => {
   let productId: string;
   let productPrice: number;
   let branchId: string;
+  let shippingPartnerId: string;
 
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
@@ -59,6 +61,25 @@ describe('Orders Shipping (e2e)', () => {
       },
     });
     branchId = branch.id;
+
+    await prisma.inventory.create({
+      data: {
+        productId,
+        branchId,
+        quantity: 500,
+      },
+    });
+
+    const partner = await prisma.shippingPartner.create({
+      data: {
+        organizationId,
+        code: `SHIP-${Date.now()}`,
+        name: 'E2E Logistics',
+        email: 'partner@example.com',
+        phone: '0909000000',
+      },
+    });
+    shippingPartnerId = partner.id;
 
     // Seed settings for this organization
     await prisma.setting.createMany({
@@ -102,13 +123,33 @@ describe('Orders Shipping (e2e)', () => {
     await app.close();
   });
 
-  const createOrderPayload = (channel: string, quantity: number) => ({
+  const createOrderPayload = (
+    channel: string,
+    quantity: number,
+    options: { productId?: string; paymentMethod?: string; branchId?: string } = {},
+  ) => ({
     customerId,
-    branchId,
-    items: [{ productId, quantity }],
-    paymentMethod: 'CASH',
+    branchId: options.branchId ?? branchId,
+    items: [{ productId: options.productId ?? productId, quantity }],
+    paymentMethod: options.paymentMethod ?? 'CASH',
     channel,
   });
+
+  const createStockedProduct = async (price = 150000, stock = 50) => {
+    const freshProduct = await createProduct(prisma, organizationId, { sellPrice: price });
+    await prisma.inventory.create({
+      data: {
+        productId: freshProduct.id,
+        branchId,
+        quantity: stock,
+      },
+    });
+    return {
+      productId: freshProduct.id,
+      price: Number(freshProduct.sellPrice),
+      initialQuantity: stock,
+    };
+  };
 
   it('should apply free shipping for ONLINE channel when subtotal is above threshold', async () => {
     const payload = createOrderPayload('ONLINE', 5); // subtotal = 500000
@@ -153,5 +194,150 @@ describe('Orders Shipping (e2e)', () => {
 
     expect(response.body.data.shipping).toBe(defaultShippingFee);
     expect(response.body.data.total).toBe(subtotal + expectedTax + defaultShippingFee);
+  });
+
+  it('reserves inventory on PROCESSING and releases when shipping is delivered', async () => {
+    const stockedProduct = await createStockedProduct(120000, 40);
+    const quantity = 2;
+    const payload = createOrderPayload('ONLINE', quantity, {
+      productId: stockedProduct.productId,
+      paymentMethod: 'COD',
+    });
+    const response = await request(app.getHttpServer())
+      .post('/orders')
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send(payload)
+      .expect(201);
+
+    const orderId = response.body.data.id as string;
+    const orderTotal = Number(response.body.data.total);
+
+    await request(app.getHttpServer())
+      .patch(`/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({ status: 'PROCESSING' })
+      .expect(200);
+
+    const reservations = await prisma.orderInventoryReservation.findMany({
+      where: { orderId },
+    });
+    expect(reservations).toHaveLength(1);
+    expect(reservations[0].status).toBe(OrderInventoryReservationStatus.RESERVED);
+
+    const inventoryAfterProcessing = await prisma.inventory.findUnique({
+      where: {
+        productId_branchId: {
+          productId: stockedProduct.productId,
+          branchId,
+        },
+      },
+    });
+    expect(inventoryAfterProcessing?.quantity).toBe(stockedProduct.initialQuantity - quantity);
+
+    const shippingOrder = await request(app.getHttpServer())
+      .post('/shipping/orders')
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({
+        orderId,
+        partnerId: shippingPartnerId,
+        trackingCode: `TRK-${Date.now()}`,
+        recipientName: 'Người nhận',
+        recipientPhone: '0909000000',
+        recipientAddress: '123 Ship Street',
+        channel: 'ONLINE',
+        codAmount: orderTotal,
+        weight: 1200,
+      })
+      .expect(201);
+
+    const shippingOrderId = shippingOrder.body.data.id as string;
+
+    await request(app.getHttpServer())
+      .patch(`/shipping/orders/${shippingOrderId}/status`)
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({
+        status: 'DELIVERED',
+        collectedCodAmount: orderTotal,
+      })
+      .expect(200);
+
+    const completedOrder = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(completedOrder?.status).toBe('COMPLETED');
+    expect(completedOrder?.isPaid).toBe(true);
+
+    const reservationsAfter = await prisma.orderInventoryReservation.findMany({ where: { orderId } });
+    expect(
+      reservationsAfter.every(
+        (reservation) => reservation.status === OrderInventoryReservationStatus.RELEASED,
+      ),
+    ).toBe(true);
+  });
+
+  it('restores inventory and returns reservations when shipping fails', async () => {
+    const stockedProduct = await createStockedProduct(90000, 60);
+    const quantity = 3;
+    const payload = createOrderPayload('ONLINE', quantity, {
+      productId: stockedProduct.productId,
+    });
+    const response = await request(app.getHttpServer())
+      .post('/orders')
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send(payload)
+      .expect(201);
+
+    const orderId = response.body.data.id as string;
+
+    await request(app.getHttpServer())
+      .patch(`/orders/${orderId}/status`)
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({ status: 'PROCESSING' })
+      .expect(200);
+
+    const shippingOrder = await request(app.getHttpServer())
+      .post('/shipping/orders')
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({
+        orderId,
+        partnerId: shippingPartnerId,
+        trackingCode: `TRK-FAIL-${Date.now()}`,
+        recipientName: 'Người nhận',
+        recipientPhone: '0909888777',
+        recipientAddress: '456 Ship Lane',
+        channel: 'ONLINE',
+        codAmount: 0,
+        weight: 800,
+      })
+      .expect(201);
+
+    const shippingOrderId = shippingOrder.body.data.id as string;
+
+    await request(app.getHttpServer())
+      .patch(`/shipping/orders/${shippingOrderId}/status`)
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({
+        status: 'FAILED',
+        failedReason: 'Carrier lost the package',
+      })
+      .expect(200);
+
+    const pendingOrder = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(pendingOrder?.status).toBe('PENDING');
+
+    const inventoryAfterFailure = await prisma.inventory.findUnique({
+      where: {
+        productId_branchId: {
+          productId: stockedProduct.productId,
+          branchId,
+        },
+      },
+    });
+    expect(inventoryAfterFailure?.quantity).toBe(stockedProduct.initialQuantity);
+
+    const reservationsAfterFailure = await prisma.orderInventoryReservation.findMany({ where: { orderId } });
+    expect(
+      reservationsAfterFailure.every(
+        (reservation) => reservation.status === OrderInventoryReservationStatus.RETURNED,
+      ),
+    ).toBe(true);
   });
 });

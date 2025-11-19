@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { RequestContextService } from '../common/context/request-context.service';
 
 const SOFT_DELETE_MODELS = [
   'product',
@@ -59,9 +60,72 @@ const softDeleteExtension = Prisma.defineExtension({
   ),
 });
 
+const ORGANIZATION_SCOPED_MODELS: Set<Prisma.ModelName> = new Set(
+  Prisma.dmmf.datamodel.models
+    .filter((model) => model.fields.some((field) => field.name === 'organizationId'))
+    .map((model) => model.name as Prisma.ModelName),
+);
+
+const organizationScopeExtension = (
+  contextProvider: () => RequestContextService | undefined,
+) =>
+  Prisma.defineExtension({
+    name: 'organizationScope',
+    query: {
+      $allModels: {
+        $allOperations({ model, operation, args, query }) {
+          if (!model || !ORGANIZATION_SCOPED_MODELS.has(model as Prisma.ModelName)) {
+            return query(args);
+          }
+
+          const ctx = contextProvider();
+          if (!ctx || ctx.shouldBypassModel(model as Prisma.ModelName)) {
+            return query(args);
+          }
+
+          const organizationId = ctx.organizationId;
+          if (!organizationId) {
+            return query(args);
+          }
+
+          if (ORGANIZATION_FILTER_OPERATIONS.has(operation)) {
+            const nextArgs = PrismaService.appendOrganizationFilter(args ?? {}, organizationId);
+            return query(nextArgs);
+          }
+
+          if (ORGANIZATION_CREATE_OPERATIONS.has(operation)) {
+            const nextArgs = args ? { ...args } : {};
+            PrismaService.ensureOrganizationOnCreate(
+              nextArgs,
+              organizationId,
+              operation === 'createMany',
+            );
+            return query(nextArgs);
+          }
+
+          return query(args);
+        },
+      },
+    },
+  });
+
+const ORGANIZATION_FILTER_OPERATIONS = new Set<string>([
+  'findFirst',
+  'findFirstOrThrow',
+  'findMany',
+  'count',
+  'aggregate',
+  'groupBy',
+  'updateMany',
+  'deleteMany',
+]);
+
+const ORGANIZATION_CREATE_OPERATIONS = new Set<string>(['create', 'createMany', 'upsert']);
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private static instance: PrismaService | null = null;
+  private static requestContext: RequestContextService | undefined;
 
   private constructor() {
     super({
@@ -69,21 +133,27 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     });
   }
 
-  static getInstance(): PrismaService {
+  static getInstance(requestContext?: RequestContextService): PrismaService {
+    if (requestContext) {
+      PrismaService.requestContext = requestContext;
+    }
+
     if (!PrismaService.instance) {
       const baseClient = new PrismaService();
-      PrismaService.instance = PrismaService.extendWithSoftDelete(baseClient);
+      PrismaService.instance = PrismaService.extendClient(baseClient);
     }
 
     return PrismaService.instance;
   }
 
-  private static extendWithSoftDelete(baseClient: PrismaService): PrismaService {
-    const extendedClient = baseClient.$extends(softDeleteExtension) as PrismaService;
-    extendedClient.onModuleInit = PrismaService.prototype.onModuleInit;
-    extendedClient.onModuleDestroy = PrismaService.prototype.onModuleDestroy;
-    extendedClient.cleanDatabase = PrismaService.prototype.cleanDatabase;
-    return extendedClient;
+  private static extendClient(baseClient: PrismaService): PrismaService {
+    const scopedClient = (baseClient.$extends(softDeleteExtension) as PrismaService).$extends(
+      organizationScopeExtension(() => PrismaService.requestContext),
+    ) as PrismaService;
+    scopedClient.onModuleInit = PrismaService.prototype.onModuleInit;
+    scopedClient.onModuleDestroy = PrismaService.prototype.onModuleDestroy;
+    scopedClient.cleanDatabase = PrismaService.prototype.cleanDatabase;
+    return scopedClient;
   }
 
   async onModuleInit() {
@@ -115,4 +185,42 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     );
   }
 
+  static appendOrganizationFilter(args: Record<string, any>, organizationId: string) {
+    const workingArgs = args ?? {};
+    const where = workingArgs.where;
+
+    if (!where) {
+      return { ...workingArgs, where: { organizationId } };
+    }
+
+    return {
+      ...workingArgs,
+      where: {
+        AND: [where, { organizationId }],
+      },
+    };
+  }
+
+  static ensureOrganizationOnCreate(args: Record<string, any>, organizationId: string, isMany = false) {
+    if (!args) {
+      return;
+    }
+
+    if (isMany && Array.isArray(args.data)) {
+      args.data = args.data.map((entry: Record<string, any>) =>
+        PrismaService.assignOrganizationId(entry, organizationId),
+      );
+      return;
+    }
+
+    args.data = PrismaService.assignOrganizationId(args.data ?? {}, organizationId);
+  }
+
+  private static assignOrganizationId<T extends Record<string, any>>(data: T, organizationId: string): T {
+    if (data.organizationId && data.organizationId !== organizationId) {
+      throw new Error('Cross-organization mutation detected');
+    }
+
+    return { ...data, organizationId } as T;
+  }
 }

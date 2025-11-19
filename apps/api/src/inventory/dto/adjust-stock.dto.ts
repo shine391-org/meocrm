@@ -8,6 +8,8 @@ export enum StockAdjustmentReason {
   FOUND = 'FOUND',
   RECOUNT = 'RECOUNT',
   RETURN = 'RETURN',
+  ORDER_RESERVATION = 'ORDER_RESERVATION',
+  ORDER_CANCELLED = 'ORDER_CANCELLED',
   OTHER = 'OTHER',
 }
 

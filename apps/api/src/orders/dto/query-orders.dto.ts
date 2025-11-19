@@ -41,6 +41,11 @@ export class QueryOrdersDto {
   @IsEnum(PaymentMethod)
   paymentMethod?: PaymentMethod;
 
+  @ApiProperty({ required: false, example: 'branch-uuid' })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
   @ApiProperty({ required: false, example: '2025-11-01' })
   @IsOptional()
   @IsDateString()

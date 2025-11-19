@@ -39,7 +39,7 @@ describe('CategoriesService', () => {
         data: expect.objectContaining({
           name: 'Child',
           organizationId: 'org_1',
-          parent: { connect: { id: 'parent' } },
+          parentId: 'parent',
         }),
         include: { parent: true, children: true },
       });
@@ -79,7 +79,7 @@ describe('CategoriesService', () => {
         where: { id: 'cat_1' },
         data: {
           name: 'Updated',
-          parent: { disconnect: true },
+          parentId: null,
         },
         include: { parent: true, children: true },
       });

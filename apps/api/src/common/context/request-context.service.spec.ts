@@ -27,4 +27,16 @@ describe('RequestContextService', () => {
       }),
     );
   });
+
+  it('allows temporary bypass of organization scoped models', async () => {
+    await service.run(async () => {
+      expect(service.shouldBypassModel('Setting')).toBe(false);
+
+      await service.withOrganizationBypass(['Setting'], async () => {
+        expect(service.shouldBypassModel('Setting')).toBe(true);
+      });
+
+      expect(service.shouldBypassModel('Setting')).toBe(false);
+    });
+  });
 });

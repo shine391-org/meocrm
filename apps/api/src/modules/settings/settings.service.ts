@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequestContextService } from '../../common/context/request-context.service';
+import { OrganizationScopedModel } from '../../common/decorators/organization-scoped-model.decorator';
 
 @Injectable()
 export class SettingsService {
@@ -36,6 +37,7 @@ export class SettingsService {
     return (setting.value as T) ?? defaultValue;
   }
 
+  @OrganizationScopedModel('Setting')
   async getForOrganization<T>(
     organizationId: string,
     key: string,

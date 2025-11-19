@@ -34,6 +34,7 @@ describe('PricingService', () => {
     const result = await service.calculateTotals({
       channel: 'ONLINE',
       subtotal: 600000,
+      taxableSubtotal: 600000,
     });
 
     expect(result).toEqual({
@@ -41,6 +42,7 @@ describe('PricingService', () => {
       freeShipApplied: true,
       taxRate: 0.1,
       taxAmount: 60000,
+      taxBreakdown: { taxableAmount: 600000, rate: 0.1 },
     });
   });
 
@@ -55,13 +57,17 @@ describe('PricingService', () => {
     const result = await service.calculateTotals({
       channel: 'POS',
       subtotal: 400000,
+      taxableSubtotal: 300000,
+      orderDiscount: 100000,
+      itemDiscountTotal: 0,
     });
 
     expect(result).toEqual({
       shippingFee: 30000,
       freeShipApplied: false,
       taxRate: 0.1,
-      taxAmount: 40000,
+      taxAmount: 30000,
+      taxBreakdown: { taxableAmount: 300000, rate: 0.1 },
     });
   });
 });

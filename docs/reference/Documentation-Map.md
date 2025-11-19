@@ -7,7 +7,8 @@
 | **Lessons Learned** | **[DEVELOPMENT_LESSONS_LEARNED.md](../DEVELOPMENT_LESSONS_LEARNED.md)** | **12 lessons: API format, UUID codes, DB performance, etc. Must-read cho AI developers!** |
 | Overview | [docs/README.md](./README.md) | Hướng dẫn đọc docset + chuẩn lỗi hệ thống. |
 | Map | [docs/Documentation-Map.md](./Documentation-Map.md) | (File hiện tại) Sơ đồ liên kết toàn bộ tài liệu. |
-| **Roadmap** | **[ROADMAP.md](../ROADMAP.md)** | **187 tasks breakdown, tiến độ 30%, timeline 3-4 tuần, critical path.** |
+| Roadmap | [ROADMAP.md](../ROADMAP.md) | **187 tasks breakdown, tiến độ 30%, timeline 3-4 tuần, critical path.** |
+| Detailed Tasks | [docs/reference/TASK_DATABASE.md](./TASK_DATABASE.md) | **NEW! Danh sách chi tiết 187 nhiệm vụ với AC và liên kết logic nghiệp vụ.** |
 | Business Logic | [docs/01_BUSINESS_LOGIC.md](./01_BUSINESS_LOGIC.md) | Quy tắc nghiệp vụ (Lead Priority, Commission, Refund, Debt, Shipping...). |
 | Implementation Plan | [docs/02_IMPLEMENTATION_PLAN.md](./02_IMPLEMENTATION_PLAN.md) | Ưu tiên feature và phụ thuộc. |
 | Data Schema | [docs/03_DATABASE_SCHEMA.md](./03_DATABASE_SCHEMA.md) | Data dictionary, ERD, PII, soft delete/purge. |

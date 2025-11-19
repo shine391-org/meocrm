@@ -3,11 +3,19 @@ import { ShippingService } from './shipping.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ShippingStatus, OrderStatus } from '@prisma/client';
 import { ShippingFeeService } from './shipping-fee.service';
+import { OrdersService } from '../orders/orders.service';
+import { InventoryService } from '../inventory/inventory.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { RequestContextService } from '../common/context/request-context.service';
 
 describe('ShippingService', () => {
   let service: ShippingService;
   let prisma: any;
   let shippingFeeService: { calculate: jest.Mock };
+  let ordersService: { updateStatus: jest.Mock; markCodPaid: jest.Mock };
+  let inventoryService: { returnStockOnOrderCancel: jest.Mock };
+  let auditLogService: { log: jest.Mock };
+  let requestContextService: { getTraceId: jest.Mock };
 
   const createMockPrisma = () => ({
     $transaction: jest.fn(),
@@ -30,7 +38,16 @@ describe('ShippingService', () => {
 
   beforeEach(async () => {
     prisma = createMockPrisma();
-    shippingFeeService = { calculate: jest.fn().mockResolvedValue({ shippingFee: 22000, weightSurcharge: 0, channelMultiplier: 1 }) };
+    shippingFeeService = { calculate: jest.fn().mockResolvedValue({ shippingFee: 22000, weightSurcharge: 0, channelMultiplier: 1, breakdown: { baseFee: 22000, weightSurcharge: 0, distanceFee: 0, serviceMultiplier: 1, channelMultiplier: 1 } }) };
+    ordersService = {
+      updateStatus: jest.fn().mockResolvedValue({}),
+      markCodPaid: jest.fn().mockResolvedValue({}),
+    };
+    inventoryService = {
+      returnStockOnOrderCancel: jest.fn().mockResolvedValue(undefined),
+    };
+    auditLogService = { log: jest.fn().mockResolvedValue(undefined) };
+    requestContextService = { getTraceId: jest.fn().mockReturnValue('trace-shipping') };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -42,6 +59,22 @@ describe('ShippingService', () => {
         {
           provide: ShippingFeeService,
           useValue: shippingFeeService,
+        },
+        {
+          provide: OrdersService,
+          useValue: ordersService,
+        },
+        {
+          provide: InventoryService,
+          useValue: inventoryService,
+        },
+        {
+          provide: AuditLogService,
+          useValue: auditLogService,
+        },
+        {
+          provide: RequestContextService,
+          useValue: requestContextService,
         },
       ],
     }).compile();
@@ -86,6 +119,14 @@ describe('ShippingService', () => {
       where: { id: 'order-1' },
       data: { status: OrderStatus.SHIPPED },
     });
+    expect(mockTx.shippingOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ feeBreakdown: expect.anything() }),
+      }),
+    );
+    expect(auditLogService.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'shipping.order.created' }),
+    );
   });
 
   it('delivers shipping order and settles COD', async () => {
@@ -95,30 +136,20 @@ describe('ShippingService', () => {
       partnerId: 'partner-1',
       status: ShippingStatus.IN_TRANSIT,
       codAmount: 50000,
+      partner: { id: 'partner-1', organizationId: 'org-1' },
+      order: { id: 'order-1', paymentMethod: 'COD' },
     };
-    prisma.shippingOrder.findFirst.mockResolvedValue({ ...shippingOrder, partner: { id: 'partner-1' }, order: { id: 'order-1' } });
+    prisma.shippingOrder.findFirst.mockResolvedValue(shippingOrder);
 
     const txContext = {
       shippingOrder: {
-        update: jest.fn()
-          .mockResolvedValueOnce({
-            ...shippingOrder,
-            status: ShippingStatus.DELIVERED,
-            partner: { id: 'partner-1' },
-            orderId: 'order-1',
-          })
-          .mockResolvedValueOnce({
-            ...shippingOrder,
-            codAmount: 40000,
-            partner: { id: 'partner-1' },
-            orderId: 'order-1',
-          }),
+        update: jest.fn().mockResolvedValue({
+          ...shippingOrder,
+          status: ShippingStatus.DELIVERED,
+        }),
       },
       shippingPartner: {
         update: jest.fn().mockResolvedValue({}),
-      },
-      order: {
-        update: jest.fn().mockResolvedValue({ status: OrderStatus.DELIVERED }),
       },
     };
 
@@ -130,10 +161,24 @@ describe('ShippingService', () => {
     });
 
     expect(result.data.status).toBe(ShippingStatus.DELIVERED);
-    expect(txContext.shippingPartner.update).toHaveBeenCalledWith({
-      where: { id: 'partner-1' },
-      data: { debtBalance: { decrement: 40000 } },
-    });
+    expect(ordersService.updateStatus).toHaveBeenCalledWith(
+      'order-1',
+      { status: OrderStatus.DELIVERED },
+      'org-1',
+      expect.any(Object),
+    );
+    expect(ordersService.updateStatus).toHaveBeenCalledWith(
+      'order-1',
+      { status: OrderStatus.COMPLETED },
+      'org-1',
+      expect.any(Object),
+    );
+    expect(ordersService.markCodPaid).toHaveBeenCalledWith(
+      'order-1',
+      'org-1',
+      40000,
+      expect.any(Object),
+    );
   });
 
   it('fails shipping order and returns order to processing', async () => {
@@ -142,6 +187,9 @@ describe('ShippingService', () => {
       partner: { id: 'partner-1' },
       status: ShippingStatus.PICKING_UP,
       orderId: 'order-1',
+      order: { id: 'order-1', paymentMethod: 'CASH' },
+      partnerId: 'partner-1',
+      partner: { id: 'partner-1', organizationId: 'org-1' },
     });
 
     const txContext = {
@@ -166,10 +214,17 @@ describe('ShippingService', () => {
 
     await service.updateStatus('org-1', 's1', { status: ShippingStatus.FAILED });
 
-    expect(txContext.order.update).toHaveBeenCalledWith({
-      where: { id: 'order-1' },
-      data: { status: OrderStatus.PROCESSING },
-    });
+    expect(ordersService.updateStatus).toHaveBeenCalledWith(
+      'order-1',
+      { status: OrderStatus.PENDING },
+      'org-1',
+      expect.any(Object),
+    );
+    expect(inventoryService.returnStockOnOrderCancel).toHaveBeenCalledWith(
+      'order-1',
+      'org-1',
+      expect.any(Object),
+    );
   });
 
   it('returns shipping order and cancels the linked order', async () => {
@@ -178,7 +233,9 @@ describe('ShippingService', () => {
       partner: { id: 'partner-1' },
       status: ShippingStatus.IN_TRANSIT,
       orderId: 'order-2',
-      order: { id: 'order-2' },
+      order: { id: 'order-2', paymentMethod: 'CASH' },
+      partnerId: 'partner-1',
+      partner: { id: 'partner-1', organizationId: 'org-1' },
     });
 
     const txContext = {
@@ -201,9 +258,16 @@ describe('ShippingService', () => {
 
     await service.updateStatus('org-1', 's2', { status: ShippingStatus.RETURNED });
 
-    expect(txContext.order.update).toHaveBeenCalledWith({
-      where: { id: 'order-2' },
-      data: { status: OrderStatus.CANCELLED },
-    });
+    expect(ordersService.updateStatus).toHaveBeenCalledWith(
+      'order-2',
+      { status: OrderStatus.PENDING },
+      'org-1',
+      expect.any(Object),
+    );
+    expect(inventoryService.returnStockOnOrderCancel).toHaveBeenCalledWith(
+      'order-2',
+      'org-1',
+      expect.any(Object),
+    );
   });
 });

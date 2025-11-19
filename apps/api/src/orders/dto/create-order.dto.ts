@@ -9,10 +9,16 @@ import {
   Min,
   ValidateNested,
   IsBoolean,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { PaymentMethod } from '@prisma/client';
+
+export enum ItemDiscountType {
+  PERCENT = 'PERCENT',
+  FIXED = 'FIXED',
+}
 
 export class CreateOrderItemDto {
   @ApiProperty({ example: 'product-uuid' })
@@ -29,6 +35,22 @@ export class CreateOrderItemDto {
   @IsNumber()
   @Min(1)
   quantity!: number;
+
+  @ApiProperty({ required: false, enum: ItemDiscountType })
+  @IsOptional()
+  @IsEnum(ItemDiscountType)
+  discountType?: ItemDiscountType;
+
+  @ApiProperty({ required: false, description: 'Discount value (percent or fixed amount)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  discountValue?: number;
+
+  @ApiProperty({ required: false, description: 'Mark true to exclude item from VAT' })
+  @IsOptional()
+  @IsBoolean()
+  taxExempt?: boolean;
 }
 
 export class CreateOrderDto {

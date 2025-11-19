@@ -3,8 +3,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateShippingOrderDto } from './dto/create-shipping-order.dto';
 import { QueryShippingOrdersDto } from './dto/query-shipping-orders.dto';
 import { UpdateShippingStatusDto } from './dto/update-shipping-status.dto';
-import { Prisma, OrderStatus, ShippingStatus } from '@prisma/client';
+import { Prisma, OrderStatus, PaymentMethod, ShippingStatus, AuditAction } from '@prisma/client';
 import { ShippingFeeService } from './shipping-fee.service';
+import { OrdersService } from '../orders/orders.service';
+import { InventoryService } from '../inventory/inventory.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { RequestContextService } from '../common/context/request-context.service';
 
 const SHIPPING_TRANSITIONS: Record<ShippingStatus, ShippingStatus[]> = {
   [ShippingStatus.PENDING]: [ShippingStatus.PICKING_UP, ShippingStatus.FAILED],
@@ -20,10 +24,14 @@ export class ShippingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly shippingFeeService: ShippingFeeService,
+    private readonly ordersService: OrdersService,
+    private readonly inventoryService: InventoryService,
+    private readonly auditLogService: AuditLogService,
+    private readonly requestContext: RequestContextService,
   ) {}
 
   async create(organizationId: string, dto: CreateShippingOrderDto) {
-    return this.prisma.$transaction(async (tx) => {
+    const shippingOrder = await this.prisma.$transaction(async (tx) => {
       const [order, partner, existing] = await Promise.all([
         tx.order.findFirst({ where: { id: dto.orderId, organizationId, deletedAt: null } }),
         tx.shippingPartner.findFirst({ where: { id: dto.partnerId, organizationId } }),
@@ -51,6 +59,8 @@ export class ShippingService {
         weight: dto.weight,
         channel: dto.channel,
         partnerId: dto.partnerId,
+        distanceKm: dto.distanceKm,
+        serviceType: dto.serviceType,
         overrideFee: dto.shippingFee,
       });
 
@@ -69,7 +79,11 @@ export class ShippingService {
           codAmount: dto.codAmount ?? 0,
           weight: dto.weight,
           notes: dto.notes,
+          serviceType: dto.serviceType,
+          distanceKm: dto.distanceKm ? Math.round(dto.distanceKm) : null,
+          feeBreakdown: computedFee.breakdown,
         },
+        include: { partner: true, order: true },
       });
 
       await tx.shippingPartner.update({
@@ -89,8 +103,26 @@ export class ShippingService {
         },
       });
 
-      return { data: shippingOrder };
+      return shippingOrder;
     });
+
+    const traceId = this.requestContext.getTraceId();
+    await this.auditLogService.log({
+      user: {
+        id: 'shipping-automation',
+        organizationId,
+      },
+      entity: 'shippingOrder',
+      entityId: shippingOrder.id,
+      action: 'shipping.order.created',
+      auditAction: AuditAction.CREATE,
+      newValues: {
+        status: shippingOrder.status,
+        traceId,
+      },
+    });
+
+    return { data: shippingOrder };
   }
 
   async findAll(organizationId: string, query: QueryShippingOrdersDto) {
@@ -168,18 +200,42 @@ export class ShippingService {
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.shippingOrder.update({
+      const updateData: Prisma.ShippingOrderUpdateInput = {
+        status: dto.status,
+      };
+
+      if (dto.status === ShippingStatus.FAILED && dto.failedReason) {
+        updateData.failedReason = dto.failedReason;
+      }
+
+      if (dto.status === ShippingStatus.RETURNED && dto.returnReason) {
+        updateData.returnReason = dto.returnReason;
+      }
+
+      if (
+        dto.status === ShippingStatus.FAILED ||
+        dto.status === ShippingStatus.RETURNED
+      ) {
+        updateData.retryCount = { increment: 1 };
+      }
+
+      if (dto.collectedCodAmount !== undefined) {
+        updateData.codAmount = dto.collectedCodAmount;
+      }
+
+      const record = await tx.shippingOrder.update({
         where: { id },
-        data: {
-          status: dto.status,
-        },
+        data: updateData,
         include: { partner: true, order: true },
       });
 
-      await this.applyStatusSideEffects(tx, updated, dto);
+      await this.applyStatusSideEffects(tx, record, dto);
 
-      return updated;
+      return record;
     });
+
+    await this.logShippingStatusChange(shippingOrder, updated, dto.status);
+    await this.syncOrderForShippingStatus(updated, dto);
 
     return { data: updated };
   }
@@ -191,30 +247,6 @@ export class ShippingService {
   ) {
     if (dto.status === ShippingStatus.DELIVERED) {
       await this.settleCod(tx, shippingOrder, dto.collectedCodAmount);
-      if (shippingOrder.orderId) {
-        await tx.order.update({
-          where: { id: shippingOrder.orderId },
-          data: { status: OrderStatus.DELIVERED },
-        });
-      }
-    }
-
-    if (dto.status === ShippingStatus.FAILED) {
-      if (shippingOrder.orderId) {
-        await tx.order.update({
-          where: { id: shippingOrder.orderId },
-          data: { status: OrderStatus.PROCESSING },
-        });
-      }
-    }
-
-    if (dto.status === ShippingStatus.RETURNED) {
-      if (shippingOrder.orderId) {
-        await tx.order.update({
-          where: { id: shippingOrder.orderId },
-          data: { status: OrderStatus.CANCELLED },
-        });
-      }
     }
   }
 
@@ -238,6 +270,93 @@ export class ShippingService {
         where: { id: shippingOrder.partner.id },
         data: { debtBalance: { decrement: targetCod } },
       });
+    }
+  }
+
+  private async logShippingStatusChange(
+    previous: any,
+    updated: any,
+    status: ShippingStatus,
+  ) {
+    const organizationId =
+      previous.partner?.organizationId ?? updated.partner?.organizationId;
+    if (!organizationId) {
+      return;
+    }
+
+    const traceId = this.requestContext.getTraceId();
+    await this.auditLogService.log({
+      user: {
+        id: 'shipping-automation',
+        organizationId,
+      },
+      entity: 'shippingOrder',
+      entityId: previous.id,
+      action: 'shipping.status.changed',
+      auditAction: AuditAction.UPDATE,
+      oldValues: { status: previous.status },
+      newValues: { status, traceId },
+    });
+  }
+
+  private async syncOrderForShippingStatus(
+    shippingOrder: any,
+    dto: UpdateShippingStatusDto,
+  ) {
+    if (!shippingOrder.orderId || !shippingOrder.order) {
+      return;
+    }
+
+    const organizationId = shippingOrder.partner?.organizationId;
+    if (!organizationId) {
+      return;
+    }
+
+    const actor = { id: 'shipping-automation', organizationId };
+
+    if (dto.status === ShippingStatus.DELIVERED) {
+      await this.ordersService.updateStatus(
+        shippingOrder.orderId,
+        { status: OrderStatus.DELIVERED },
+        organizationId,
+        actor,
+      );
+
+      await this.ordersService.updateStatus(
+        shippingOrder.orderId,
+        { status: OrderStatus.COMPLETED },
+        organizationId,
+        actor,
+      );
+
+      if (shippingOrder.order.paymentMethod === PaymentMethod.COD) {
+        await this.ordersService.markCodPaid(
+          shippingOrder.orderId,
+          organizationId,
+          dto.collectedCodAmount,
+          actor,
+        );
+      }
+
+      return;
+    }
+
+    if (
+      dto.status === ShippingStatus.FAILED ||
+      dto.status === ShippingStatus.RETURNED
+    ) {
+      await this.ordersService.updateStatus(
+        shippingOrder.orderId,
+        { status: OrderStatus.PENDING },
+        organizationId,
+        actor,
+      );
+
+      await this.inventoryService.returnStockOnOrderCancel(
+        shippingOrder.orderId,
+        organizationId,
+        actor,
+      );
     }
   }
 }

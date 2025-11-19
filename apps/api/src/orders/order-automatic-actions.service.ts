@@ -29,7 +29,10 @@ export class OrderAutomaticActionsService {
           this.inventoryService.deductStockOnOrderProcessing(
             event.orderId,
             event.organizationId,
-            actorId,
+            {
+              userId: actorId,
+              traceId: event.traceId,
+            },
           ),
       );
     }
@@ -44,8 +47,20 @@ export class OrderAutomaticActionsService {
           this.inventoryService.returnStockOnOrderCancel(
             event.orderId,
             event.organizationId,
-            actorId,
+            {
+              userId: actorId,
+              traceId: event.traceId,
+            },
           ),
+      );
+    }
+
+    if (event.nextStatus === OrderStatus.COMPLETED) {
+      await this.safeExecute('finalizeOrderCompletion', () =>
+        this.ordersService.finalizeOrderCompletion(
+          event.orderId,
+          event.organizationId,
+        ),
       );
     }
   }

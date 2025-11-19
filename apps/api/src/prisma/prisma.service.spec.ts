@@ -25,7 +25,7 @@ describe('PrismaService singleton', () => {
   });
 
   it('only applies the soft delete extension once', () => {
-    const extendSpy = jest.spyOn(PrismaService as any, 'extendWithSoftDelete');
+    const extendSpy = jest.spyOn(PrismaService as any, 'extendClient');
 
     PrismaService.getInstance();
     PrismaService.getInstance();

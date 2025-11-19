@@ -9,14 +9,14 @@
 > **ORM:** Prisma 6.19.0 (latest stable, Rust-free)
 > 
 
-> **Updated:** November 10, 2025
+> **Updated:** November 19, 2025
 > 
 
 ---
 
 ## 📊 Schema Overview
 
-**43 Tables** + **27 Enums** = **70 Total Database Schemas**
+**48 Tables** + **29 Enums** = **77 Total Database Schemas**
 
 ---
 
@@ -35,20 +35,67 @@
 
 ```prisma
 model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique // lano-hn, lano-hcm
-  
-  // Relations
-  users     User[]
-  branches  Branch[]
-  products  Product[]
-  customers Customer[]
-  orders    Order[]
-  
+  id   String @id @default(uuid())
+  name String
+  slug String @unique
+  code String @unique
+
+  users                 User[]
+  branches              Branch[]
+  products              Product[]
+  productVariants       ProductVariant[]
+  customers             Customer[]
+  leads                 Lead[]
+  orders                Order[]
+  orderItems            OrderItem[]
+  suppliers             Supplier[]
+  categories            Category[]
+  shippingPartners      ShippingPartner[]
+  promotions            Promotion[]
+  dailySalesReports     DailySalesReport[]
+  customerGroups        CustomerGroup[]
+  auditLogs             AuditLog[]
+  orderReturns          OrderReturn[]
+  expenses              Expense[]
+  loyaltyPrograms       LoyaltyProgram[]
+  priceBooks            PriceBook[]
+  commissionRules       CommissionRule[]
+  commissions           Commission[]
+  warrantyPlans         WarrantyPlan[]
+  appointments          Appointment[]
+  tasks                 Task[]
+  activities            Activity[]
+  stockAdjustments      StockAdjustment[]
+  purchaseOrders        PurchaseOrder[]
+  quotes                Quote[]
+  webhooks              Webhook[]
+  customerDebtSnapshots CustomerDebtSnapshot[]
+  settings              Setting[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   @@map("organizations")
+}
+```
+
+### Setting
+
+```prisma
+model Setting {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  key       String
+  value     Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("settings")
 }
 ```
 
@@ -56,7 +103,7 @@ model Organization {
 
 ```prisma
 model Branch {
-  id             String  @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -65,9 +112,17 @@ model Branch {
   phone   String?
   
   // Relations
-  inventory      Inventory[]
-  transfersFrom  Transfer[] @relation("TransferFrom")
-  transfersTo    Transfer[] @relation("TransferTo")
+  inventory         Inventory[]
+  transfersFrom     Transfer[]         @relation("TransferFrom")
+  transfersTo       Transfer[]         @relation("TransferTo")
+  orders            Order[]
+  cashRegisters     CashRegister[]
+  dailySalesReports DailySalesReport[]
+  expenses          Expense[]
+  appointments      Appointment[]
+  attendances       Attendance[]
+  stockAdjustments  StockAdjustment[]
+  purchaseOrders    PurchaseOrder[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -84,26 +139,56 @@ model Branch {
 
 ```prisma
 model User {
-  id             String  @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  
-  email    String  @unique
-  password String  // bcrypt hashed
+
+  email    String   @unique
+  password String // bcrypt hashed
   name     String
   role     UserRole @default(STAFF)
-  
+
+  auditLogs        AuditLog[]
+  cashRegisters    CashRegister[]
+  appointments     Appointment[]
+  tasks            Task[]
+  activities       Activity[]
+  attendances      Attendance[]
+  timesheets       Timesheet[]
+  refreshTokens    RefreshToken[]
+  leadsAssigned    Lead[]         @relation("LeadAssignedUser")
+  customersCreated Customer[]     @relation("CustomerCreatedBy")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   @@index([organizationId])
   @@map("users")
 }
 
 enum UserRole {
+  OWNER
   ADMIN
   MANAGER
   STAFF
   CASHIER
+}
+```
+
+### RefreshToken
+
+```prisma
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  remember  Boolean  @default(false)
+
+  @@index([userId])
+  @@map("refresh_tokens")
 }
 ```
 
@@ -115,7 +200,7 @@ enum UserRole {
 
 ```prisma
 model Category {
-  id             String  @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -128,6 +213,8 @@ model Category {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
   @@index([organizationId])
   @@index([parentId])
   @@map("categories")
@@ -138,43 +225,50 @@ model Category {
 
 ```prisma
 model Product {
-  id             String  @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  
-  sku         String  @unique // "TDH016", "VDNT09"
+
+  sku         String
   name        String  // Full product name
+  description String?
   categoryId  String?
   category    Category? @relation(fields: [categoryId], references: [id])
-  
+
   // Pricing (VNĐ)
   costPrice   Decimal @db.Decimal(12, 2) // Giá vốn
   sellPrice   Decimal @db.Decimal(12, 2) // Giá bán
-  
+
   // Stock
   stock       Int     @default(0)
   minStock    Int     @default(0)
   maxStock    Int     @default(999999)
-  
+
   // Media
   images      String[] // CDN URLs
   weight      Int?     // grams
-  
+
   // Flags
   isActive    Boolean @default(true)
-  
+
   // Relations
-  variants    ProductVariant[]
-  inventory   Inventory[]
-  orderItems  OrderItem[]
-  
+  variants              ProductVariant[]
+  inventory             Inventory[]
+  orderItems            OrderItem[]
+  purchaseOrderItems    PurchaseOrderItem[]
+  orderReturnItems      OrderReturnItem[]
+  priceBookItems        PriceBookItem[]
+  warrantyRegistrations WarrantyRegistration[]
+  stockAdjustmentItems  StockAdjustmentItem[]
+  quoteItems            QuoteItem[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
-  
+
+  @@unique([sku, organizationId])
   @@index([organizationId])
   @@index([categoryId])
-  @@index([sku])
   @@map("products")
 }
 ```
@@ -186,16 +280,25 @@ model ProductVariant {
   id        String  @id @default(uuid())
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
-  sku             String  @unique // "VDNT09-D", "VDNT09-xanhla"
-  name            String  // "D" (đen), "NS" (nâu sáng), "xanhla"
-  additionalPrice Decimal @default(0) @db.Decimal(12, 2)
-  stock           Int     @default(0)
+
+  sku             String
+  name            String // "D" (đen), "NS" (nâu sáng), "xanhla"
+  additionalPrice Decimal  @default(0) @db.Decimal(12, 2)
+  stock           Int      @default(0)
   images          String[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  orderItems OrderItem[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([sku, organizationId])
   @@index([productId])
+  @@index([organizationId])
   @@map("product_variants")
 }
 ```
@@ -208,37 +311,74 @@ model ProductVariant {
 
 ```prisma
 model Customer {
-  id             String  @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  
-  code  String  @unique // "KH024917"
-  name  String
-  phone String
-  email String?
-  
-  // Address (Vietnam 3-level)
-  address  String?
-  province String? // "Hồ Chí Minh", "Hà Nội"
-  district String? // "Quận 7", "Quận Đống Đa"
-  ward     String? // "Phường Tân Phong"
-  
-  // CRM data
-  segment       String? // "Đang Giao Hàng", "Đã mua hàng"
-  totalSpent    Decimal @default(0) @db.Decimal(12, 2)
-  totalOrders   Int     @default(0)
-  debt          Decimal @default(0) @db.Decimal(12, 2) // Nợ cần thu
-  lastOrderAt   DateTime?
-  
-  // Relations
-  orders Order[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  code    String
+  name    String
+  phone   String
+  email   String?
+  address String?
+
+  province String?
+  district String?
+  ward     String?
+
+  segment     String?
+  totalSpent  Decimal   @default(0) @db.Decimal(12, 2)
+  totalOrders Int       @default(0)
+  debt        Decimal   @default(0) @db.Decimal(12, 2)
+  lastOrderAt DateTime?
+  birthday    DateTime?
+
+  creatorId String?
+  creator   User? @relation("CustomerCreatedBy", fields: [creatorId], references: [id])
+
+  groupId String?
+  group   CustomerGroup? @relation(fields: [groupId], references: [id])
+
+  orders                Order[]
+  loyaltyTransactions   LoyaltyTransaction[]
+  warrantyRegistrations WarrantyRegistration[]
+  appointments          Appointment[]
+  tasks                 Task[]
+  activities            Activity[]
+  quotes                Quote[]
+  commissions           Commission[]
+  debtSnapshots         CustomerDebtSnapshot[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([organizationId, code])
   @@index([organizationId])
   @@index([code])
   @@index([phone])
+  @@index([groupId])
+  @@index([creatorId])
   @@map("customers")
+}
+```
+
+### CustomerDebtSnapshot
+
+```prisma
+model CustomerDebtSnapshot {
+  id             String       @id @default(cuid())
+  organizationId String
+  customerId     String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  debtValue  Decimal  @db.Decimal(14, 2)
+  capturedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([organizationId, customerId, capturedAt])
+  @@index([organizationId, customerId])
+  @@map("customer_debt_snapshots")
 }
 ```
 
@@ -289,43 +429,63 @@ enum LeadPriority {
 
 ```prisma
 model Order {
-  id             String  @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  
-  code       String   @unique // "HD031537"
+
+  code       String
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id])
-  
-  // Totals (VNĐ)
-  subtotal   Decimal @db.Decimal(12, 2) // Tổng tiền hàng
-  discount   Decimal @default(0) @db.Decimal(12, 2)
-  total      Decimal @db.Decimal(12, 2) // Khách cần trả
-  
-  // Payment
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  subtotal Decimal @db.Decimal(12, 2)
+  tax      Decimal @default(0) @db.Decimal(12, 2)
+  shipping Decimal @default(0) @db.Decimal(12, 2)
+  discount Decimal @default(0) @db.Decimal(12, 2)
+  total    Decimal @db.Decimal(12, 2)
+
   paymentMethod PaymentMethod
-  isPaid        Boolean @default(false)
-  paidAmount    Decimal @default(0) @db.Decimal(12, 2)
-  
-  // Status
+  isPaid        Boolean       @default(false)
+  paidAmount    Decimal       @default(0) @db.Decimal(12, 2)
+
   status OrderStatus @default(PENDING)
-  
-  // Relations
-  items          OrderItem[]
-  shippingOrders ShippingOrder[]
-  
+
+  notes String?
+
+  items                 OrderItem[]
+  shippingOrders        ShippingOrder[]
+  payments              Payment[]
+  orderReturns          OrderReturn[]
+  loyaltyTransactions   LoyaltyTransaction[]
+  commissions           Commission[]
+  warrantyRegistrations WarrantyRegistration[]
+  tasks                 Task[]
+  activities            Activity[]
+  timesheets            Timesheet[]
+  quotes                Quote[]
+
   createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  completedAt DateTime?
+  deletedAt DateTime?
+  paidAt DateTime?
+
+  @@unique([code, organizationId])
   @@index([organizationId])
   @@index([customerId])
-  @@index([code])
+  @@index([branchId])
   @@map("orders")
 }
 
 enum OrderStatus {
   PENDING       // Đang xử lý
+  CONFIRMED
   PROCESSING
+  SHIPPED
+  DELIVERED
   COMPLETED     // Hoàn thành
   CANCELLED
 }
@@ -343,20 +503,27 @@ enum PaymentMethod {
 
 ```prisma
 model OrderItem {
-  id      String @id @default(uuid())
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   orderId String
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
+
   productId String
   product   Product @relation(fields: [productId], references: [id])
-  
-  quantity    Int
-  price       Decimal @db.Decimal(12, 2) // Đơn giá
-  discount    Decimal @default(0) @db.Decimal(12, 2)
-  lineTotal   Decimal @db.Decimal(12, 2) // Thành tiền
-  
+
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  subtotal  Decimal @db.Decimal(12, 2)
+
+  @@index([organizationId])
   @@index([orderId])
   @@index([productId])
+  @@index([variantId])
   @@map("order_items")
 }
 ```
@@ -369,11 +536,11 @@ model OrderItem {
 
 ```prisma
 model ShippingPartner {
-  id             String  @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
-  code  String @unique // "DT000008", "aha"
+  code  String
   name  String // "GHTK", "Ahamove", "GHN"
   email String?
   phone String?
@@ -388,6 +555,7 @@ model ShippingPartner {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@unique([code, organizationId])
   @@index([organizationId])
   @@map("shipping_partners")
 }
@@ -404,7 +572,7 @@ model ShippingOrder {
   partnerId String
   partner   ShippingPartner @relation(fields: [partnerId], references: [id])
   
-  trackingCode String @unique // "GY6YGLDU"
+  trackingCode String @unique
   
   // Recipient
   recipientName    String
@@ -451,7 +619,7 @@ enum ShippingStatus {
 
 ```prisma
 model Inventory {
-  id        String @id @default(uuid())
+  id        String  @id @default(uuid())
   productId String
   product   Product @relation(fields: [productId], references: [id])
   
@@ -503,11 +671,11 @@ enum TransferStatus {
 
 ```prisma
 model StockAdjustment {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
-  code           String  // "ADJ001234"
+  code           String
   branchId       String
   branch         Branch  @relation(fields: [branchId], references: [id])
   
@@ -547,7 +715,7 @@ enum AdjustmentStatus {
 
 ```prisma
 model StockAdjustmentItem {
-  id            String  @id @default(cuid())
+  id            String          @id @default(cuid())
   adjustmentId  String
   adjustment    StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
   
@@ -573,12 +741,12 @@ model StockAdjustmentItem {
 
 ```prisma
 model Supplier {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
-  code           String  // "NCC001"
-  name           String  // "Xưởng da Lano"
+  code           String
+  name           String
   contactPerson  String?
   phone          String
   email          String?
@@ -608,11 +776,11 @@ model Supplier {
 
 ```prisma
 model PurchaseOrder {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
-  code           String  // "PO001093"
+  code           String
   supplierId     String
   supplier       Supplier @relation(fields: [supplierId], references: [id])
   
@@ -666,7 +834,7 @@ enum PaymentStatus {
 
 ```prisma
 model PurchaseOrderItem {
-  id              String  @id @default(cuid())
+  id              String        @id @default(cuid())
   purchaseOrderId String
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   
@@ -691,9 +859,9 @@ model PurchaseOrderItem {
 
 ```prisma
 model CashRegister {
-  id        String  @id @default(cuid())
+  id        String @id @default(cuid())
   branchId  String
-  branch    Branch  @relation(fields: [branchId], references: [id])
+  branch    Branch @relation(fields: [branchId], references: [id])
   
   userId    String  // Nhân viên thu ngân
   user      User    @relation(fields: [userId], references: [id])
@@ -730,9 +898,9 @@ enum CashRegisterStatus {
 
 ```prisma
 model Payment {
-  id              String  @id @default(cuid())
+  id              String        @id @default(cuid())
   orderId         String
-  order           Order   @relation(fields: [orderId], references: [id])
+  order           Order         @relation(fields: [orderId], references: [id])
   
   cashRegisterId  String?
   cashRegister    CashRegister? @relation(fields: [cashRegisterId], references: [id])
@@ -758,12 +926,12 @@ model Payment {
 
 ```prisma
 model Promotion {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
   name           String  // "Flash Sale 50%"
-  code           String  // "FLASH50"
+  code           String
   description    String?
   
   type           PromotionType
@@ -810,7 +978,7 @@ enum PromotionType {
 
 ```prisma
 model DailySalesReport {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -851,7 +1019,7 @@ model DailySalesReport {
 
 ```prisma
 model CustomerGroup {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -860,7 +1028,8 @@ model CustomerGroup {
   discountRate   Decimal  @default(0) @db.Decimal(5, 2) // % giảm giá
   
   // Relations
-  customers      Customer[]
+  customers  Customer[]
+  priceBooks PriceBook[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -877,7 +1046,7 @@ model CustomerGroup {
 
 ```prisma
 model AuditLog {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -910,6 +1079,25 @@ enum AuditAction {
 }
 ```
 
+### Webhook
+
+```prisma
+model Webhook {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  url             String
+  secretEncrypted Json
+  events          String[]
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@map("webhooks")
+}
+```
+
 ---
 
 ## 🔄 Returns & Refunds
@@ -918,14 +1106,14 @@ enum AuditAction {
 
 ```prisma
 model OrderReturn {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
   orderId        String
   order          Order   @relation(fields: [orderId], references: [id])
   
-  code           String  // "RT001234"
+  code           String
   
   // Return details
   reason         String  // "Lỗi sản phẩm", "Khách đổi ý"
@@ -964,7 +1152,7 @@ enum ReturnStatus {
 
 ```prisma
 model OrderReturnItem {
-  id            String  @id @default(cuid())
+  id            String      @id @default(cuid())
   returnId      String
   orderReturn   OrderReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
   
@@ -990,11 +1178,11 @@ model OrderReturnItem {
 
 ```prisma
 model Expense {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
-  code           String  // "EXP001234", "INC001234"
+  code           String
   branchId       String?
   branch         Branch? @relation(fields: [branchId], references: [id])
   
@@ -1037,7 +1225,7 @@ enum ExpenseType {
 
 ```prisma
 model LoyaltyProgram {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -1068,7 +1256,7 @@ model LoyaltyProgram {
 
 ```prisma
 model LoyaltyTransaction {
-  id             String  @id @default(cuid())
+  id             String         @id @default(cuid())
   programId      String
   program        LoyaltyProgram @relation(fields: [programId], references: [id])
   
@@ -1109,7 +1297,7 @@ enum LoyaltyTransactionType {
 
 ```prisma
 model PriceBook {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -1143,7 +1331,7 @@ model PriceBook {
 
 ```prisma
 model PriceBookItem {
-  id          String  @id @default(cuid())
+  id          String    @id @default(cuid())
   priceBookId String
   priceBook   PriceBook @relation(fields: [priceBookId], references: [id], onDelete: Cascade)
   
@@ -1167,7 +1355,7 @@ model PriceBookItem {
 
 ```prisma
 model CommissionRule {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -1197,7 +1385,7 @@ enum CommissionType {
 
 ```prisma
 model Commission {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -1255,7 +1443,7 @@ enum CommissionSource {
 
 ```prisma
 model WarrantyPlan {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -1288,7 +1476,7 @@ model WarrantyPlan {
 
 ```prisma
 model WarrantyRegistration {
-  id          String  @id @default(cuid())
+  id          String       @id @default(cuid())
   planId      String
   plan        WarrantyPlan @relation(fields: [planId], references: [id])
   
@@ -1334,7 +1522,7 @@ enum WarrantyStatus {
 
 ```prisma
 model WarrantyClaim {
-  id             String  @id @default(cuid())
+  id             String               @id @default(cuid())
   registrationId String
   registration   WarrantyRegistration @relation(fields: [registrationId], references: [id])
   
@@ -1373,7 +1561,7 @@ enum ClaimStatus {
 
 ```prisma
 model Appointment {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -1440,7 +1628,7 @@ enum AppointmentStatus {
 
 ```prisma
 model Task {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -1465,6 +1653,8 @@ model Task {
   
   // Completion
   completedAt    DateTime?
+  
+  timesheets Timesheet[]
   
   createdBy      String?
   createdAt      DateTime @default(now())
@@ -1495,7 +1685,7 @@ enum TaskStatus {
 
 ```prisma
 model Activity {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
@@ -1651,11 +1841,11 @@ enum TimesheetStatus {
 
 ```prisma
 model Quote {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   
-  code           String  // "QT001234"
+  code           String
   
   customerId     String
   customer       Customer @relation(fields: [customerId], references: [id])
@@ -1751,15 +1941,21 @@ model QuoteItem {
 6. **UUID/CUID IDs:** chống đoán, hỗ trợ offline.
 7. **Indexes:** Bắt buộc trên FK + fields dùng filter (code, status, periodMonth).
 
+## 🆕 November 2025 Schema Notes
+
+- **OrderInventoryReservation**: bảng mới giúp track stock deduction (`orderId`, `orderItemId`, `branchId`, `productId`, `variantId`, `quantity`, `variantReservedQuantity`, `status`). Được automation sử dụng để ngăn double-deduct và hoàn kho an toàn.
+- **Orders/order_items**: bổ sung `taxableSubtotal`, `taxBreakdown (JSON)` và các cột `discountType / discountValue / discountAmount / netTotal / isTaxExempt` cho từng item nhằm phục vụ pricing mới.
+- **ShippingOrders**: thêm `serviceType`, `distanceKm`, `feeBreakdown (JSON)`, `retryCount`, `failedReason`, `returnReason` để ghi nhận flow shipping/partner.
+
 ---
 
 ## 📊 Final Summary
 
 | Category | Count |
 | --- | --- |
-| **Tables** | 43 |
-| **Enums** | 27 |
-| **Total Schemas** | 70 |
+| **Tables** | 48 |
+| **Enums** | 29 |
+| **Total Schemas** | 77 |
 | **Modules** | 23 |
 
 **Next:** Implement this schema with Prisma migrations! 🚀

@@ -6,7 +6,7 @@
 > **Authentication:** JWT Bearer token
 > 
 
-> **Response Format:** JSON envelope `{ success, data, message }`
+> **Updated:** November 19, 2025
 > 
 
 ---
@@ -15,7 +15,7 @@
 
 ### POST /auth/register
 
-Register new organization + admin user
+Register new organization and admin user.
 
 **Request Body:**
 
@@ -28,31 +28,9 @@ Register new organization + admin user
 }
 ```
 
-**Response:** `201 Created`
-
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "uuid",
-      "email": "admin@lano.vn",
-      "name": "Admin User",
-      "role": "ADMIN"
-    },
-    "organization": {
-      "id": "uuid",
-      "name": "Lano Leather",
-      "slug": "lano-leather"
-    },
-    "accessToken": "jwt.token.here"
-  }
-}
-```
-
 ### POST /auth/login
 
-Login existing user
+Login existing user.
 
 **Request Body:**
 
@@ -63,64 +41,121 @@ Login existing user
 }
 ```
 
+### GET /auth/me
+
+Get the profile of the currently authenticated user.
+
 **Response:** `200 OK`
 
 ```json
 {
-  "success": true,
-  "data": {
-    "user": { "...user object..." },
-    "accessToken": "jwt.token.here"
-  }
+  "id": "uuid",
+  "email": "admin@lano.vn",
+  "name": "Admin User",
+  "role": "OWNER",
+  "organizationId": "uuid"
 }
 ```
 
 ### POST /auth/refresh
 
-Refresh access token
-
-**Headers:** `Authorization: Bearer {token}`
+Refresh an access token using a valid refresh token (sent via secure cookie).
 
 **Response:** `200 OK`
 
 ```json
 {
-  "success": true,
-  "data": {
-    "accessToken": "new.jwt.token"
-  }
+  "accessToken": "new.jwt.token.here",
+  "refreshToken": "new.refresh.token.here"
 }
 ```
 
-### GET /reports/debt
+### POST /auth/logout
 
-Customer debt report from snapshots.
-
-**Query Parameters:**
-
-- `groupBy` (string, required: `day` or `month`)
-- `fromDate`, `toDate` (ISO date strings, optional)
-- `customerId` (uuid, optional)
+Logout the user and invalidate the refresh token.
 
 **Response:** `200 OK`
 
 ```json
 {
-  "success": true,
-  "data": [
-    {
-      "period": "2025-11-10T00:00:00.000Z",
-      "customerId": "uuid-customer-1",
-      "closingDebt": "200000.00"
-    },
-    {
-      "period": "2025-11-09T00:00:00.000Z",
-      "customerId": "uuid-customer-1",
-      "closingDebt": "150000.00"
-    }
-  ]
+  "message": "Logged out"
 }
 ```
+
+---
+
+## 🏢 Organizations
+
+### GET /organizations/me
+
+Get the profile of the current user's organization.
+
+**Response:** `200 OK`
+
+### PATCH /organizations/me
+
+Update the profile of the current user's organization.
+
+**Response:** `200 OK`
+
+### GET /organizations/slug/:slug
+
+Public endpoint to look up an organization by its unique slug.
+
+**Response:** `200 OK`
+
+### POST /organizations
+
+Create a new organization. Protected by a secret header.
+
+**Headers:** `x-organization-secret: <secret>`
+
+**Response:** `201 Created`
+
+---
+
+## 👥 Users
+
+### GET /users
+
+List all users within the current user's organization. Supports pagination.
+
+**Query Parameters:** `page`, `limit`
+
+**Response:** `200 OK`
+
+### POST /users
+
+Create a new user within the current user's organization.
+
+**Request Body:**
+```json
+{
+  "email": "staff@lano.vn",
+  "password": "securepass123",
+  "name": "Staff User",
+  "role": "STAFF"
+}
+```
+**Response:** `201 Created`
+
+### GET /users/:id
+
+Get a specific user's details by ID.
+
+**Response:** `200 OK`
+
+### PATCH /users/:id
+
+Update a user's profile.
+
+**Response:** `200 OK`
+
+### DELETE /users/:id
+
+Remove a user from the organization.
+
+**Response:** `200 OK`
 
 ---
 
@@ -128,132 +163,126 @@ Customer debt report from snapshots.
 
 ### GET /products
 
-List products with filters
-
-**Headers:** `Authorization: Bearer {token}`
+List products with filters.
 
 **Query Parameters:**
-
-- `page` (number, default: 1)
-- `limit` (number, default: 20, max: 100)
-- `search` (string) - search by SKU or name
-- `categoryId` (uuid) - filter by category
-- `minPrice` (number)
-- `maxPrice` (number)
-- `inStock` (boolean) - only in-stock products
-- `sortBy` (string: "name", "price", "stock", "createdAt")
-- `sortOrder` (string: "asc", "desc")
+- `page`, `limit`, `search`
+- `categoryId`, `minPrice`, `maxPrice`, `inStock`
+- `sortBy`, `sortOrder`
 
 **Response:** `200 OK`
-
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "id": "uuid",
-        "sku": "TDH016",
-        "name": "Túi đeo chéo da bò cao cấp",
-        "categoryId": "uuid",
-        "category": {
-          "id": "uuid",
-          "name": "Túi da handmade"
-        },
-        "costPrice": 1500000,
-        "sellPrice": 7500000,
-        "stock": 5,
-        "images": ["https://cdn.../image1.jpg"],
-        "variants": [
-          {
-            "id": "uuid",
-            "sku": "TDH016-D",
-            "name": "Đen",
-            "additionalPrice": 0,
-            "stock": 3
-          }
-        ],
-        "createdAt": "2025-11-06T10:00:00Z"
-      }
-    ],
-    "pagination": {
-      "page": 1,
-      "limit": 20,
-      "total": 1509,
-      "totalPages": 76
-    }
-  }
-}
-```
-
-### GET /products/:id
-
-Get product by ID
-
-**Response:** `200 OK`
-
-```json
-{
-  "success": true,
-  "data": { "/* full product object */" }
-}
-```
 
 ### POST /products
 
-Create new product
-
-**Request Body:**
-
-```json
-{
-  "sku": "TDH017",
-  "name": "Túi tote da togo",
-  "categoryId": "uuid",
-  "costPrice": 2000000,
-  "sellPrice": 8000000,
-  "stock": 10,
-  "minStock": 2,
-  "maxStock": 50,
-  "images": ["https://cdn.../image.jpg"],
-  "weight": 500,
-  "variants": [
-    {
-      "sku": "TDH017-D",
-      "name": "Đen",
-      "additionalPrice": 0,
-      "stock": 5
-    },
-    {
-      "sku": "TDH017-NS",
-      "name": "Nâu sáng",
-      "additionalPrice": 100000,
-      "stock": 5
-    }
-  ]
-}
-```
+Create a new product. Can include variants.
 
 **Response:** `201 Created`
 
+### GET /products/:id
+
+Get a single product by its ID.
+
+**Response:** `200 OK`
+
 ### PATCH /products/:id
 
-Update product
-
-**Request Body:** (partial update)
-
-```json
-{
-  "sellPrice": 8500000,
-  "stock": 8
-}
-```
+Update a product's details.
 
 **Response:** `200 OK`
 
 ### DELETE /products/:id
 
-Soft delete product
+Soft delete a product.
+
+**Response:** `204 No Content`
+
+---
+
+## 📦 Product Variants
+
+### GET /products/:productId/variants
+
+List all variants for a specific product.
+
+**Response:** `200 OK`
+
+### POST /products/:productId/variants
+
+Create a new variant for a product.
+
+**Request Body:**
+```json
+{
+  "name": "Màu Đen",
+  "sku": "PRODUCT-SKU-BLK",
+  "additionalPrice": 0,
+  "stock": 10
+}
+```
+**Response:** `201 Created`
+
+### GET /products/:productId/variants/:id
+
+Get a single product variant by its ID.
+
+**Response:** `200 OK`
+
+### PATCH /products/:productId/variants/:id
+
+Update a product variant's details.
+
+**Response:** `200 OK`
+
+### DELETE /products/:productId/variants/:id
+
+Soft delete a product variant.
+
+**Response:** `200 OK`
+
+---
+
+## 📂 Categories
+
+### GET /categories
+
+Get a flat list of all categories for the organization.
+
+**Response:** `200 OK`
+
+### GET /categories/tree
+
+Get all categories structured as a tree.
+
+**Response:** `200 OK`
+
+### POST /categories
+
+Create a new category.
+
+**Request Body:**
+```json
+{
+  "name": "Ví da nam",
+  "parentId": "optional-parent-uuid"
+}
+```
+**Response:** `201 Created`
+
+### GET /categories/:id
+
+Get a single category by ID.
+
+**Response:** `200 OK`
+
+### PATCH /categories/:id
+
+Update a category's name or parent.
+
+**Response:** `200 OK`
+
+### DELETE /categories/:id
+
+Soft delete a category.
 
 **Response:** `200 OK`
 
@@ -263,66 +292,38 @@ Soft delete product
 
 ### GET /customers
 
-List customers
+List customers with pagination and filters.
 
 **Query Parameters:**
-
 - `page`, `limit`
-- `search` - by name, phone, code
-- `segment` - customer segment
-- `hasDebt` (boolean)
-- `province`, `district`
+- `search` (by name, phone, code)
+- `segment`, `sortBy`, `sortOrder`
 
 **Response:** `200 OK`
 
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "id": "uuid",
-        "code": "KH024917",
-        "name": "Trần Thanh Tâm",
-        "phone": "0937946879",
-        "email": null,
-        "address": "17 Hưng Phước 3",
-        "province": "Hồ Chí Minh",
-        "district": "Quận 7",
-        "ward": "Phường Tân Phong",
-        "segment": "Đang Giao Hàng",
-        "totalSpent": 550000,
-        "totalOrders": 1,
-        "debt": 550000,
-        "lastOrderAt": "2025-11-05T15:50:00Z",
-        "createdAt": "2025-11-05T15:49:00Z"
-      }
-    ],
-    "pagination": { "..." }
-  }
-}
-```
-
 ### POST /customers
 
-Create customer
-
-**Request Body:**
-
-```json
-{
-  "name": "Nguyễn Văn A",
-  "phone": "0901234567",
-  "email": "nguyenvana@example.com",
-  "address": "123 Lê Lợi",
-  "province": "Hà Nội",
-  "district": "Quận Hoàn Kiếm",
-  "ward": "Phường Tràng Tiền",
-  "segment": "Khách lẻ"
-}
-```
+Create a new customer.
 
 **Response:** `201 Created`
+
+### GET /customers/:id
+
+Get a single customer by ID.
+
+**Response:** `200 OK`
+
+### PATCH /customers/:id
+
+Update a customer's details.
+
+**Response:** `200 OK`
+
+### DELETE /customers/:id
+
+Soft delete a customer.
+
+**Response:** `200 OK`
 
 ---
 
@@ -330,33 +331,9 @@ Create customer
 
 ### GET /branches
 
-Liệt kê danh sách chi nhánh thuộc tổ chức hiện tại (sử dụng `OrganizationGuard` nên cần header `x-organization-id`). POS FE dùng endpoint này để người bán chọn “quầy” trước khi thanh toán.
-
-**Headers**
-
-- `Authorization: Bearer <token>`
-- `x-organization-id: <organization uuid>`
+List all branches for the current organization.
 
 **Response:** `200 OK`
-
-```json
-[
-  {
-    "id": "br_01J5R4S9MXQJ92X6FZC6V4E3P5",
-    "name": "Lano HN - Main Branch",
-    "address": "123 Hoàn Kiếm, Hà Nội",
-    "phone": "024-1234-5678"
-  },
-  {
-    "id": "br_01J5R4SAPGJE2NEV6G7NE38R1V",
-    "name": "Lano HCM - District 7",
-    "address": "321 Phú Mỹ Hưng, Quận 7, TP.HCM",
-    "phone": "028-8765-4321"
-  }
-]
-```
-
-> Không phân trang: BE trả toàn bộ chi nhánh của tenant để FE cache cục bộ. Nếu org không có chi nhánh nào sẽ trả mảng rỗng.
 
 ---
 
@@ -364,178 +341,130 @@ Liệt kê danh sách chi nhánh thuộc tổ chức hiện tại (sử dụng `
 
 ### GET /orders
 
-List orders
+List orders with pagination and filters.
 
 **Query Parameters:**
-
-- `page`, `limit`
-- `status` - PENDING, PROCESSING, COMPLETED, CANCELLED
-- `customerId`
-- `fromDate`, `toDate`
-- `paymentMethod`
+- `page`, `limit`, `status`
+- `customerId`, `fromDate`, `toDate`
+- `paymentMethod`, `branchId`
 
 **Response:** `200 OK`
-
-```json
-{
-  "data": [
-    {
-      "id": "ord_01HZYJZP4S0",
-      "code": "ORD032",
-      "branch": { "id": "br_01HZYJX", "name": "Chi nhánh Q1" },
-      "customer": {
-        "name": "Trần Thanh Tâm",
-        "phone": "0937946879"
-      },
-      "subtotal": 520000,
-      "discount": 0,
-      "tax": 52000,
-      "shipping": 30000,
-      "total": 602000,
-      "paymentMethod": "COD",
-      "isPaid": false,
-      "paidAmount": 0,
-      "status": "PENDING",
-      "itemsCount": 1,
-      "createdAt": "2025-11-05T15:50:06Z"
-    }
-  ],
-  "meta": { "total": 1, "page": 1, "limit": 20, "lastPage": 1 }
-}
-```
 
 ### POST /orders
 
-Create order
-
-**Request Body:**
-
-```json
-{
-  "branchId": "uuid",
-  "customerId": "uuid",
-  "items": [
-    {
-      "productId": "uuid",
-      "quantity": 2,
-      "variantId": null
-    }
-  ],
-  "discount": 0,
-  "paymentMethod": "CASH",
-  "channel": "POS",
-  "notes": "Khách thanh toán tại quầy"
-}
-```
+Create a new order.
 
 **Response:** `201 Created`
 
-```json
-{
-  "data": {
-    "id": "ord_01HZYM2M0A3",
-    "code": "ORD033",
-    "branchId": "uuid",
-    "status": "COMPLETED",
-    "subtotal": 1040000,
-    "tax": 104000,
-    "shipping": 0,
-    "discount": 0,
-    "total": 1144000,
-    "isPaid": true,
-    "paymentMethod": "CASH",
-    "items": [
-      {
-        "productId": "uuid",
-        "quantity": 2,
-        "price": 520000,
-        "total": 1040000
-      }
-    ]
-  },
-  "warnings": []
-}
-```
+### GET /orders/:id
 
-> **Note:** When stock is lower than the requested quantity, the `warnings` array contains entries with `type`, `message`, `requested`, and `available`. Orders are blocked only when stock is zero.
-
----
-
-## 🚚 Shipping Orders
-
-### GET /shipping-orders
-
-List shipping orders
-
-**Query Parameters:**
-
-- `page`, `limit`
-- `orderId`
-- `partnerId`
-- `trackingCode`
-- `status` - PENDING, PICKING_UP, IN_TRANSIT, DELIVERED, FAILED, RETURNED
+Get a single order by ID.
 
 **Response:** `200 OK`
 
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "id": "uuid",
-        "orderId": "uuid",
-        "partnerId": "uuid",
-        "partner": {
-          "name": "Giao hàng nhanh"
-        },
-        "trackingCode": "GY6YGLDU",
-        "recipientName": "Trần Thanh Tâm",
-        "recipientPhone": "0937946879",
-        "recipientAddress": "17 Hưng Phước 3, Phường Tân Phong, Quận 7, HCM",
-        "shippingFee": 19500,
-        "codAmount": 550000,
-        "status": "IN_TRANSIT",
-        "weight": 500,
-        "createdAt": "2025-11-05T15:50:06Z"
-      }
-    ],
-    "pagination": { "..." }
-  }
-}
-```
+### PUT /orders/:id
+
+Update an order's details (only for PENDING orders).
+
+**Response:** `200 OK`
+
+### DELETE /orders/:id
+
+Soft delete an order.
+
+**Response:** `200 OK`
+
+### PATCH /orders/:id/status
+
+Update the status of an order (e.g., from PENDING to PROCESSING).
+
+**Response:** `200 OK`
 
 ---
 
-## 🏢 Suppliers
+## ↩️ Refunds
+
+### POST /orders/:orderId/refund-request
+
+Request a refund for a completed order.
+
+**Response:** `202 Accepted`
+
+### POST /orders/:orderId/refund-approve
+
+Approve a pending refund request (manager role required).
+
+**Response:** `200 OK`
+
+### POST /orders/:orderId/refund-reject
+
+Reject a pending refund request (manager role required).
+
+**Response:** `200 OK`
+
+---
+
+## 🚚 Shipping
+
+### GET /shipping/orders
+
+List shipping orders with pagination and filters.
+
+**Query Parameters:** `page`, `limit`, `status`, `search`
+
+**Response:** `200 OK`
+
+### POST /shipping/orders
+
+Create a new shipping order for an existing MeoCRM order.
+
+**Response:** `201 Created`
+
+### GET /shipping/orders/:id
+
+Get a single shipping order by ID.
+
+**Response:** `200 OK`
+
+### PATCH /shipping/orders/:id/status
+
+Update the status of a shipping order (e.g., from IN_TRANSIT to DELIVERED). This can be called by a webhook from the shipping partner.
+
+**Response:** `200 OK`
+
+---
+
+## 🏭 Suppliers
 
 ### GET /suppliers
 
-List suppliers
+List suppliers with pagination and filters.
 
 **Response:** `200 OK`
 
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "id": "uuid",
-        "code": "DT000008",
-        "name": "GHTK",
-        "email": "cskh@ghtk.vn",
-        "phone": "1800.6092",
-        "totalOrders": 26429,
-        "totalFees": 222301730,
-        "totalCOD": 3078000,
-        "debtBalance": 498000
-      }
-    ],
-    "pagination": { "..." }
-  }
-}
-```
+### POST /suppliers
+
+Create a new supplier.
+
+**Response:** `201 Created`
+
+### GET /suppliers/:id
+
+Get a single supplier by ID.
+
+**Response:** `200 OK`
+
+### PATCH /suppliers/:id
+
+Update a supplier's details.
+
+**Response:** `200 OK`
+
+### DELETE /suppliers/:id
+
+Soft delete a supplier.
+
+**Response:** `204 No Content`
 
 ---
 
@@ -543,154 +472,123 @@ List suppliers
 
 ### GET /inventory
 
-Get inventory by branch
+Get inventory by branch with pagination and filters.
 
-**Query Parameters:**
-
-- `branchId` (required)
-- `productId`
-- `lowStock` (boolean) - only products below minStock
+**Query Parameters:** `branchId` (required), `page`, `limit`, `search`, `categoryId`, `lowStockOnly`
 
 **Response:** `200 OK`
 
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "id": "uuid",
-        "productId": "uuid",
-        "product": {
-          "sku": "TDH016",
-          "name": "Túi đeo chéo",
-          "minStock": 5
-        },
-        "branchId": "uuid",
-        "branch": {
-          "name": "Lano - HN"
-        },
-        "quantity": 3,
-        "isLowStock": false
-      }
-    ]
-  }
-}
-```
+### POST /inventory/adjust
 
-### POST /transfers
-
-Create inter-branch transfer
+Manually adjust stock for a product in a specific branch (admin only).
 
 **Request Body:**
-
 ```json
 {
-  "fromBranchId": "uuid",
-  "toBranchId": "uuid",
-  "items": [
-    {
-      "productId": "uuid",
-      "quantity": 2
-    }
-  ]
+  "productId": "uuid",
+  "branchId": "uuid",
+  "quantity": -5,
+  "reason": "DAMAGED",
+  "notes": "Hàng bị hỏng trong kho"
 }
 ```
+**Response:** `200 OK`
 
+### GET /inventory/low-stock
+
+Get a list of products with low stock for a specific branch.
+
+**Query Parameters:** `branchId` (required)
+
+**Response:** `200 OK`
+
+### POST /inventory/transfer
+
+Create an immediate inter-branch stock transfer.
+
+**Request Body:**
+```json
+{
+  "productId": "uuid",
+  "fromBranchId": "uuid-source",
+  "toBranchId": "uuid-destination",
+  "quantity": 10
+}
+```
 **Response:** `201 Created`
 
 ---
 
 ## 📈 Reports
 
-### GET /reports/revenue
+### GET /reports/debt
 
-Revenue report
+Get a customer debt report.
 
 **Query Parameters:**
-
-- `fromDate`, `toDate` (ISO date strings)
-- `branchId`
-- `groupBy` - day, week, month
+- `groupBy` (string, required: `day` or `month`)
+- `fromDate`, `toDate` (ISO date strings, optional)
+- `customerId` (uuid, optional)
 
 **Response:** `200 OK`
 
-```json
-{
-  "success": true,
-  "data": {
-    "total": 58000000,
-    "breakdown": [
-      {
-        "date": "2025-11-01",
-        "revenue": 5000000,
-        "orders": 10
-      }
-    ]
-  }
-}
-```
+---
+
+## 🪝 Webhooks
+
+### POST /webhooks/handler
+
+Public endpoint for receiving webhook events from external services. Not for direct use.
+
+### GET /webhooks
+
+List all configured webhook subscriptions for the organization.
+
+**Response:** `200 OK`
+
+### POST /webhooks
+
+Create a new webhook subscription.
+
+**Response:** `201 Created`
+
+### PATCH /webhooks/:id
+
+Update a webhook subscription.
+
+**Response:** `200 OK`
+
+### POST /webhooks/:id/test
+
+Send a test event to a configured webhook.
+
+**Response:** `200 OK`
+
+---
+
+## ❤️ Health Check
+
+### GET /
+
+Basic API health check.
+
+**Response:** `200 OK` (string: "MeoCRM API v1.0...")
+
+### GET /health
+
+Detailed health check including database status.
+
+**Response:** `200 OK`
 
 ---
 
 ## 🚨 Error Responses
 
-### 400 Bad Request
-
-```json
-{
-  "success": false,
-  "message": "Validation failed",
-  "errors": [
-    {
-      "field": "email",
-      "message": "Invalid email format"
-    }
-  ]
-}
-```
-
-### 401 Unauthorized
-
-```json
-{
-  "success": false,
-  "message": "Invalid or expired token"
-}
-```
-
-### 403 Forbidden
-
-```json
-{
-  "success": false,
-  "message": "Insufficient permissions"
-}
-```
-
-### 404 Not Found
-
-```json
-{
-  "success": false,
-  "message": "Resource not found"
-}
-```
-
-### 500 Internal Server Error
-
-```json
-{
-  "success": false,
-  "message": "Internal server error",
-  "error": "Error details (dev only)"
-}
-```
+Standard error responses are provided for `400`, `401`, `403`, `404`, and `500` status codes.
 
 ---
 
-**Authentication:** All endpoints except `/auth/*` require `Authorization: Bearer {token}` header
+## 📌 2025-11 API Notes
 
-**Rate Limiting:** 100 requests per minute per IP
-
-**CORS:** Configured for `http://localhost:2041` (development)
+- **Orders responses** now expose `taxableSubtotal`, `taxBreakdown { taxableAmount, rate }` and per-item fields `discountType`, `discountValue`, `discountAmount`, `netTotal`, `isTaxExempt` following the updated DTO.
+- **Shipping responses** surface `serviceType`, `distanceKm`, `feeBreakdown`, `retryCount`, `failedReason`, `returnReason`. `PATCH /shipping-orders/:id/status` accepts the new reason fields and triggers automation (DELIVERED ⇒ auto COMPLETE + `markCodPaid`; FAILED/RETURNED ⇒ order back to `PENDING`, inventory restored).

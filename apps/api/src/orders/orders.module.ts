@@ -7,9 +7,10 @@ import { PricingService } from './pricing.service';
 import { InventoryModule } from '../inventory/inventory.module';
 import { OrderAutomaticActionsService } from './order-automatic-actions.service';
 import { CustomersModule } from '../customers/customers.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
-  imports: [PrismaModule, SettingsModule, InventoryModule, CustomersModule],
+  imports: [PrismaModule, SettingsModule, InventoryModule, CustomersModule, CommonModule],
   controllers: [OrdersController],
   providers: [OrdersService, PricingService, OrderAutomaticActionsService],
   exports: [OrdersService],

@@ -4,6 +4,8 @@ import { SettingsService } from '../modules/settings/settings.service';
 export interface ShippingFeeInput {
   organizationId: string;
   weight?: number; // grams
+  distanceKm?: number;
+  serviceType?: string;
   channel?: string;
   partnerId?: string;
   overrideFee?: number;
@@ -13,6 +15,23 @@ export interface ShippingFeeResult {
   shippingFee: number;
   weightSurcharge: number;
   channelMultiplier: number;
+  breakdown: ShippingFeeBreakdown;
+}
+
+interface ShippingPartnerRule {
+  baseFee?: number;
+  weightRate?: number;
+  distanceRate?: number;
+  serviceTypes?: Record<string, { multiplier?: number }>;
+}
+
+export interface ShippingFeeBreakdown {
+  baseFee: number;
+  weightSurcharge: number;
+  distanceFee: number;
+  serviceMultiplier: number;
+  channelMultiplier: number;
+  partnerId?: string;
 }
 
 @Injectable()
@@ -25,39 +44,71 @@ export class ShippingFeeService {
         shippingFee: input.overrideFee!,
         weightSurcharge: 0,
         channelMultiplier: 1,
+        breakdown: {
+          baseFee: input.overrideFee!,
+          weightSurcharge: 0,
+          distanceFee: 0,
+          serviceMultiplier: 1,
+          channelMultiplier: 1,
+          partnerId: input.partnerId,
+        },
       };
     }
 
-    const baseFee = (await this.settingsService.get<number>('shipping.baseFee', 30000)) ?? 30000;
-    const perKgFee = (await this.settingsService.get<number>('shipping.weightRate', 10000)) ?? 10000;
-    const freeThreshold = (await this.settingsService.get<number>('shipping.freeThreshold', 0)) ?? 0;
+    const defaultBaseFee =
+      (await this.settingsService.get<number>('shipping.baseFee', 30000)) ?? 30000;
+    const defaultWeightRate =
+      (await this.settingsService.get<number>('shipping.weightRate', 10000)) ?? 10000;
+    const partnerRules =
+      (await this.settingsService.get<Record<string, ShippingPartnerRule>>(
+        'shipping.partners',
+        {},
+      )) ?? {};
+    const partnerRule = input.partnerId
+      ? partnerRules[input.partnerId]
+      : undefined;
+
+    const baseFee = partnerRule?.baseFee ?? defaultBaseFee;
+    const weightRate = partnerRule?.weightRate ?? defaultWeightRate;
+    const distanceRate = partnerRule?.distanceRate ?? 0;
+
+    const weightKg = Math.ceil(Math.max(0, Number(input.weight ?? 0)) / 1000);
+    const weightSurcharge = weightKg * weightRate;
+    const distanceFee = Math.max(0, Number(input.distanceKm ?? 0)) * distanceRate;
+
+    let calculated = baseFee + weightSurcharge + distanceFee;
+
+    const serviceType = input.serviceType ?? 'standard';
+    const serviceMultiplier =
+      partnerRule?.serviceTypes?.[serviceType]?.multiplier ?? 1;
+    calculated *= serviceMultiplier;
+
     const channelMultipliers =
-      (await this.settingsService.get<Record<string, number>>('shipping.channelMultipliers', {})) ?? {};
+      (await this.settingsService.get<Record<string, number>>(
+        'shipping.channelMultipliers',
+        {},
+      )) ?? {};
+    const channelMultiplier =
+      input.channel && channelMultipliers[input.channel]
+        ? channelMultipliers[input.channel]
+        : 1;
 
-    const weight = Math.max(0, Number(input.weight ?? 0));
-    const weightKg = Math.ceil(weight / 1000);
-    const weightSurcharge = weightKg * perKgFee;
-    const channelMultiplier = input.channel && channelMultipliers[input.channel]
-      ? channelMultipliers[input.channel]
-      : 1;
+    calculated *= channelMultiplier;
 
-    let calculated = baseFee + weightSurcharge;
-
-    if (channelMultiplier !== 1) {
-      calculated = Math.round(calculated * channelMultiplier);
-    }
-
-    if (input.channel && freeThreshold > 0 && channelMultipliers[input.channel]) {
-      // the freeThreshold is treated as an override for channels with mapping
-      if (calculated >= freeThreshold) {
-        calculated = 0;
-      }
-    }
+    const shippingFee = Math.max(0, Math.round(calculated));
 
     return {
-      shippingFee: calculated,
+      shippingFee,
       weightSurcharge,
       channelMultiplier,
+      breakdown: {
+        baseFee,
+        weightSurcharge,
+        distanceFee,
+        serviceMultiplier,
+        channelMultiplier,
+        partnerId: input.partnerId,
+      },
     };
   }
 }

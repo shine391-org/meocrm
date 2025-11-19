@@ -1,566 +1,85 @@
-# MeoCRM - Agent Operations Manual
+# AGENT WORKFLOW - Quy trình làm việc với AGENT
 
-**Consolidated guide for AI agents (Claude/Jules) working on MeoCRM project**
-
----
-
-## Quick Navigation
-
-| Section | For When |
-|---------|----------|
-| [1. Onboarding](#1-onboarding) | First time setup |
-| [2. Daily Workflow](#2-daily-workflow-option-3-claude-solo) | Starting a task |
-| [3. Testing](#3-testing) | Writing/running tests |
-| [4. Service-Specific](#4-service-specific-context) | Backend or Frontend work |
-| [5. 10 Development Lessons](#5-development-lessons-checklist) | Before every commit |
+Tài liệu này định nghĩa quy trình làm việc tinh gọn giữa **Bạn** (người dùng) và **AGENT** (tôi), tập trung vào việc sử dụng `TASK_DATABASE.md` để theo dõi công việc chi tiết.
 
 ---
 
-## 1. Onboarding
+## 🎭 Vai trò
 
-### Initial Setup
-```bash
-./setup-jules-vm.sh
+### Bạn (User)
+- ✅ **Giao việc:** Cung cấp nhiệm vụ từ `ROADMAP.md`.
+- ✅ **Review:** Xem xét code, kết quả kiểm thử, và phê duyệt.
+- ✅ **Quyết định:** Đưa ra các quyết định về logic nghiệp vụ.
 
-# Copy environment files
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.local.example apps/web/.env.local
-```
-
-### Essential Reading (Load in Order)
-| Priority | File | Purpose | Size |
-|----------|------|---------|------|
-| 🔴 1 | [WORKFLOW-SIMPLE.md](WORKFLOW-SIMPLE.md) | Daily workflow | 5 min |
-| 🔴 2 | [ROADMAP.md](ROADMAP.md) | Current tasks (91/187 complete) | 10 min |
-| 🟡 3 | [DEVELOPMENT_LESSONS_LEARNED.md](DEVELOPMENT_LESSONS_LEARNED.md) | 10 coding rules | 5 min |
-| 🟡 4 | [docs/essential/01_BUSINESS_LOGIC.md](docs/essential/01_BUSINESS_LOGIC.md) | Business rules | 15 min |
-| 🟢 5 | [docs/essential/ENVIRONMENT.md](docs/essential/ENVIRONMENT.md) | Ports, DB, Redis | 5 min |
-
-**Total onboarding:** ~40 minutes
+### AGENT (Tôi)
+- ✅ **Phân tích:** Đọc và hiểu yêu cầu, phân tích mã nguồn.
+- ✅ **Lập kế hoạch:** Trình bày kế hoạch thực thi chi tiết.
+- ✅ **Thực thi & Kiểm thử:** Viết mã, sửa lỗi, và viết/chạy các bài kiểm thử.
+- ✅ **Cập nhật & Báo cáo:** Ghi lại tiến trình vào `TASK_DATABASE.md` và báo cáo cho bạn.
 
 ---
 
-## 2. Daily Workflow (Option 3: Claude Solo)
+## 🔄 Quy trình làm việc 5 bước tối ưu
 
-### Principle: "Claude Builds, Jules Validates"
+### Bước 1: GIAO VIỆC (Bạn)
+Bạn bắt đầu bằng cách chỉ định một `TASK-ID` từ `docs/reference/TASK_DATABASE.md`.
 
+**Mẫu giao việc:**
 ```
-Phase 1: PLAN (You + Claude)
-    ↓
-Phase 2-4: CLAUDE SOLO
-    - Implement
-    - Test
-    - Document
-    - Push to feature branch
-    ↓
-Phase 5: JULES CI/CD
-    - Auto-checkout branch
-    - Run tests in VM
-    - Report results
-    ↓
-Phase 6: MERGE (You)
-    - Review PR + Jules report
-    - Merge if green
+Nhiệm vụ: [TASK-ID] - [Tên nhiệm vụ]
 ```
 
-### Phase 1: PLAN (5-15 min)
+### Bước 2: LÊN KẾ HOẠCH (AGENT)
+Tôi sẽ phân tích nhiệm vụ dựa trên `TASK-ID` đã cho.
 
-**You provide:**
+1.  Mở `docs/reference/TASK_DATABASE.md` và tìm đến mục `[TASK-ID]`.
+2.  Đọc kỹ phần **Vấn đề** và **Acceptance Criteria**.
+3.  Đọc các tài liệu liên quan được liệt kê trong `📚 Business Logic liên quan`.
+4.  Trình bày kế hoạch thực thi chi tiết.
+
+### Bước 3: THỰC THI & KIỂM THỬ (AGENT)
+Tôi sẽ viết mã và kiểm thử.
+
+1.  Tạo một nhánh (branch) mới cho nhiệm vụ (ví dụ: `feature/ORD-010-fix-inventory-bug`).
+2.  Viết hoặc sửa đổi mã nguồn.
+3.  Viết kiểm thử (unit/integration test) song song.
+4.  Chạy kiểm thử liên tục và **đảm bảo tất cả các bài kiểm thử đều PASS** trước khi kết thúc.
+5.  Commit mã nguồn với một thông điệp rõ ràng, có chứa `TASK-ID`.
+
+### Bước 4: BÁO CÁO & XIN REVIEW (AGENT)
+Sau khi hoàn thành, tôi sẽ báo cáo và yêu cầu bạn review.
+
+**Đầu ra của tôi:**
 ```
-Task: [Feature name from ROADMAP.md]
-Context: [ROADMAP line reference, Business Logic section]
-Priority: [High/Medium/Low]
+✅ Hoàn thành: [TASK-ID] - [Tên nhiệm vụ]
+
+Các thay đổi:
+- `apps/api/src/orders/orders.service.ts`
+- `apps/api/src/inventory/inventory.service.ts`
+
+Kết quả kiểm thử:
+- `orders.service.spec.ts` ...... 2/2 tests passed
+
+Mã nguồn đã sẵn sàng để bạn xem xét tại branch `feature/ORD-010-fix-inventory-bug`.
 ```
 
-**Claude loads context:**
-1. ROADMAP.md task details
-2. Relevant docs (Business Logic, API Reference)
-3. DEVELOPMENT_LESSONS_LEARNED.md
-4. Similar existing code patterns
+### Bước 5: CẬP NHẬT CƠ SỞ DỮ LIỆU NHIỆM VỤ (AGENT)
+Đây là bước cuối cùng để ghi lại tiến trình một cách tập trung.
 
-**Handoff:** Claude confirms understanding → proceed
+1.  **Cập nhật `ROADMAP.md`**: Thay đổi trạng thái chung của module nếu cần.
+2.  **Cập nhật `docs/reference/TASK_DATABASE.md`**:
+    *   Tìm đến mục `[TASK-ID]`.
+    *   Thay đổi trạng thái của nhiệm vụ (ví dụ: `⏳ Todo` -> `🔄 In Progress` hoặc `🔄 In Progress` -> `✅ Completed`).
+    *   **Thêm một mục log chi tiết vào cuối phần mô tả của nhiệm vụ đó.**
+
+    **Mẫu cập nhật log trong `TASK_DATABASE.md`:**
+    ```markdown
+    - **Cập nhật [YYYY-MM-DD]:**
+      - **Hành động:** Hoàn thành việc sửa lỗi [mô tả ngắn]. Tất cả các unit test liên quan đã pass.
+      - **Commit:** `[link tới commit hoặc commit hash]`
+      - **Trạng thái:** Chờ review.
+    ```
+3.  **Thông báo kết thúc:** "Tôi đã hoàn thành, cập nhật log công việc vào TASK_DATABASE và sẵn sàng cho chỉ dẫn tiếp theo."
 
 ---
-
-### Phase 2-4: CLAUDE SOLO (1-8h depending on complexity)
-
-#### Step 1: Create Branch
-```bash
-git checkout -b feature/TASK-NAME
-```
-
-#### Step 2: Implement Code
-
-**Context loading strategy:**
-- Simple CRUD: ~80 KB (WORKFLOW + ROADMAP + similar code)
-- Medium module: ~170 KB (+ Business Logic + Schema)
-- Complex feature: ~300 KB (+ Integration + Testing guides)
-
-**Pre-coding checklist (DEVELOPMENT_LESSONS_LEARNED.md):**
-- [ ] **Lesson #1:** Response format `{ data: T }` or `{ data: T[], meta }`
-- [ ] **Lesson #2:** URL prefix `/api` (global prefix set)
-- [ ] **Lesson #3:** Error format `{code, message, traceId}`
-- [ ] **Lesson #6:** OrganizationGuard on all endpoints
-- [ ] **Lesson #7:** Soft delete with `deletedAt`
-- [ ] **Lesson #9:** No hardcoded values (use Settings)
-- [ ] **Lesson #10:** Consistent patterns
-
-#### Step 3: Write Tests
-
-**Coverage target:** ≥80%
-
-**Test structure:**
-```typescript
-describe('ModuleName', () => {
-  // Happy path
-  it('should work with valid data', async () => {
-    const result = await service.create(dto, orgId);
-    expect(result.data).toHaveProperty('id');
-  });
-
-  // Error cases
-  it('should throw when organizationId missing', async () => {
-    await expect(service.create(dto, null)).rejects.toThrow();
-  });
-
-  // Multi-tenant isolation
-  it('should not access other org data', async () => {
-    const result = await service.findAll(otherOrgId);
-    expect(result.data).toHaveLength(0);
-  });
-});
-```
-
-**Run tests:**
-```bash
-# API tests
-pnpm --filter @meocrm/api test
-
-# Web tests
-pnpm --filter @meocrm/web test
-
-# All tests
-pnpm -w test
-```
-
-#### Step 4: Update Docs
-
-In same commit:
-- [ ] ROADMAP.md - Mark task completed
-- [ ] docs/reference/04_API_REFERENCE.md - Add endpoints (if new)
-- [ ] CHANGELOG.md - Add entry under [Unreleased]
-
-#### Step 5: Commit & Push
-
-**Commit message format:**
-```bash
-git commit -m "feat(module): description
-
-- Detail 1
-- Detail 2
-- Follow DEVELOPMENT_LESSONS_LEARNED.md
-
-Implements: TASK-ID
-Related: ROADMAP.md lines X-Y
-
-🤖 Generated by Claude Code"
-```
-
-```bash
-git push origin feature/TASK-NAME
-```
-
-#### Step 6: Create PR
-
-```bash
-gh pr create \
-  --title "feat(module): description (TASK-ID)" \
-  --base dev \
-  --body "$(cat <<'EOF'
-## Summary
-[Brief description]
-
-## Changes
-- **Component/Service** (X lines)
-  - Feature 1
-  - Feature 2
-
-## DEVELOPMENT_LESSONS_LEARNED.md Compliance
-- [x] Lesson #1: Response format
-- [x] Lesson #6: OrganizationGuard
-- [x] Lesson #9: No hardcoded values
-
-## Documentation Updates
-- [x] ROADMAP.md updated
-- [x] API_REFERENCE.md updated (if applicable)
-
-## Testing
-Local tests:
-```
-✅ module.service.spec.ts (X tests passed)
-```
-
-**⚠️ Awaiting Jules CI/CD validation**
-
-## Related
-- Implements: TASK-ID from ROADMAP.md
-- Blocks: [other tasks]
-
-🤖 Generated by Claude Code
-EOF
-)" \
-  --label "needs-vm-validation"
-```
-
----
-
-### Phase 5: JULES CI/CD (15-45 min)
-
-**Trigger:** You tell Jules "Test PR #123"
-
-**Jules runs:**
-```bash
-cd /path/to/meocrm
-bash jules-ci.sh 123
-```
-
-**Jules posts to PR:**
-- ✅/❌ Build status
-- ✅/❌ Test results
-- Coverage report
-- Approval/Changes requested
-
-**If tests fail:**
-- Claude reviews errors
-- Claude fixes in new commit
-- Jules re-runs validation
-
----
-
-### Phase 6: MERGE (You)
-
-**Prerequisites:**
-- ✅ PR created by Claude
-- ✅ Jules CI/CD green
-- ✅ Code review done
-
-**Actions:**
-1. Review PR on GitHub
-2. Verify ROADMAP.md updated
-3. Click "Merge pull request"
-4. Delete branch
-
-**Post-merge:**
-```bash
-git checkout dev
-git pull origin dev
-git branch -d feature/TASK-NAME
-```
-
----
-
-## 3. Testing
-
-### Test Commands
-
-```bash
-# API service
-pnpm --filter @meocrm/api test
-
-# Web service
-pnpm --filter @meocrm/web test
-
-# All tests
-pnpm -w test
-
-# With coverage
-pnpm -w test --coverage
-
-# E2E tests
-pnpm test:e2e
-```
-
-### Testing Requirements
-
-**Coverage target:** ≥80% (CI fails if lower)
-
-**Test pyramid:**
-- Unit tests: 70%
-- Integration tests: 20%
-- E2E tests: 10%
-
-**Critical test scenarios:**
-- ✅ Happy path
-- ✅ Error cases (validation, auth, etc.)
-- ✅ Multi-tenant isolation
-- ✅ Soft delete behavior
-
-**Golden E2E flow:**
-```
-Login → Create Product → Create POS Order → Verify Stock Decreased
-```
-
-See [docs/guides/testing/Strategy-&-Coverage.md](docs/guides/testing/Strategy-&-Coverage.md) for details.
-
----
-
-## 4. Service-Specific Context
-
-### 4.1 Backend (@meocrm/api)
-
-**Framework:** NestJS
-
-**Key Rules:**
-- **Multi-tenant security:** ALL database queries MUST filter by `organizationId`
-- **PrismaService:** Use for all database access
-- **OrganizationGuard:** Apply to all controllers (Lesson #6)
-
-**Architecture:**
-```
-Controller (HTTP layer)
-    ↓
-Service (Business logic)
-    ↓
-PrismaService (Database)
-```
-
-**Testing:**
-```bash
-pnpm --filter @meocrm/api test
-```
-
-**Key docs:**
-- [docs/reference/04_API_REFERENCE.md](docs/reference/04_API_REFERENCE.md)
-- [docs/essential/03_DATABASE_SCHEMA.md](docs/essential/03_DATABASE_SCHEMA.md)
-- [docs/essential/01_BUSINESS_LOGIC.md](docs/essential/01_BUSINESS_LOGIC.md)
-
----
-
-### 4.2 Frontend (@meocrm/web)
-
-**Framework:** Next.js (App Router)
-
-**Key Rules:**
-- **UI Components:** Use shadcn/ui components from `components/ui`
-- **State Management:** React Query for server state
-- **API Communication:** Functions in `lib/api/`
-- **Server Actions:** Use for mutations (Lesson #8)
-- **No client redirects:** Server-side only (Lesson #4)
-
-**Architecture:**
-```
-Page (App Router)
-    ↓
-Server Actions (Mutations)
-    ↓
-API Client (lib/api/)
-    ↓
-Backend API
-```
-
-**Testing:**
-```bash
-pnpm --filter @meocrm/web test
-```
-
-**Key docs:**
-- [docs/reference/04_API_REFERENCE.md](docs/reference/04_API_REFERENCE.md) (API endpoints)
-
----
-
-## 5. Development Lessons Checklist
-
-**Use before EVERY commit:**
-
-### Code Quality
-- [ ] **#1:** Response format `{ data: T }` or `{ data: T[], meta }`
-- [ ] **#2:** URL prefix `/api` (global prefix set)
-- [ ] **#3:** Error format `{code, message, traceId}`
-- [ ] **#4:** No Next.js client redirects (server-side only)
-- [ ] **#5:** Use Prisma generated types
-- [ ] **#6:** OrganizationGuard on all endpoints
-- [ ] **#7:** Soft delete with `deletedAt`
-- [ ] **#8:** Server actions for Next.js mutations
-- [ ] **#9:** No hardcoded values (use Settings)
-- [ ] **#10:** Consistent patterns across modules
-
-### Testing
-- [ ] Unit tests written
-- [ ] Integration tests written
-- [ ] Coverage ≥80%
-- [ ] Multi-tenant isolation tested
-
-### Documentation
-- [ ] ROADMAP.md updated
-- [ ] API_REFERENCE.md updated (if new endpoints)
-- [ ] CHANGELOG.md updated
-
-### Git
-- [ ] Commit message follows format
-- [ ] Branch name descriptive
-- [ ] PR description detailed
-
-**If ANY checkbox unchecked → DO NOT PUSH**
-
-See [DEVELOPMENT_LESSONS_LEARNED.md](DEVELOPMENT_LESSONS_LEARNED.md) for full details.
-
----
-
-## 6. Settings & Configuration
-
-**Core principle:** No hardcoded values (Lesson #9)
-
-**All settings-driven:**
-- Lead Priority rules
-- Commission calculations
-- Refund policies
-- Shipping calculations
-- Notification preferences
-
-**Where to configure:**
-- Settings console (Admin UI)
-- Seed config: [docs/guides/settings/README.md](docs/guides/settings/README.md)
-
-**In code:**
-```typescript
-// ❌ Bad - hardcoded
-const refundDeadline = 7; // days
-
-// ✅ Good - settings-driven
-const refundDeadline = await settingsService.get('refund.deadline', orgId);
-```
-
----
-
-## 7. Multi-Tenant Security
-
-**Critical rule:** Every database query MUST filter by `organizationId`
-
-### Backend (NestJS)
-
-**Prisma middleware auto-injects:**
-```typescript
-// Automatically filtered by organizationId
-const products = await prisma.product.findMany();
-```
-
-**Raw SQL must manually filter:**
-```sql
-SELECT * FROM products
-WHERE organization_id = $1  -- REQUIRED
-```
-
-**OrganizationGuard:**
-```typescript
-@UseGuards(OrganizationGuard)
-@Controller('products')
-export class ProductsController {
-  // All endpoints automatically have organizationId
-}
-```
-
-### Frontend (Next.js)
-
-**Server actions auto-inject organizationId:**
-```typescript
-export async function createProduct(data: ProductDto) {
-  // organizationId from session
-  return api.post('/api/products', data);
-}
-```
-
----
-
-## 8. Error Handling
-
-**Standard error format (Lesson #3):**
-```typescript
-{
-  code: 'PRODUCT_NOT_FOUND',
-  message: 'Product not found',
-  traceId: 'abc-123-def',
-  details?: { ... }  // optional
-}
-```
-
-**OpenAPI schema:** `components.schemas.Error`
-
----
-
-## 9. Time Estimates
-
-| Task Complexity | Phase 1 (Plan) | Phase 2-4 (Claude) | Phase 5 (Jules) | Total |
-|----------------|---------------|-------------------|----------------|-------|
-| **Simple** (CRUD single entity) | 5-10 min | 1-1.5h | 15-20 min | **1.5-2h** |
-| **Medium** (Full module + relations) | 10-15 min | 3-4h | 20-30 min | **3.5-5h** |
-| **Complex** (Multi-module + logic) | 15-20 min | 6-8h | 30-45 min | **7-9h** |
-
-**Daily throughput (8h):**
-- Simple: 3-4 tasks/day
-- Medium: 1-2 tasks/day
-- Complex: 1 task/day
-
----
-
-## 10. Troubleshooting
-
-See [docs/reference/06_TROUBLESHOOTING.md](docs/reference/06_TROUBLESHOOTING.md) for:
-- Environment issues
-- Docker/Postgres/Redis errors
-- Test failures
-- Build errors
-
----
-
-## 11. Quick Commands
-
-```bash
-# Development
-pnpm --filter @meocrm/api dev     # Backend (port 2003)
-pnpm --filter @meocrm/web dev     # Frontend (port 2004)
-
-# Database
-pnpm --filter @meocrm/api prisma:generate  # Generate Prisma client
-pnpm --filter @meocrm/api prisma:migrate   # Run migrations
-pnpm --filter @meocrm/api prisma:reset     # Reset DB (local only)
-
-# Testing
-pnpm --filter @meocrm/api test    # API tests
-pnpm --filter @meocrm/web test    # Web tests
-pnpm -w test                      # All tests
-pnpm test:e2e                     # E2E tests
-
-# Build
-pnpm build                        # Build all packages
-
-# Git workflow
-git checkout -b feature/task-name
-git add .
-git commit -m "feat: description"
-git push origin feature/task-name
-gh pr create
-```
-
----
-
-## 12. Success Metrics
-
-Track weekly:
-- Tasks completed: 15-20/week
-- First-time-right rate: ≥90%
-- Average task time: <3h (simple), <5h (medium)
-- Rework iterations: ≤1 per task
-- Test coverage: ≥80%
-- Conflicts: 0
-
----
-
-## Related Files
-
-- **Daily workflow:** [WORKFLOW-SIMPLE.md](WORKFLOW-SIMPLE.md)
-- **Task tracking:** [ROADMAP.md](ROADMAP.md)
-- **10 coding rules:** [DEVELOPMENT_LESSONS_LEARNED.md](DEVELOPMENT_LESSONS_LEARNED.md)
-- **Business logic:** [docs/essential/01_BUSINESS_LOGIC.md](docs/essential/01_BUSINESS_LOGIC.md)
-- **Database schema:** [docs/essential/03_DATABASE_SCHEMA.md](docs/essential/03_DATABASE_SCHEMA.md)
-- **API reference:** [docs/reference/04_API_REFERENCE.md](docs/reference/04_API_REFERENCE.md)
-- **Testing guide:** [docs/guides/testing/Strategy-&-Coverage.md](docs/guides/testing/Strategy-&-Coverage.md)
+Quy trình này đảm bảo tất cả thông tin về một nhiệm vụ được lưu trữ tại một nơi duy nhất (`TASK_DATABASE.md`), giúp việc theo dõi và bàn giao trở nên dễ dàng.

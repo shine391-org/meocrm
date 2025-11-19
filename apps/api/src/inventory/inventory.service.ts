@@ -5,18 +5,33 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { AdjustmentType, AuditAction, OrderInventoryReservationStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { GetInventoryDto } from './dto/get-inventory.dto';
 import { AdjustStockDto, StockAdjustmentReason } from './dto/adjust-stock.dto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { RequestContextService } from '../common/context/request-context.service';
+
+type PrismaTransactionalClient = Prisma.TransactionClient;
+
+type ReservationActorInput = string | Partial<InventoryReservationActor> | undefined;
+
+interface InventoryReservationActor {
+  userId: string;
+  traceId?: string;
+}
 
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   /**
    * INV-002: Get inventory by branch with pagination and filters
@@ -317,7 +332,7 @@ export class InventoryService {
       const adjustmentType = quantity > 0 ? 'INCREASE' : 'DECREASE';
       const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
 
-      await tx.stockAdjustment.create({
+      const adjustment = await tx.stockAdjustment.create({
         data: {
           organizationId,
           code: `ADJ-${uniqueSuffix}`,
@@ -338,6 +353,20 @@ export class InventoryService {
               },
             ],
           },
+        },
+      });
+
+      await this.logInventoryAudit({
+        auditAction: AuditAction.CREATE,
+        organizationId,
+        userId,
+        entityId: adjustment.id,
+        entity: 'inventory.adjustment',
+        payload: {
+          productId,
+          branchId,
+          quantity,
+          reason,
         },
       });
 
@@ -529,7 +558,7 @@ export class InventoryService {
 
         // Log transactions for both branches using StockAdjustment
 
-        await Promise.all([
+        const [sourceAdjustment, destinationAdjustment] = await Promise.all([
           // Source branch (OUT)
           tx.stockAdjustment.create({
             data: {
@@ -580,6 +609,48 @@ export class InventoryService {
           }),
         ]);
 
+        await Promise.all([
+          this.logInventoryAudit({
+            auditAction: AuditAction.CREATE,
+            organizationId,
+            userId,
+            entityId: sourceAdjustment.id,
+            entity: 'inventory.adjustment',
+            payload: {
+              transferId: transfer.id,
+              productId,
+              branchId: fromBranchId,
+              quantity: -quantity,
+            },
+          }),
+          this.logInventoryAudit({
+            auditAction: AuditAction.CREATE,
+            organizationId,
+            userId,
+            entityId: destinationAdjustment.id,
+            entity: 'inventory.adjustment',
+            payload: {
+              transferId: transfer.id,
+              productId,
+              branchId: toBranchId,
+              quantity,
+            },
+          }),
+          this.logInventoryAudit({
+            auditAction: AuditAction.CREATE,
+            organizationId,
+            userId,
+            entityId: transfer.id,
+            entity: 'inventory.transfer',
+            payload: {
+              productId,
+              fromBranchId,
+              toBranchId,
+              quantity,
+            },
+          }),
+        ]);
+
         return { data: transfer };
       } catch (error) {
         if (error instanceof BadRequestException) {
@@ -595,43 +666,212 @@ export class InventoryService {
    * INV-006: Stock return on order cancellation
    * Called by OrdersService when order status changes to CANCELLED
    */
-  async returnStockOnOrderCancel(orderId: string, organizationId: string, _userId: string) {
-    // Get order with items
-    const order = await this.prisma.order.findFirst({
-      where: { id: orderId, organizationId },
-      include: {
-        items: {
-          include: {
-            product: true,
-          },
+  async returnStockOnOrderCancel(
+    orderId: string,
+    organizationId: string,
+    actorInput?: ReservationActorInput,
+  ) {
+    const actor = this.normalizeReservationActor(actorInput);
+
+    return this.prisma.$transaction(async (tx) => {
+      const order = await this.loadOrderInventoryContext(tx, orderId, organizationId);
+
+      const reservations = await tx.orderInventoryReservation.findMany({
+        where: {
+          orderId,
+          organizationId,
+          status: OrderInventoryReservationStatus.RESERVED,
         },
-      },
+      });
+
+      if (!reservations.length) {
+        return { data: { restoredItems: 0 } };
+      }
+
+      const adjustmentItems: Prisma.StockAdjustmentItemCreateWithoutAdjustmentInput[] = [];
+      for (const reservation of reservations) {
+        const { oldQuantity, newQuantity } = await this.applyInventoryIncrement(
+          tx,
+          reservation.productId,
+          reservation.branchId,
+          reservation.quantity,
+        );
+
+        if (reservation.variantId && reservation.variantReservedQuantity > 0) {
+          await tx.productVariant.update({
+            where: { id: reservation.variantId },
+            data: { stock: { increment: reservation.variantReservedQuantity } },
+          });
+        }
+
+        adjustmentItems.push({
+          productId: reservation.productId,
+          oldQuantity,
+          newQuantity,
+          difference: reservation.quantity,
+        });
+      }
+
+      const adjustment = await tx.stockAdjustment.create({
+        data: this.buildOrderStockAdjustment({
+          organizationId,
+          branchId: order.branchId!,
+          orderCode: order.code,
+          actorId: actor.userId,
+          traceId: actor.traceId,
+          reason: StockAdjustmentReason.ORDER_CANCELLED,
+          type: 'INCREASE',
+          items: adjustmentItems,
+        }),
+      });
+
+      await tx.orderInventoryReservation.updateMany({
+        where: {
+          id: { in: reservations.map((reservation) => reservation.id) },
+        },
+        data: {
+          status: OrderInventoryReservationStatus.RETURNED,
+          releaseAdjustmentId: adjustment.id,
+        },
+      });
+
+      await this.logInventoryAudit({
+        auditAction: AuditAction.CREATE,
+        organizationId,
+        userId: actor.userId,
+        entityId: adjustment.id,
+        entity: 'inventory.adjustment',
+        payload: {
+          orderId: order.id,
+          branchId: order.branchId,
+          itemsRestored: reservations.length,
+          action: 'return',
+        },
+      });
+
+      return {
+        data: {
+          restoredItems: reservations.length,
+          adjustmentId: adjustment.id,
+        },
+      };
     });
-
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
-
-    // NOTE: Order model now has branchId field (schema updated 2025-11-16)
-    // When OrdersModule is implemented, use order.branchId for inventory integration
-    if (!order.branchId) {
-      throw new BadRequestException('Order must have branchId for stock return');
-    }
-
-    return { message: 'Stock return functionality pending OrdersModule implementation' };
   }
 
   /**
    * Deduct stock when order moves to PROCESSING status
    * Called by OrdersService
    */
-  async deductStockOnOrderProcessing(orderId: string, organizationId: string, _userId: string) {
-    const order = await this.prisma.order.findFirst({
-      where: { id: orderId, organizationId },
+  async deductStockOnOrderProcessing(
+    orderId: string,
+    organizationId: string,
+    actorInput?: ReservationActorInput,
+  ) {
+    const actor = this.normalizeReservationActor(actorInput);
+
+    return this.prisma.$transaction(async (tx) => {
+      const order = await this.loadOrderInventoryContext(tx, orderId, organizationId);
+      await this.ensureNoActiveReservation(tx, orderId, organizationId);
+
+      if (!order.items.length) {
+        throw new BadRequestException('Order has no items to reserve');
+      }
+
+      const adjustmentItems: Prisma.StockAdjustmentItemCreateWithoutAdjustmentInput[] = [];
+      const reservations: Prisma.OrderInventoryReservationCreateManyInput[] = [];
+
+      for (const item of order.items) {
+        const { oldQuantity, newQuantity } = await this.applyInventoryDecrement(
+          tx,
+          item.productId,
+          order.branchId!,
+          item.quantity,
+          item.product?.name,
+        );
+
+        const variantReservedQuantity = await this.reserveVariantStock(
+          tx,
+          item.variantId,
+          item.quantity,
+          organizationId,
+          order.code,
+        );
+
+        adjustmentItems.push({
+          productId: item.productId,
+          oldQuantity,
+          newQuantity,
+          difference: -item.quantity,
+        });
+
+        reservations.push({
+          orderId: order.id,
+          orderItemId: item.id,
+          branchId: order.branchId!,
+          productId: item.productId,
+          variantId: item.variantId ?? undefined,
+          quantity: item.quantity,
+          variantReservedQuantity,
+          organizationId,
+          status: OrderInventoryReservationStatus.RESERVED,
+        });
+      }
+
+      const adjustment = await tx.stockAdjustment.create({
+        data: this.buildOrderStockAdjustment({
+          organizationId,
+          branchId: order.branchId!,
+          orderCode: order.code,
+          actorId: actor.userId,
+          traceId: actor.traceId,
+          reason: StockAdjustmentReason.ORDER_RESERVATION,
+          type: 'DECREASE',
+          items: adjustmentItems,
+        }),
+      });
+
+      await tx.orderInventoryReservation.createMany({
+        data: reservations.map((reservation) => ({
+          ...reservation,
+          reservationAdjustmentId: adjustment.id,
+        })),
+      });
+
+      await this.logInventoryAudit({
+        auditAction: AuditAction.CREATE,
+        organizationId,
+        userId: actor.userId,
+        entityId: adjustment.id,
+        entity: 'inventory.adjustment',
+        payload: {
+          orderId: order.id,
+          branchId: order.branchId,
+          itemsReserved: reservations.length,
+          action: 'reserve',
+        },
+      });
+
+      return {
+        data: {
+          reservedItems: reservations.length,
+          adjustmentId: adjustment.id,
+        },
+      };
+    });
+  }
+
+  private async loadOrderInventoryContext(
+    prisma: PrismaTransactionalClient,
+    orderId: string,
+    organizationId: string,
+  ) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, organizationId, deletedAt: null },
       include: {
         items: {
           include: {
-            product: true,
+            product: { select: { id: true, name: true } },
+            variant: { select: { id: true, stock: true } },
           },
         },
       },
@@ -641,13 +881,205 @@ export class InventoryService {
       throw new NotFoundException('Order not found');
     }
 
-    // NOTE: Order model now has branchId field (schema updated 2025-11-16)
-    // When OrdersModule is implemented, use order.branchId for inventory integration
     if (!order.branchId) {
-      throw new BadRequestException('Order must have branchId for stock deduction');
+      throw new BadRequestException('Order must have branchId for inventory integration');
     }
 
-    return { message: 'Stock deduction functionality pending OrdersModule implementation' };
+    return order;
+  }
+
+  private normalizeReservationActor(actorInput?: ReservationActorInput): InventoryReservationActor {
+    if (!actorInput) {
+      return { userId: 'system' };
+    }
+
+    if (typeof actorInput === 'string') {
+      return { userId: actorInput };
+    }
+
+    return {
+      userId: actorInput.userId ?? 'system',
+      traceId: actorInput.traceId,
+    };
+  }
+
+  private async ensureNoActiveReservation(
+    prisma: PrismaTransactionalClient,
+    orderId: string,
+    organizationId: string,
+  ) {
+    const activeReservations = await prisma.orderInventoryReservation.count({
+      where: {
+        orderId,
+        organizationId,
+        status: {
+          in: [
+            OrderInventoryReservationStatus.RESERVED,
+            OrderInventoryReservationStatus.RELEASED,
+          ],
+        },
+      },
+    });
+
+    if (activeReservations > 0) {
+      throw new BadRequestException('Stock has already been reserved for this order');
+    }
+  }
+
+  private async applyInventoryDecrement(
+    prisma: PrismaTransactionalClient,
+    productId: string,
+    branchId: string,
+    quantity: number,
+    productName?: string,
+  ) {
+    const inventory = await prisma.inventory.findUnique({
+      where: { productId_branchId: { productId, branchId } },
+    });
+
+    if (!inventory) {
+      throw new BadRequestException(
+        `Inventory not found for product ${productName ?? productId} at branch ${branchId}`,
+      );
+    }
+
+    if (inventory.quantity < quantity) {
+      throw new BadRequestException(
+        `Insufficient stock for ${productName ?? productId}. Requested ${quantity}, available ${inventory.quantity}`,
+      );
+    }
+
+    const updatedInventory = await prisma.inventory.update({
+      where: { productId_branchId: { productId, branchId } },
+      data: { quantity: { decrement: quantity } },
+    });
+
+    return { oldQuantity: inventory.quantity, newQuantity: updatedInventory.quantity };
+  }
+
+  private async applyInventoryIncrement(
+    prisma: PrismaTransactionalClient,
+    productId: string,
+    branchId: string,
+    quantity: number,
+  ) {
+    const inventory = await prisma.inventory.findUnique({
+      where: { productId_branchId: { productId, branchId } },
+    });
+
+    if (!inventory) {
+      const created = await prisma.inventory.create({
+        data: { productId, branchId, quantity },
+      });
+      return { oldQuantity: 0, newQuantity: created.quantity };
+    }
+
+    const updatedInventory = await prisma.inventory.update({
+      where: { productId_branchId: { productId, branchId } },
+      data: { quantity: { increment: quantity } },
+    });
+
+    return { oldQuantity: inventory.quantity, newQuantity: updatedInventory.quantity };
+  }
+
+  private async reserveVariantStock(
+    prisma: PrismaTransactionalClient,
+    variantId: string | null | undefined,
+    quantity: number,
+    organizationId: string,
+    orderCode: string,
+  ): Promise<number> {
+    if (!variantId || quantity <= 0) {
+      return 0;
+    }
+
+    const variant = await prisma.productVariant.findFirst({
+      where: { id: variantId, organizationId },
+      select: { id: true, stock: true },
+    });
+
+    if (!variant) {
+      throw new NotFoundException('Product variant not found for reservation');
+    }
+
+    const available = Number(variant.stock ?? 0);
+    const reservedQuantity = Math.min(available, quantity);
+
+    if (reservedQuantity <= 0) {
+      this.logger.warn(`Variant ${variantId} has no stock for order ${orderCode}`);
+      return 0;
+    }
+
+    await prisma.productVariant.update({
+      where: { id: variantId },
+      data: { stock: { decrement: reservedQuantity } },
+    });
+
+    if (reservedQuantity < quantity) {
+      this.logger.warn(
+        `Variant ${variantId} only reserved ${reservedQuantity}/${quantity} units for order ${orderCode}; falling back to branch inventory`,
+      );
+    }
+
+    return reservedQuantity;
+  }
+
+  private buildOrderStockAdjustment(params: {
+    organizationId: string;
+    branchId: string;
+    orderCode: string;
+    actorId: string;
+    traceId?: string;
+    reason: StockAdjustmentReason;
+    type: AdjustmentType;
+    items: Prisma.StockAdjustmentItemCreateWithoutAdjustmentInput[];
+  }): Prisma.StockAdjustmentCreateInput {
+    const uniqueSuffix = randomUUID().split('-')[0].toUpperCase();
+    const traceSegment = params.traceId ? ` trace:${params.traceId}` : '';
+    const actionLabel = params.type === 'DECREASE' ? 'reservation' : 'restock';
+
+    return {
+      organizationId: params.organizationId,
+      code: `ADJ-ORD-${uniqueSuffix}`,
+      branchId: params.branchId,
+      type: params.type,
+      reason: this.mapReasonToAdjustmentReason(params.reason),
+      notes: `Order ${params.orderCode} ${actionLabel} by ${params.actorId}${traceSegment}`,
+      adjustedBy: params.actorId,
+      adjustedAt: new Date(),
+      status: 'CONFIRMED',
+      items: {
+        create: params.items,
+      },
+    };
+  }
+
+  private async logInventoryAudit(params: {
+    auditAction: AuditAction;
+    organizationId: string;
+    userId: string;
+    entity: string;
+    entityId: string;
+    payload?: Record<string, unknown>;
+  }) {
+    try {
+      await this.auditLogService.log({
+        user: { id: params.userId, organizationId: params.organizationId },
+        entity: params.entity,
+        entityId: params.entityId,
+        action: params.entity,
+        auditAction: params.auditAction,
+        newValues: {
+          ...(params.payload ?? {}),
+          traceId: this.requestContext.getTraceId(),
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Inventory audit log failure for ${params.entityId}`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   /**
@@ -661,6 +1093,8 @@ export class InventoryService {
       [StockAdjustmentReason.FOUND]: 'Found extra inventory',
       [StockAdjustmentReason.RECOUNT]: 'Inventory recount',
       [StockAdjustmentReason.RETURN]: 'Customer return',
+      [StockAdjustmentReason.ORDER_RESERVATION]: 'Order reservation hold',
+      [StockAdjustmentReason.ORDER_CANCELLED]: 'Order cancellation restock',
       [StockAdjustmentReason.OTHER]: 'Other reason',
     };
     return reasonMap[reason] || reason;

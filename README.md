@@ -56,11 +56,10 @@
 
 ### 📚 Documentation Guide
 
-**For Claude/AI Agents:**
-- **Start here:** [docs/00_START_HERE.md](docs/00_START_HERE.md) - Fast context loading guide
-- **Every session:** Read [WORKFLOW-SIMPLE.md](WORKFLOW-SIMPLE.md) + [ROADMAP.md](ROADMAP.md)
-- **Operations manual:** [AGENTS.md](AGENTS.md) - Complete workflow & coding rules
-- **Coding rules:** [DEVELOPMENT_LESSONS_LEARNED.md](DEVELOPMENT_LESSONS_LEARNED.md) - 10 essential lessons
+**For AGENT:**
+- **Start here:** [docs/00_START_HERE.md](docs/00_START_HERE.md) - Hướng dẫn tải ngữ cảnh nhanh.
+- **Workflow:** [AGENTS.md](AGENTS.md) - Quy trình làm việc 5 bước.
+- **Coding Rules:** [DEVELOPMENT_LESSONS_LEARNED.md](DEVELOPMENT_LESSONS_LEARNED.md) - 10 bài học lập trình cần thiết.
 
 **For Humans:**
 - **Quick start:** This README → Setup → Run
@@ -159,7 +158,7 @@ PRISMA_HIDE_UPDATE_MESSAGE=true
 - [ ] Install workspace dependencies with `pnpm install`.
 - [ ] Configure env via Jules GUI profile (or Appendix B template for local machines). Never run `setup-jules-vm.sh` inside the VM.
 - [ ] Prebuild the API client with `pnpm --filter @meocrm/api-client build`.
-- [ ] Run `pnpm db:generate`, `pnpm db:push`, `pnpm db:seed`.
+- [ ] (Tùy chọn) Seed dữ liệu dev bằng `./scripts/seed-dev.sh` sau khi đặt biến `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` (xem docs/guides/frontend-development.md).
 - [ ] Start dev servers via `pnpm dev` (or split into `pnpm dev:api` / `pnpm dev:web`).
 
 ## 7. Environment Verification
@@ -193,9 +192,10 @@ echo "✅ All required tools available"
 ```bash
 pnpm install            # Install dependencies (monorepo aware)
 pnpm docker:dev         # Start PostgreSQL + Redis (containers only if needed)
-pnpm db:generate        # Generate Prisma client
-pnpm db:push            # Sync schema
-pnpm db:seed            # Seed development data
+# Seed nhanh cho frontend:
+#   export SEED_ADMIN_EMAIL=seed@example.com
+#   export SEED_ADMIN_PASSWORD=Passw0rd!
+#   ./scripts/seed-dev.sh
 ```
 > 🔔 Jules VM snapshot already runs PostgreSQL + Redis inside Docker. Do **not** install system services or rerun `setup-jules-vm.sh`; restart the provided containers if they stop.
 

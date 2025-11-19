@@ -4,16 +4,24 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { StockAdjustmentReason } from './dto/adjust-stock.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { RequestContextService } from '../common/context/request-context.service';
 
 describe('InventoryService', () => {
   let service: InventoryService;
   let prisma: DeepMockProxy<PrismaService>;
+  let auditLogService: { log: jest.Mock };
+  let requestContext: { getTraceId: jest.Mock };
 
   beforeEach(async () => {
+    auditLogService = { log: jest.fn().mockResolvedValue(undefined) };
+    requestContext = { getTraceId: jest.fn().mockReturnValue('trace-inventory') } as any;
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryService,
         { provide: PrismaService, useValue: mockDeep<PrismaService>() },
+        { provide: AuditLogService, useValue: auditLogService },
+        { provide: RequestContextService, useValue: requestContext },
       ],
     }).compile();
 
@@ -583,43 +591,74 @@ describe('InventoryService', () => {
   describe('deductStockOnOrderProcessing', () => {
     const mockOrder = {
       id: 'order-1',
+      code: 'ORD-001',
       organizationId: 'org-1',
       branchId: 'branch-1',
       items: [
         {
           id: 'item-1',
           productId: 'prod-1',
-          quantity: 5,
+          quantity: 3,
           product: { id: 'prod-1', name: 'Product 1', organizationId: 'org-1' },
+          variantId: 'variant-1',
         },
       ],
     };
 
     beforeEach(() => {
       prisma.order.findFirst.mockResolvedValue(mockOrder as any);
+      prisma.orderInventoryReservation.count.mockResolvedValue(0);
+      prisma.inventory.findUnique.mockResolvedValue({ quantity: 10 });
+      prisma.inventory.update.mockResolvedValue({ quantity: 7 });
+      prisma.productVariant.findFirst.mockResolvedValue({ id: 'variant-1', stock: 5 });
+      prisma.productVariant.update.mockResolvedValue({ id: 'variant-1' } as any);
+      prisma.stockAdjustment.create.mockResolvedValue({ id: 'adj-1' } as any);
+      prisma.orderInventoryReservation.createMany.mockResolvedValue({ count: 1 } as any);
     });
 
-    it('should return placeholder message (pending Orders module)', async () => {
+    it('reserves inventory, logs adjustment, and creates reservation rows', async () => {
       const result = await service.deductStockOnOrderProcessing('order-1', 'org-1', 'user-1');
 
-      expect(result.message).toContain('pending OrdersModule implementation');
-      expect(prisma.order.findFirst).toHaveBeenCalledWith({
-        where: { id: 'order-1', organizationId: 'org-1' },
-        include: {
-          items: {
-            include: {
-              product: true,
-            },
-          },
-        },
+      expect(prisma.inventory.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productId_branchId: { productId: 'prod-1', branchId: 'branch-1' } },
+          data: { quantity: { decrement: 3 } },
+        }),
+      );
+      expect(prisma.stockAdjustment.create).toHaveBeenCalled();
+      expect(prisma.orderInventoryReservation.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            orderItemId: 'item-1',
+            reservationAdjustmentId: 'adj-1',
+            variantReservedQuantity: 3,
+          }),
+        ],
       });
+      expect(result.data).toEqual({ reservedItems: 1, adjustmentId: 'adj-1' });
     });
 
-    it('should throw NotFoundException when order not found', async () => {
+    it('throws when stock is insufficient', async () => {
+      prisma.inventory.findUnique.mockResolvedValue({ quantity: 1 });
+
+      await expect(
+        service.deductStockOnOrderProcessing('order-1', 'org-1', 'user-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws when there are active reservations', async () => {
+      prisma.orderInventoryReservation.count.mockResolvedValue(1);
+
+      await expect(
+        service.deductStockOnOrderProcessing('order-1', 'org-1', 'user-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws NotFoundException when order does not exist', async () => {
       prisma.order.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.deductStockOnOrderProcessing('invalid', 'org-1', 'user-1'),
+        service.deductStockOnOrderProcessing('missing', 'org-1', 'user-1'),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -627,43 +666,68 @@ describe('InventoryService', () => {
   describe('returnStockOnOrderCancel', () => {
     const mockOrder = {
       id: 'order-1',
+      code: 'ORD-001',
       organizationId: 'org-1',
       branchId: 'branch-1',
-      items: [
-        {
-          id: 'item-1',
-          productId: 'prod-1',
-          quantity: 10,
-          product: { id: 'prod-1', name: 'Product 1', organizationId: 'org-1' },
-        },
-      ],
+      items: [],
     };
 
     beforeEach(() => {
       prisma.order.findFirst.mockResolvedValue(mockOrder as any);
+      prisma.orderInventoryReservation.findMany.mockResolvedValue([
+        {
+          id: 'res-1',
+          branchId: 'branch-1',
+          productId: 'prod-1',
+          quantity: 2,
+          variantId: 'variant-1',
+          variantReservedQuantity: 1,
+        },
+      ] as any);
+      prisma.inventory.findUnique.mockResolvedValue({ quantity: 3 });
+      prisma.inventory.update.mockResolvedValue({ quantity: 5 });
+      prisma.productVariant.update.mockResolvedValue({ id: 'variant-1' } as any);
+      prisma.stockAdjustment.create.mockResolvedValue({ id: 'adj-2' } as any);
+      prisma.orderInventoryReservation.updateMany.mockResolvedValue({ count: 1 } as any);
     });
 
-    it('should return placeholder message (pending Orders module)', async () => {
+    it('restores stock and marks reservations as returned', async () => {
       const result = await service.returnStockOnOrderCancel('order-1', 'org-1', 'user-1');
 
-      expect(result.message).toContain('pending OrdersModule implementation');
-      expect(prisma.order.findFirst).toHaveBeenCalledWith({
-        where: { id: 'order-1', organizationId: 'org-1' },
-        include: {
-          items: {
-            include: {
-              product: true,
-            },
-          },
+      expect(prisma.inventory.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productId_branchId: { productId: 'prod-1', branchId: 'branch-1' } },
+          data: { quantity: { increment: 2 } },
+        }),
+      );
+      expect(prisma.productVariant.update).toHaveBeenCalledWith({
+        where: { id: 'variant-1' },
+        data: { stock: { increment: 1 } },
+      });
+      expect(prisma.orderInventoryReservation.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['res-1'] } },
+        data: {
+          status: 'RETURNED',
+          releaseAdjustmentId: 'adj-2',
         },
       });
+      expect(result.data).toEqual({ restoredItems: 1, adjustmentId: 'adj-2' });
     });
 
-    it('should throw NotFoundException when order not found', async () => {
+    it('returns early when there is nothing to restore', async () => {
+      prisma.orderInventoryReservation.findMany.mockResolvedValue([]);
+
+      const result = await service.returnStockOnOrderCancel('order-1', 'org-1', 'user-1');
+
+      expect(result.data).toEqual({ restoredItems: 0 });
+      expect(prisma.inventory.update).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when order does not exist', async () => {
       prisma.order.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.returnStockOnOrderCancel('invalid', 'org-1', 'user-1'),
+        service.returnStockOnOrderCancel('missing', 'org-1', 'user-1'),
       ).rejects.toThrow(NotFoundException);
     });
   });

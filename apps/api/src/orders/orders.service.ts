@@ -5,15 +5,24 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateOrderDto, CreateOrderItemDto } from './dto/create-order.dto';
+import { CreateOrderDto, CreateOrderItemDto, ItemDiscountType } from './dto/create-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
-import { Prisma, OrderStatus, PaymentMethod, User } from '@prisma/client';
+import {
+  Prisma,
+  OrderStatus,
+  PaymentMethod,
+  User,
+  OrderInventoryReservationStatus,
+  AuditAction,
+} from '@prisma/client';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { PricingService } from './pricing.service';
 import { CustomerStatsService } from '../customers/services/customer-stats.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderWarning, OrderStatusChangedEvent } from './orders.types';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { RequestContextService } from '../common/context/request-context.service';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 type OrderFinancialInput = {
@@ -50,8 +59,9 @@ const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
     OrderStatus.SHIPPED,
     OrderStatus.COMPLETED,
     OrderStatus.CANCELLED,
+    OrderStatus.PENDING,
   ],
-  [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED],
+  [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED, OrderStatus.PENDING],
   [OrderStatus.DELIVERED]: [OrderStatus.COMPLETED],
   [OrderStatus.COMPLETED]: [],
   [OrderStatus.CANCELLED]: [],
@@ -69,6 +79,8 @@ export class OrdersService {
     private readonly pricingService: PricingService,
     private readonly eventEmitter: EventEmitter2,
     private readonly customerStatsService: CustomerStatsService,
+    private readonly auditLogService: AuditLogService,
+    private readonly requestContextService: RequestContextService,
   ) {}
 
   private readonly logger = new Logger(OrdersService.name);
@@ -126,17 +138,27 @@ export class OrdersService {
         );
       }
 
-      const { itemsData, subtotal, warnings } = await this.calculateOrderTotals(
+      const {
+        itemsData,
+        subtotal,
+        warnings,
+        taxableSubtotal,
+        itemDiscountTotal,
+      } = await this.calculateOrderTotals(
         dto.items,
         organizationId,
         prisma,
       );
 
+      const discount = Number(dto.discount ?? 0);
+
       const pricingResult = await this.pricingService.calculateTotals({
         channel: dto.channel,
         subtotal,
+        taxableSubtotal,
+        orderDiscount: discount,
+        itemDiscountTotal,
       });
-      const discount = Number(dto.discount ?? 0);
       if (discount < 0) {
         throw new BadRequestException('Discount must be zero or positive');
       }
@@ -198,6 +220,8 @@ export class OrdersService {
           status,
           completedAt: status === OrderStatus.COMPLETED ? new Date() : undefined,
           organizationId,
+          taxableSubtotal: pricingResult.taxBreakdown.taxableAmount,
+          taxBreakdown: pricingResult.taxBreakdown,
           items: { create: itemsData },
         },
         include: {
@@ -212,25 +236,14 @@ export class OrdersService {
         },
       });
 
-      if (dto.customerId) {
-        await this.customerStatsService.updateStatsOnOrderComplete(
-          dto.customerId,
-          total,
-          prisma,
+      if (status === OrderStatus.COMPLETED) {
+        await this.finalizeOrderCompletion(
+          order.id,
           organizationId,
+          prisma,
         );
-
-        const outstanding = Math.max(total - paidAmount, 0);
-        if (outstanding > 0) {
-          await this.customerStatsService.updateDebt(
-            dto.customerId,
-            outstanding,
-            prisma,
-            organizationId,
-          );
-        }
       }
-
+      const traceId = this.requestContextService.getTraceId();
       const normalized = this.mapOrderResponse(order);
 
       this.eventEmitter.emit('orders.created', {
@@ -238,6 +251,22 @@ export class OrdersService {
         organizationId,
         userId: user?.id,
         warnings,
+      });
+
+      await this.auditLogService.log({
+        user: this.resolveAuditUser(user, organizationId),
+        entity: 'order',
+        entityId: order.id,
+        action: 'order.created',
+        auditAction: AuditAction.CREATE,
+        newValues: {
+          order: {
+            id: order.id,
+            status: order.status,
+            total: Number(order.total),
+          },
+          traceId,
+        },
       });
 
       return {
@@ -435,8 +464,12 @@ export class OrdersService {
     itemsData: any[];
     subtotal: number;
     warnings: OrderWarning[];
+    taxableSubtotal: number;
+    itemDiscountTotal: number;
   }> {
     let subtotal = 0;
+    let taxableSubtotal = 0;
+    let itemDiscountTotal = 0;
     const itemsData: any[] = [];
     const warnings: OrderWarning[] = [];
 
@@ -490,20 +523,48 @@ export class OrdersService {
         });
       }
 
-      const itemSubtotal = unitPrice * item.quantity;
-      subtotal += itemSubtotal;
+      const unitDiscount = this.resolveUnitDiscount(item, unitPrice);
+      const lineSubtotal = unitPrice * item.quantity;
+      const lineDiscount = Math.min(lineSubtotal, unitDiscount * item.quantity);
+      const netLineTotal = Math.max(0, lineSubtotal - lineDiscount);
+      const netUnitPrice = unitPrice - unitDiscount;
+
+      subtotal += lineSubtotal;
+      itemDiscountTotal += lineDiscount;
+
+      if (!item.taxExempt) {
+        taxableSubtotal += netLineTotal;
+      }
+
+      const costPrice = Number(product.costPrice ?? 0);
+      if (netUnitPrice < costPrice) {
+        warnings.push({
+          type: 'LOSS_SALE',
+          productId: product.id,
+          variantId: selectedVariant?.id,
+          sku: selectedVariant?.sku ?? product.sku,
+          available: availableStock,
+          requested: item.quantity,
+          message: `Net price ${netUnitPrice.toFixed(2)} is lower than cost ${costPrice.toFixed(2)}`,
+        });
+      }
 
       itemsData.push({
         productId: item.productId,
         variantId: item.variantId,
         quantity: item.quantity,
         unitPrice,
-        subtotal: itemSubtotal,
+        subtotal: lineSubtotal,
+        discountType: item.discountType ?? null,
+        discountValue: item.discountValue ?? null,
+        discountAmount: lineDiscount,
+        netTotal: netLineTotal,
+        isTaxExempt: Boolean(item.taxExempt),
         organizationId,
       });
     }
 
-    return { itemsData, subtotal, warnings };
+    return { itemsData, subtotal, warnings, taxableSubtotal, itemDiscountTotal };
   }
 
   async findAll(organizationId: string, query: QueryOrdersDto) {
@@ -612,6 +673,7 @@ export class OrdersService {
     organizationId: string,
     actor?: OrderActor,
   ) {
+    const traceId = this.requestContextService.getTraceId();
     const result = await this.prisma.$transaction(async (prisma) => {
       const order = await prisma.order.findFirst({
         where: { id, organizationId, deletedAt: null },
@@ -642,6 +704,28 @@ export class OrdersService {
             dto.status
           }. Valid transitions: ${allowedTransitions.join(', ')}`,
         );
+      }
+
+      const shippingStatusGuard: OrderStatus[] = [
+        OrderStatus.SHIPPED,
+        OrderStatus.DELIVERED,
+        OrderStatus.COMPLETED,
+      ];
+
+      if (
+        order.paymentMethod === PaymentMethod.COD &&
+        shippingStatusGuard.includes(dto.status)
+      ) {
+        const shippingOrder = await prisma.shippingOrder.findFirst({
+          where: { orderId: order.id },
+          select: { id: true },
+        });
+
+        if (!shippingOrder) {
+          throw new BadRequestException(
+            'COD orders require a shipping order before advancing to shipping statuses',
+          );
+        }
       }
 
       if (
@@ -688,7 +772,11 @@ export class OrdersService {
         },
       });
 
-      if (dto.status === OrderStatus.CANCELLED && order.customerId) {
+      if (
+        dto.status === OrderStatus.CANCELLED &&
+        order.customerId &&
+        order.completedAt
+      ) {
         const { totalAmount, outstanding } = this.calculateOrderFinancials({
           subtotal: order.subtotal,
           tax: order.tax,
@@ -716,20 +804,6 @@ export class OrdersService {
         }
       }
 
-      if (
-        dto.status === OrderStatus.COMPLETED &&
-        order.paymentMethod === PaymentMethod.COD &&
-        !order.isPaid &&
-        order.customerId
-      ) {
-        await this.customerStatsService.updateDebt(
-          order.customerId,
-          -Number(order.total),
-          prisma,
-          organizationId,
-        );
-      }
-
       return {
         updated,
         previousStatus: order.status,
@@ -742,9 +816,193 @@ export class OrdersService {
       previousStatus: result.previousStatus,
       nextStatus: dto.status,
       userId: actor?.id,
+      traceId,
     } satisfies OrderStatusChangedEvent);
 
+    await this.auditLogService.log({
+      user: this.resolveAuditUser(actor, organizationId),
+      entity: 'order',
+      entityId: result.updated.id,
+      action: 'order.status.changed',
+      auditAction: AuditAction.UPDATE,
+      oldValues: { status: result.previousStatus },
+      newValues: { status: dto.status, traceId },
+    });
+
     return { data: this.mapOrderResponse(result.updated) };
+  }
+
+  async markCodPaid(
+    id: string,
+    organizationId: string,
+    collectedCodAmount?: number,
+    actor?: OrderActor,
+  ) {
+    const traceId = this.requestContextService.getTraceId();
+    const outcome = await this.prisma.$transaction(async (prisma) => {
+      const order = await prisma.order.findFirst({
+        where: { id, organizationId, deletedAt: null },
+        include: { customer: true },
+      });
+
+      if (!order) {
+        throw new NotFoundException(`Order with ID ${id} not found`);
+      }
+
+      if (order.paymentMethod !== PaymentMethod.COD) {
+        throw new BadRequestException('COD payment confirmation only applies to COD orders');
+      }
+
+      if (order.status !== OrderStatus.COMPLETED) {
+        throw new BadRequestException('COD payment can only be confirmed once the order is completed');
+      }
+
+      if (order.isPaid) {
+        return { updated: order, previous: order, appliedAmount: 0 };
+      }
+
+      const outstanding = Math.max(
+        Number(order.total) - Number(order.paidAmount ?? 0),
+        0,
+      );
+
+      if (outstanding <= 0) {
+        throw new BadRequestException('Order has no outstanding COD amount');
+      }
+
+      const appliedAmount = Math.min(outstanding, collectedCodAmount ?? outstanding);
+
+      if (appliedAmount <= 0) {
+        throw new BadRequestException('Collected COD amount must be greater than zero');
+      }
+
+      const newPaidAmount = Number(order.paidAmount ?? 0) + appliedAmount;
+      const isFullyPaid = newPaidAmount >= Number(order.total);
+
+      const updated = await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          paidAmount: newPaidAmount,
+          isPaid: isFullyPaid,
+          paidAt: isFullyPaid ? new Date() : order.paidAt,
+        },
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: true,
+              variant: true,
+            },
+          },
+          branch: true,
+        },
+      });
+
+      if (order.customerId) {
+        await this.customerStatsService.updateDebt(
+          order.customerId,
+          -appliedAmount,
+          prisma,
+          organizationId,
+        );
+      }
+
+      return { updated, previous: order, appliedAmount };
+    });
+
+    if (outcome.appliedAmount > 0) {
+      await this.auditLogService.log({
+        user: this.resolveAuditUser(actor, organizationId),
+        entity: 'order',
+        entityId: outcome.updated.id,
+        action: 'order.cod_paid',
+        auditAction: AuditAction.UPDATE,
+        oldValues: { paidAmount: Number(outcome.previous.paidAmount ?? 0) },
+        newValues: { paidAmount: Number(outcome.updated.paidAmount ?? 0), traceId },
+      });
+    }
+
+    return { data: this.mapOrderResponse(outcome.updated) };
+  }
+
+  async finalizeOrderCompletion(
+    orderId: string,
+    organizationId: string,
+    prisma?: PrismaTransactionalClient,
+  ) {
+    const db = prisma || this.prisma;
+    const order = await db.order.findFirst({
+      where: { id: orderId, organizationId, deletedAt: null },
+      select: {
+        id: true,
+        total: true,
+        paidAmount: true,
+        customerId: true,
+      },
+    });
+
+    if (!order) {
+      this.logger.warn(`Order ${orderId} not found when finalizing completion`);
+      return;
+    }
+
+    if (order.customerId) {
+      await this.customerStatsService.updateStatsOnOrderComplete(
+        order.customerId,
+        Number(order.total),
+        db,
+        organizationId,
+      );
+
+      const outstanding = Math.max(
+        Number(order.total) - Number(order.paidAmount ?? 0),
+        0,
+      );
+
+      if (outstanding > 0) {
+        await this.customerStatsService.updateDebt(
+          order.customerId,
+          outstanding,
+          db,
+          organizationId,
+        );
+      }
+    }
+
+    await db.orderInventoryReservation.updateMany({
+      where: {
+        orderId,
+        organizationId,
+        status: OrderInventoryReservationStatus.RESERVED,
+      },
+      data: {
+        status: OrderInventoryReservationStatus.RELEASED,
+      },
+    });
+  }
+
+  private resolveAuditUser(user: OrderActor | undefined, organizationId: string) {
+    if (user?.id && user.organizationId) {
+      return { id: user.id, organizationId: user.organizationId };
+    }
+
+    return {
+      id: user?.id ?? 'system-order-automation',
+      organizationId,
+    };
+  }
+
+  private resolveUnitDiscount(item: CreateOrderItemDto, unitPrice: number) {
+    if (!item.discountType || item.discountValue === undefined || item.discountValue === null) {
+      return 0;
+    }
+
+    if (item.discountType === ItemDiscountType.PERCENT) {
+      const percent = Math.max(0, Math.min(100, Number(item.discountValue)));
+      return Math.min(unitPrice, (unitPrice * percent) / 100);
+    }
+
+    return Math.min(unitPrice, Number(item.discountValue));
   }
 
   private mapOrderResponse(order: any) {
@@ -755,6 +1013,8 @@ export class OrdersService {
       shipping: Number(order.shipping),
       discount: Number(order.discount),
       total: Number(order.total),
+      taxableSubtotal: Number(order.taxableSubtotal ?? order.subtotal),
+      taxBreakdown: order.taxBreakdown ?? undefined,
       paidAmount: Number(order.paidAmount),
       branch: order.branch
         ? {
@@ -766,8 +1026,10 @@ export class OrdersService {
         ...item,
         price: Number(item.unitPrice),
         quantity: Number(item.quantity),
-        discount: Number(item.discount ?? 0),
+        discount: Number(item.discountAmount ?? 0),
+        netTotal: Number(item.netTotal ?? item.subtotal),
         total: Number(item.subtotal),
+        isTaxExempt: Boolean(item.isTaxExempt),
       })),
       customer: order.customer
         ? {

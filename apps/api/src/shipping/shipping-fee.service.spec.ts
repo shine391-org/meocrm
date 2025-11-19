@@ -26,28 +26,56 @@ describe('ShippingFeeService', () => {
     const result = await service.calculate({ organizationId: 'o1', overrideFee: 12000 });
     expect(result.shippingFee).toBe(12000);
     expect(result.weightSurcharge).toBe(0);
+    expect(result.breakdown.baseFee).toBe(12000);
   });
 
   it('applies weight surcharge and multiplier', async () => {
-    settings.get
-      .mockResolvedValueOnce(20000)
-      .mockResolvedValueOnce(8000)
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce({ express: 1.5 });
+    settings.get.mockImplementation((key: string) => {
+      const map: Record<string, any> = {
+        'shipping.baseFee': 20000,
+        'shipping.weightRate': 8000,
+        'shipping.partners': undefined,
+        'shipping.channelMultipliers': { express: 1.5 },
+      };
+      return Promise.resolve(map[key]);
+    });
 
-    const result = await service.calculate({ organizationId: 'o1', weight: 2300, channel: 'express' });
+    const result = await service.calculate({ organizationId: 'o1', weight: 2000, channel: 'express', distanceKm: 5 });
     expect(result.shippingFee).toBeGreaterThan(0);
     expect(result.channelMultiplier).toBe(1.5);
+    expect(result.breakdown.distanceFee).toBe(0);
   });
 
-  it('applies free threshold for mapped channel', async () => {
-    settings.get
-      .mockResolvedValueOnce(18000)
-      .mockResolvedValueOnce(4000)
-      .mockResolvedValueOnce(50)
-      .mockResolvedValueOnce({ express: 1.5 });
+  it('applies partner-specific rules and service multiplier', async () => {
+    settings.get.mockImplementation((key: string) => {
+      const map: Record<string, any> = {
+        'shipping.baseFee': 15000,
+        'shipping.weightRate': 5000,
+        'shipping.partners': {
+          'partner-1': {
+            baseFee: 10000,
+            weightRate: 2000,
+            distanceRate: 1000,
+            serviceTypes: {
+              express: { multiplier: 2 },
+            },
+          },
+        },
+        'shipping.channelMultipliers': {},
+      };
+      return Promise.resolve(map[key]);
+    });
 
-    const result = await service.calculate({ organizationId: 'o1', weight: 1000, channel: 'express' });
-    expect(result.shippingFee).toBe(0);
+    const result = await service.calculate({
+      organizationId: 'o1',
+      partnerId: 'partner-1',
+      weight: 3000,
+      distanceKm: 3,
+      serviceType: 'express',
+    });
+
+    expect(result.breakdown.baseFee).toBe(10000);
+    expect(result.breakdown.distanceFee).toBe(3000);
+    expect(result.shippingFee).toBeGreaterThan(result.breakdown.baseFee);
   });
 });

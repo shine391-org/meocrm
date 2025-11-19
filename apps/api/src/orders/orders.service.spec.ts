@@ -8,6 +8,8 @@ import { PricingService } from './pricing.service';
 import { SettingsService } from '../modules/settings/settings.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CustomerStatsService } from '../customers/services/customer-stats.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { RequestContextService } from '../common/context/request-context.service';
 
 type PrismaTransactionalClient = Prisma.TransactionClient;
 
@@ -20,8 +22,13 @@ describe('OrdersService', () => {
     revertStatsOnOrderCancel: jest.Mock;
     updateDebt: jest.Mock;
   };
+  let auditLogService: { log: jest.Mock };
+  let requestContextService: { getTraceId: jest.Mock };
 
   beforeEach(async () => {
+    auditLogService = { log: jest.fn().mockResolvedValue(undefined) };
+    requestContextService = { getTraceId: jest.fn().mockReturnValue('trace-test') };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
@@ -37,6 +44,7 @@ describe('OrdersService', () => {
               freeShipApplied: false,
               taxRate: 0.1,
               taxAmount: 5,
+              taxBreakdown: { taxableAmount: 50, rate: 0.1 },
             }),
           },
         },
@@ -55,6 +63,14 @@ describe('OrdersService', () => {
             revertStatsOnOrderCancel: jest.fn().mockResolvedValue(undefined),
             updateDebt: jest.fn().mockResolvedValue(undefined),
           },
+        },
+        {
+          provide: AuditLogService,
+          useValue: auditLogService,
+        },
+        {
+          provide: RequestContextService,
+          useValue: requestContextService,
         },
       ],
     }).compile();
@@ -254,20 +270,11 @@ describe('OrdersService', () => {
       // Verify transaction was called
       expect(prisma.$transaction).toHaveBeenCalled();
 
-      expect(customerStatsService.updateStatsOnOrderComplete).toHaveBeenCalled();
-      const [[createdCustomerId, createdTotal, createdTx, createdOrg]] =
-        customerStatsService.updateStatsOnOrderComplete.mock.calls;
-      expect(createdCustomerId).toBe(mockCreateDto.customerId);
-      expect(createdTotal).toBe(result.data.total);
-      expect(createdTx).toBeDefined();
-      expect(createdOrg).toBe('org-1');
-
-      expect(customerStatsService.updateDebt).toHaveBeenCalled();
-      const [[debtCustomerId, debtAmount, debtTx, debtOrg]] = customerStatsService.updateDebt.mock.calls;
-      expect(debtCustomerId).toBe(mockCreateDto.customerId);
-      expect(debtAmount).toBe(result.data.total);
-      expect(debtTx).toBeDefined();
-      expect(debtOrg).toBe('org-1');
+      expect(customerStatsService.updateStatsOnOrderComplete).not.toHaveBeenCalled();
+      expect(customerStatsService.updateDebt).not.toHaveBeenCalled();
+      expect(auditLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'order.created' }),
+      );
     });
 
     it('respects immediate payment when allowed', async () => {
@@ -478,6 +485,22 @@ describe('OrdersService', () => {
       expect(result.data).toHaveLength(2);
       expect(result.meta.total).toBe(2);
     });
+
+    it('applies branch filters when provided', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+      prisma.order.count.mockResolvedValue(0);
+
+      await service.findAll('org-id', { page: 1, limit: 20, branchId: 'branch-1' } as any);
+
+      expect(prisma.order.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            branchId: 'branch-1',
+            organizationId: 'org-id',
+          }),
+        }),
+      );
+    });
   });
 
   describe('findOne', () => {
@@ -588,6 +611,16 @@ describe('OrdersService', () => {
       );
     });
 
+    it('blocks COD orders from advancing without shipping order', async () => {
+      const codOrder = { ...order, paymentMethod: 'COD' } as any;
+      prisma.order.findFirst.mockResolvedValue(codOrder);
+      prisma.shippingOrder.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateStatus('order-1', { status: OrderStatus.SHIPPED } as any, 'org-id'),
+      ).rejects.toThrow('COD orders require a shipping order before advancing to shipping statuses');
+    });
+
     it('should throw NotFoundException if order not found', async () => {
       prisma.order.findFirst.mockResolvedValue(null);
       await expect(
@@ -598,6 +631,7 @@ describe('OrdersService', () => {
     it('reverts stats via service when cancelling order', async () => {
       const cancelOrder = {
         ...order,
+        completedAt: new Date(),
         customer: { id: order.customerId, debt: 70 },
       } as any;
 
@@ -633,6 +667,64 @@ describe('OrdersService', () => {
       expect(debtAmount).toBe(expectedDebt);
       expect(debtTx).toBeDefined();
       expect(debtOrg).toBe('org-id');
+    });
+  });
+
+  describe('markCodPaid', () => {
+    it('marks COD order as paid and reduces debt', async () => {
+      const codOrder = {
+        id: 'order-1',
+        organizationId: 'org-1',
+        paymentMethod: 'COD',
+        status: OrderStatus.COMPLETED,
+        total: new Prisma.Decimal(500),
+        paidAmount: new Prisma.Decimal(0),
+        isPaid: false,
+        customerId: 'cust-1',
+        customer: { id: 'cust-1' },
+      } as any;
+
+      prisma.order.findFirst.mockResolvedValue(codOrder);
+      prisma.order.update.mockResolvedValue({
+        ...codOrder,
+        isPaid: true,
+        paidAmount: new Prisma.Decimal(500),
+        customer: { id: 'cust-1' },
+        items: [],
+        branch: null,
+      } as any);
+
+      const result = await service.markCodPaid('order-1', 'org-1', undefined, {
+        id: 'user-1',
+        organizationId: 'org-1',
+      } as any);
+
+      expect(result.data.isPaid).toBe(true);
+      expect(customerStatsService.updateDebt).toHaveBeenCalledWith(
+        'cust-1',
+        -500,
+        expect.anything(),
+        'org-1',
+      );
+      expect(auditLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'order.cod_paid' }),
+      );
+    });
+
+    it('throws when COD order is not completed', async () => {
+      prisma.order.findFirst.mockResolvedValue({
+        id: 'order-1',
+        organizationId: 'org-1',
+        paymentMethod: 'COD',
+        status: OrderStatus.PROCESSING,
+        total: new Prisma.Decimal(200),
+        paidAmount: new Prisma.Decimal(0),
+        isPaid: false,
+      } as any);
+
+      await expect(
+        service.markCodPaid('order-1', 'org-1'),
+      ).rejects.toThrow('COD payment can only be confirmed once the order is completed');
     });
   });
 });
