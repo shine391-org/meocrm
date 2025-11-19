@@ -3,15 +3,24 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { setupTestApp } from '../src/test-utils';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Categories E2E', () => {
   let app: INestApplication;
   let authToken: string;
+  let prisma: PrismaService;
+  let organizationCode: string;
 
   beforeAll(async () => {
-    const { app: testApp, accessToken: token } = await setupTestApp();
+    const { app: testApp, accessToken: token, prisma: prismaService, organizationId } = await setupTestApp();
     app = testApp;
     authToken = token;
+    prisma = prismaService;
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { code: true },
+    });
+    organizationCode = organization?.code ?? '';
   });
 
   afterAll(async () => {
@@ -31,7 +40,7 @@ describe('Categories E2E', () => {
           email: uniqueEmail,
           password: 'Password123',
           name: 'Test User',
-          organizationCode: 'meocrm'
+          organizationCode,
         })
         .expect(201);
 

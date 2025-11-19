@@ -48,7 +48,7 @@ export class CustomersService {
       this.validateBirthday(birthday);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const customer = await this.prisma.$transaction(async (tx) => {
       const customer = await tx.customer.create({
         data: {
           ...rest,
@@ -71,6 +71,8 @@ export class CustomersService {
 
       return segment ? { ...customer, segment } : customer;
     });
+
+    return { data: customer };
   }
 
   async findAll(
@@ -221,7 +223,7 @@ export class CustomersService {
       throw new NotFoundException(`Customer ${id} not found`);
     }
 
-    return { message: 'Customer deleted successfully' };
+    return { data: { message: 'Customer deleted successfully' } };
   }
 
   private validateBirthday(birthday: string): void {

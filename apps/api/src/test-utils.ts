@@ -1,6 +1,6 @@
 /* istanbul ignore file */
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthService } from './auth/auth.service';
@@ -94,8 +94,31 @@ export async function setupTestApp(options: { skipCleanup?: boolean } = {}): Pro
     }
   };
   app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
-  app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
-  app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
+  app.use('/webhooks', (req: express.Request & { rawBody?: string }, _res, next) => {
+    if (req.body && req.body instanceof Buffer) {
+      try {
+        req.rawBody = req.body.toString('utf8');
+        req.body = JSON.parse(req.rawBody);
+      } catch (error) {
+        return next(new BadRequestException('Invalid webhook payload JSON.'));
+      }
+    }
+    return next();
+  });
+
+  const skipWebhooks = (req: express.Request) => req.originalUrl?.startsWith('/webhooks');
+  app.use((req, res, next) => {
+    if (skipWebhooks(req)) {
+      return next();
+    }
+    return bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit })(req, res, next);
+  });
+  app.use((req, res, next) => {
+    if (skipWebhooks(req)) {
+      return next();
+    }
+    return bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit })(req, res, next);
+  });
 
   const prisma = app.get<PrismaService>(PrismaService);
   const authService = app.get<AuthService>(AuthService);
@@ -261,7 +284,7 @@ export async function createOrder(
 export async function createProduct(
   prisma: PrismaService,
   organizationId: string,
-  data: { sellPrice?: number } = {},
+  data: { sellPrice?: number; stock?: number } = {},
 ) {
   return prisma.product.create({
     data: {
@@ -270,6 +293,7 @@ export async function createProduct(
       sku: `SKU-${Date.now()}`,
       sellPrice: data.sellPrice || 10000,
       costPrice: 5000,
+      stock: data.stock ?? 100,
     },
   });
 }

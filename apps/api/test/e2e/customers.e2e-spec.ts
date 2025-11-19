@@ -30,7 +30,9 @@ describe('Customers E2E', () => {
 
     const dto = { name: 'E2E Test', phone: '0901234567' };
 
-    const { body: customer } = await request(app.getHttpServer())
+    const {
+      body: { data: customer },
+    } = await request(app.getHttpServer())
       .post('/customers')
       .set('Authorization', `Bearer ${token}`)
       .send(dto)
@@ -63,7 +65,9 @@ describe('Customers E2E', () => {
     const { token, organization } = await testContext.createUserAndOrg();
     const statsService = app.get(CustomerStatsService);
 
-    const { body: customer } = await request(app.getHttpServer())
+    const {
+      body: { data: customer },
+    } = await request(app.getHttpServer())
       .post('/customers')
       .set('Authorization', `Bearer ${token}`)
       .send({ name: 'Test', phone: '0901234567' })
@@ -78,7 +82,9 @@ describe('Customers E2E', () => {
       organization.id,
     );
 
-    const { body: updated } = await request(app.getHttpServer())
+    const {
+      body: { data: updated },
+    } = await request(app.getHttpServer())
         .get(`/customers/${customer.id}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(200);

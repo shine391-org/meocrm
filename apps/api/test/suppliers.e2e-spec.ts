@@ -39,16 +39,18 @@ describe('Suppliers E2E Tests', () => {
         taxCode: '0987654321',
       };
 
-      const { body } = await request(app.getHttpServer())
+      const {
+        body: { data: supplier },
+      } = await request(app.getHttpServer())
         .post('/suppliers')
         .set('Authorization', `Bearer ${accessToken}`)
         .send(dto)
         .expect(201);
 
-      expect(body).toBeDefined();
-      expect(body.name).toBe(dto.name);
-      expect(body.code).toMatch(/^DT\d{6}$/); // This is correct as service generates 'DT' code
-      expect(body.organizationId).toBe(organizationId);
+      expect(supplier).toBeDefined();
+      expect(supplier.name).toBe(dto.name);
+      expect(supplier.code).toMatch(/^DT\d{6}$/); // This is correct as service generates 'DT' code
+      expect(supplier.organizationId).toBe(organizationId);
     });
 
     it('should return 400 for validation error (missing name)', async () => {
@@ -80,7 +82,7 @@ describe('Suppliers E2E Tests', () => {
 
         expect(body.data).toBeInstanceOf(Array);
         expect(body.data.length).toBeGreaterThan(0);
-        expect(body.pagination).toBeDefined();
+        expect(body.meta).toBeDefined();
       });
   });
 
@@ -90,13 +92,15 @@ describe('Suppliers E2E Tests', () => {
         data: { name: 'Test Supplier', phone: '111', code: generateUniqueCode(), organizationId }
       });
 
-      const { body } = await request(app.getHttpServer())
+      const {
+        body: { data },
+      } = await request(app.getHttpServer())
         .get(`/suppliers/${supplier.id}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
-      expect(body.id).toBe(supplier.id);
-      expect(body.name).toBe(supplier.name);
+      expect(data.id).toBe(supplier.id);
+      expect(data.name).toBe(supplier.name);
     });
 
     it('should return 404 for a non-existent supplier', async () => {
@@ -114,13 +118,15 @@ describe('Suppliers E2E Tests', () => {
       });
       const newName = 'Updated Name';
 
-      const { body } = await request(app.getHttpServer())
+      const {
+        body: { data },
+      } = await request(app.getHttpServer())
         .patch(`/suppliers/${supplier.id}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ name: newName })
         .expect(200);
 
-      expect(body.name).toBe(newName);
+      expect(data.name).toBe(newName);
     });
   });
 

@@ -1,3 +1,11 @@
+const includeE2E = process.env.RUN_E2E === 'true';
+
+const testPathIgnorePatterns = ['/node_modules/', '/dist/', '/test/webhooks/', 'apps/api/src/modules/webhooks/webhooks.service.spec.ts', 'apps/api/test/webhooks/'];
+
+if (!includeE2E) {
+  testPathIgnorePatterns.push('.*\\.e2e-spec\\.ts$');
+}
+
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
@@ -21,7 +29,7 @@ module.exports = {
     '!apps/api/src/**/dto/**',
     '!apps/api/src/**/entities/**',
   ],
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', '\.e2e-spec\.ts$', '/test/webhooks/', 'apps/api/src/modules/webhooks/webhooks.service.spec.ts', 'apps/api/test/webhooks/'],
+  testPathIgnorePatterns,
   coverageDirectory: './coverage',
   testEnvironment: 'node',
   roots: ['<rootDir>/apps/api'],

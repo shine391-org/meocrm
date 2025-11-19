@@ -94,8 +94,8 @@ describe('Orders Debt Integrity E2E', () => {
   });
 
   beforeEach(async () => {
-    await prisma.orderItem.deleteMany({ where: { organizationId } });
-    await prisma.order.deleteMany({ where: { organizationId } });
+    await prisma.orderItem.deleteMany({});
+    await prisma.order.deleteMany({});
     await prisma.customer.update({
       where: { id: customerId },
       data: { debt: 0, totalSpent: 0, totalOrders: 0 },

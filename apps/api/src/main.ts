@@ -1,7 +1,7 @@
 import * as express from 'express';
 import * as bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
-import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestFactory } from '@nestjs/core';
@@ -36,8 +36,34 @@ async function bootstrap() {
 
   app.use(cookieParser(configService.get('COOKIE_SECRET') || 'dev-secret-key'));
   app.use('/webhooks', createWebhookRawMiddleware(rawLimit));
-  app.use(bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit }));
-  app.use(bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit }));
+  app.use('/webhooks', (req: express.Request & { rawBody?: string }, _res, next) => {
+    if (!req.body || !(req.body instanceof Buffer)) {
+      return next();
+    }
+    try {
+      req.rawBody = req.body.toString('utf8');
+      const parsed = JSON.parse(req.body.toString('utf8'));
+      req.body = parsed;
+      return next();
+    } catch (error) {
+      return next(new BadRequestException('Invalid webhook payload JSON.'));
+    }
+  });
+
+  const skipWebhooks = (req: express.Request) => req.originalUrl?.startsWith('/webhooks');
+
+  app.use((req, res, next) => {
+    if (skipWebhooks(req)) {
+      return next();
+    }
+    return bodyParser.urlencoded({ verify: rawBodyBuffer, extended: true, limit: rawLimit })(req, res, next);
+  });
+  app.use((req, res, next) => {
+    if (skipWebhooks(req)) {
+      return next();
+    }
+    return bodyParser.json({ verify: rawBodyBuffer, limit: rawLimit })(req, res, next);
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

@@ -1,12 +1,13 @@
 /* istanbul ignore file */
-import { Controller, Post, Get, Body, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, Res, UnauthorizedException, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
-import { Request, Response } from 'express';
+import { CookieOptions, Request, Response } from 'express';
 
 const REFRESH_TOKEN_COOKIE = 'meocrm_refresh_token';
 const REFRESH_TOKEN_DEFAULT_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -14,7 +15,14 @@ const REFRESH_TOKEN_DEFAULT_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly signCookies: boolean;
+
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {
+    this.signCookies = Boolean(this.configService.get<string>('COOKIE_SECRET'));
+  }
 
   @Post('register')
   @Public()
@@ -27,6 +35,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @HttpCode(HttpStatus.OK)
   @Public()
   @ApiOperation({ summary: 'Login and get tokens' })
   @ApiResponse({ status: 200, description: 'Login successful' })
@@ -78,33 +87,66 @@ export class AuthController {
   }
 
   private setRefreshTokenCookie(res: Response, token: string, maxAge = REFRESH_TOKEN_DEFAULT_MAX_AGE) {
-    res.cookie(REFRESH_TOKEN_COOKIE, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.isSecureCookie(),
-      maxAge,
-      path: '/',
-      signed: true,
-    });
+    res.cookie(REFRESH_TOKEN_COOKIE, token, this.buildCookieOptions({ maxAge }));
   }
 
   private clearRefreshTokenCookie(res: Response) {
-    res.cookie(REFRESH_TOKEN_COOKIE, '', {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: this.isSecureCookie(),
-      expires: new Date(0),
-      path: '/',
-      signed: true,
-    });
+    res.cookie(
+      REFRESH_TOKEN_COOKIE,
+      '',
+      this.buildCookieOptions({
+        expires: new Date(0),
+      }),
+    );
   }
 
   private extractRefreshToken(req: Request): string | null {
-    return req.signedCookies?.[REFRESH_TOKEN_COOKIE] || null;
+    const signed = req.signedCookies?.[REFRESH_TOKEN_COOKIE];
+    if (signed) {
+      return signed;
+    }
+
+    const unsigned = req.cookies?.[REFRESH_TOKEN_COOKIE];
+    if (unsigned) {
+      return unsigned;
+    }
+
+    return this.extractFromHeader(req);
   }
 
   private isSecureCookie(): boolean {
     const env = (process.env.NODE_ENV ?? 'development').toLowerCase();
     return env === 'production';
+  }
+
+  private buildCookieOptions(overrides: Partial<CookieOptions>): CookieOptions {
+    return {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: this.isSecureCookie(),
+      maxAge: REFRESH_TOKEN_DEFAULT_MAX_AGE,
+      path: '/',
+      signed: this.signCookies,
+      ...overrides,
+    };
+  }
+
+  private extractFromHeader(req: Request): string | null {
+    const cookieHeader = req.headers?.cookie;
+    if (!cookieHeader) {
+      return null;
+    }
+
+    const cookies = cookieHeader.split(';').reduce<Record<string, string>>((acc, part) => {
+      const [rawKey, ...rawVal] = part.split('=');
+      if (!rawKey) {
+        return acc;
+      }
+      const key = rawKey.trim();
+      acc[key] = decodeURIComponent(rawVal.join('='));
+      return acc;
+    }, {});
+
+    return cookies[REFRESH_TOKEN_COOKIE] ?? null;
   }
 }

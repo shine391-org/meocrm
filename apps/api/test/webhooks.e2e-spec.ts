@@ -33,7 +33,8 @@ describe('Webhooks E2E', () => {
     it('rejects requests without a signature', async () => {
       await request(app.getHttpServer())
         .post('/webhooks/handler')
-        .send(payload)
+        .set('Content-Type', 'application/json')
+        .send(payloadString)
         .expect(401);
     });
 
@@ -41,7 +42,8 @@ describe('Webhooks E2E', () => {
       await request(app.getHttpServer())
         .post('/webhooks/handler')
         .set('X-MeoCRM-Signature', 'invalid-signature')
-        .send(payload)
+        .set('Content-Type', 'application/json')
+        .send(payloadString)
         .expect(401);
     });
 

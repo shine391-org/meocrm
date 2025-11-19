@@ -78,19 +78,28 @@ export class OrdersService {
     prisma?: PrismaTransactionalClient,
   ): Promise<string> {
     const db = prisma || this.prisma;
+    const organization = await db.organization.findUnique({
+      where: { id: organizationId },
+      select: { code: true },
+    });
+
+    const rawToken =
+      organization?.code?.replace(/[^A-Z0-9]/gi, '').toUpperCase() ||
+      organizationId.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    const orgSegment = rawToken.slice(-6) || 'ORG';
+    const prefix = `ORD-${orgSegment}`;
+
     const lastOrder = await db.order.findFirst({
-      where: { organizationId, code: { startsWith: 'ORD' } },
+      where: { code: { startsWith: prefix } },
       orderBy: { code: 'desc' },
       select: { code: true },
     });
 
-    if (!lastOrder) {
-      return 'ORD001';
-    }
+    const nextNumber = lastOrder
+      ? (parseInt(lastOrder.code.replace(`${prefix}-`, ''), 10) || 0) + 1
+      : 1;
 
-    const codeNumber = lastOrder.code.substring(3);
-    const lastNumber = parseInt(codeNumber, 10);
-    return `ORD${(lastNumber + 1).toString().padStart(3, '0')}`;
+    return `${prefix}-${nextNumber.toString().padStart(4, '0')}`;
   }
 
   async create(dto: CreateOrderDto, organizationId: string, user: User) {
@@ -498,7 +507,16 @@ export class OrdersService {
   }
 
   async findAll(organizationId: string, query: QueryOrdersDto) {
-    const { page, limit, status, customerId, fromDate, toDate, paymentMethod } =
+    const {
+      page,
+      limit,
+      status,
+      customerId,
+      fromDate,
+      toDate,
+      paymentMethod,
+      branchId,
+    } = query;
       query;
     const where: Prisma.OrderWhereInput = {
       organizationId,
@@ -513,6 +531,9 @@ export class OrdersService {
     }
     if (paymentMethod) {
       where.paymentMethod = paymentMethod;
+    }
+    if (branchId) {
+      where.branchId = branchId;
     }
     if (fromDate || toDate) {
       where.createdAt = {};

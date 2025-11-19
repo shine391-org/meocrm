@@ -9,6 +9,7 @@ describe('Suppliers E2E', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let testContext: TestContext;
+  const randomPhone = () => `09${Math.floor(10000000 + Math.random() * 90000000)}`;
 
   beforeAll(async () => {
     testContext = await setupTestApp();
@@ -37,8 +38,8 @@ describe('Suppliers E2E', () => {
         taxCode: '0123456789',
       })
       .expect(201);
-    expect(response.body.code).toMatch(/^DT\\d{6}$/);
-    expect(response.body.name).toBe('Công ty ABC');
+    expect(response.body.data.code).toMatch(/^DT\d{6}$/);
+    expect(response.body.data.name).toBe('Công ty ABC');
   });
 
   it('should enforce tenant isolation', async () => {
@@ -48,7 +49,7 @@ describe('Suppliers E2E', () => {
     await request(app.getHttpServer())
       .post('/suppliers')
       .set('Authorization', `Bearer ${tokenA}`)
-      .send({ name: 'Supplier A', phone: '111' })
+      .send({ name: 'Supplier A', phone: randomPhone() })
       .expect(201);
 
     const { body: suppliersInB } = await request(app.getHttpServer())
@@ -63,12 +64,12 @@ describe('Suppliers E2E', () => {
     await request(app.getHttpServer())
       .post('/suppliers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'ABC Corp', phone: '111' })
+      .send({ name: 'ABC Corp', phone: randomPhone() })
       .expect(201);
     await request(app.getHttpServer())
       .post('/suppliers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'XYZ Ltd', phone: '222' })
+      .send({ name: 'XYZ Ltd', phone: randomPhone() })
       .expect(201);
 
     const results = await request(app.getHttpServer())
@@ -83,10 +84,12 @@ describe('Suppliers E2E', () => {
   it('should soft delete a supplier', async () => {
     const { token } = await testContext.createUserAndOrg();
 
-    const { body: supplier } = await request(app.getHttpServer())
+    const {
+      body: { data: supplier },
+    } = await request(app.getHttpServer())
       .post('/suppliers')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'To be deleted', phone: '123' })
+      .send({ name: 'To be deleted', phone: randomPhone() })
       .expect(201);
 
     await request(app.getHttpServer())

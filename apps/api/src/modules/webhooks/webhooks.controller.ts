@@ -22,6 +22,7 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { WebhookEntity } from './entities/webhook.entity';
 import { RequestContextService } from '../../common/context/request-context.service';
+import { Public } from '../../auth/decorators/public.decorator';
 
 @ApiTags('Webhooks')
 @Controller('webhooks')
@@ -33,6 +34,7 @@ export class WebhooksController {
   ) {}
 
   @Post('handler')
+  @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(WebhookHMACGuard)
   async handleWebhook(@Body() payload: any) {

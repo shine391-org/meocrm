@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -21,13 +22,13 @@ export class CategoriesService {
       }
     }
 
-    const createData: any = {
+    const createData: Prisma.CategoryUncheckedCreateInput = {
       name: dto.name,
       organizationId,
     };
 
     if (dto.parentId) {
-      createData.parent = { connect: { id: dto.parentId } };
+      createData.parentId = dto.parentId;
     }
 
     return this.prisma.category.create({
@@ -126,12 +127,14 @@ export class CategoriesService {
       }
     }
 
-    const updateData: any = { name: dto.name };
+    const updateData: Prisma.CategoryUncheckedUpdateInput = {};
+
+    if (dto.name !== undefined) {
+      updateData.name = dto.name;
+    }
 
     if (dto.parentId !== undefined) {
-      updateData.parent = dto.parentId
-        ? { connect: { id: dto.parentId } }
-        : { disconnect: true };
+      updateData.parentId = dto.parentId ?? null;
     }
 
     return this.prisma.category.update({
