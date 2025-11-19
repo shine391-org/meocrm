@@ -10,30 +10,30 @@
 ---
 
 ## 1. Tóm tắt nhanh
-- **Tình trạng:** Quá trình kiểm toán toàn diện đã phát hiện nhiều **mâu thuẫn nghiêm trọng** giữa tài liệu, logic nghiệp vụ và code đã triển khai. Nhiều tính năng cốt lõi được cho là đã hoàn thành hoặc đang phát triển thực tế lại bị thiếu hoặc có lỗi nghiêm trọng.
+- **Tình trạng:** Đợt kiểm toán 19-11 tìm thấy nhiều chênh lệch giữa docs và code. Kể từ đó P0/P1 quan trọng (Inventory/Orders/Shipping/Pricing/Security) đã được xử lý: logic trừ/hoàn kho chạy bằng bảng `OrderInventoryReservation`, workflow COD bổ sung `markCodPaid`, ShippingFeeService hỗ trợ weight/distance/partner, PricingService có `taxableSubtotal + item discount`, Prisma multi-tenant middleware và AuditLog cron đã bật. Các tính năng này đã có migration/seed và Playwright test đi kèm.
 - **Nền tảng:** Auth, Categories, Customers, Suppliers backend đã ổn định.
-- **Vấn đề nghiêm trọng:**
-  - **Inventory:** Logic trừ/hoàn kho cho đơn hàng **CHƯA HOẠT ĐỘNG**.
-  - **Orders:** Quy trình xử lý sai khác với tài liệu, logic cập nhật thanh toán COD bị lỗi.
-  - **Shipping:** Logic tính phí vận chuyển và xử lý đơn hàng thất bại/hoàn trả không đúng.
-  - **Pricing:** Logic tính thuế và chiết khấu cấp độ sản phẩm bị sai hoặc thiếu.
-  - **Security & Audit:** Các tính năng quan trọng như middleware tự động và ghi log kiểm toán chưa được triển khai.
-- **Kế hoạch:** Cần ưu tiên sửa các lỗi nghiêm trọng này trước khi phát triển tính năng mới.
+- **Vấn đề còn mở:**
+  - **Inventory:** ✅ INV-009 đã bật cảnh báo reservation leak + Playwright cover shipping fail; theo dõi mở rộng dashboard multi-branch.
+  - **Orders:** ✅ Refund `ORD-009` tạo `OrderReturn` + hoàn kho/stats; còn backlog phần KPI nâng cao.
+  - **Shipping:** Chưa có Partner API live; phần retry mới ở mức mock test.
+  - **Pricing:** POS đã hiển thị cảnh báo LOSS_SALE và breakdown VAT; vẫn còn KPI nâng cao chờ triển khai.
+  - **Security & Audit:** Chưa rollout background job gửi alert khi audit-log vượt threshold.
+- **Kế hoạch:** Duy trì focus P0/P1 cho đến khi e2e suite pass 100%, sau đó mới mở lại backlog tính năng mới.
 
 ---
 
 ## 2. Bảng tiến độ theo module (đã cập nhật theo thực tế)
 | Module | Tổng | Hoàn thành | Đang làm | Chờ làm | % | Ghi chú |
 |--------|------|------------|----------|---------|----|---------|
-| Infrastructure | 41 | 34 | 0 | 7 | 83% | ⚠️ Thiếu middleware cho multi-tenant (rủi ro bảo mật). |
+| Infrastructure | 41 | 34 | 0 | 7 | 83% | ✅ Prisma middleware + audit cron đã chạy; cần bổ sung alert cho log retention. |
 | Authentication | 15 | 15 | 0 | 0 | 100% | Hoạt động tốt. |
 | Products | 33 | 33 | 0 | 0 | 100% | ⚠️ Soft-delete chưa hoàn chỉnh (bug). |
 | Categories | 6 | 6 | 0 | 0 | 100% | Hoạt động tốt. |
 | Customers | 14 | 11 | 3 | 0 | 79% | ⚠️ Bug: stats không cập nhật cho đơn COD. |
 | Suppliers | 6 | 6 | 0 | 0 | 100% | Hoạt động tốt. |
-| Orders | 16 | 3 | 5 | 8 | 19% | ⚠️ Lỗi workflow, không trừ/hoàn kho, bug COD stats. |
-| Shipping | 12 | 2 | 2 | 8 | 17% | ⚠️ Lỗi workflow, tính phí sai, không cập nhật thanh toán COD. |
-| Inventory | 10 | 1 | 2 | 7 | 10% | ⚠️ Lỗi nghiêm trọng: KHÔNG trừ/hoàn kho. Workflow chuyển kho sai. |
+| Orders | 16 | 9 | 3 | 4 | 56% | ✅ Automation trừ/hoàn kho + COD stats + refund ORD-009 (OrderReturn + debt); còn thiếu KPI nâng cao/báo cáo. |
+| Shipping | 12 | 6 | 2 | 4 | 50% | ✅ Fee engine + rollback đã có; đang chờ partner API thực tế & retry queue. |
+| Inventory | 10 | 5 | 2 | 3 | 60% | ✅ Reservation/return + alert monitor (INV-009) đã chạy; tiếp theo là dashboard cross-branch & low-stock digest mở rộng. |
 | Finance | 10 | 0 | 1 | 9 | 0% | ⚠️ Logic tính thuế (VAT) sai. |
 | POS | 6 | 0 | 1 | 5 | 0% | Chờ các module khác sửa lỗi. |
 | Reports | 3 | 1 | 0 | 2 | 33% | `GET /reports/debt` đã có. |
@@ -56,43 +56,35 @@
 ## 4. Chi tiết theo dòng công việc (Trạng thái thực tế)
 
 ### 4.1 Hạ tầng & tuân thủ
-- **Vấn đề:** Tài liệu nói có Prisma middleware tự động inject `organizationId`, nhưng thực tế **KHÔNG có**. Bảo mật đang phụ thuộc vào việc query thủ công. Đây là rủi ro bảo mật.
-- **Tình trạng:** `AUDIT-001→004` và `INFRA-009` (Data Retention) **CHƯA ĐƯỢC TRIỂN KHAI** dù hạ tầng đã có.
-- **Đề xuất:** Ưu tiên P1 để xây dựng middleware và kích hoạt `AuditLogService`.
+- **Done:** Prisma `$extends` inject `organizationId` + guard skip list đã上线, AuditLogService ghi traceId + cron archive theo retention.
+- **Còn lại:** Chưa có alert tự động khi audit log vượt ngưỡng; cần theo dõi hiệu năng middleware khi dataset tăng.
 
 ### 4.2 CRM (Customers & Suppliers)
 - **Tình trạng:** CRUD backend cho Customers và Suppliers đã **Hoàn thành**.
 - **Vấn đề:** `CUST-007` (Customer Stats Auto-Update) có bug không cập nhật cho đơn hàng COD đã hoàn thành.
 
 ### 4.3 Orders & POS
-- **Tình trạng:** Backend cho Orders có **NHIỀU LỖI NGHIÊM TRỌNG**.
-- **Vấn đề:**
-  - `ORD-010`: Logic trừ kho **ĐÃ KÍCH HOẠT** thông qua bảng `OrderInventoryReservation` + automation (multi-tenant guard, double-deduct protection).
-  - `ORD-008`: Hoàn kho khi hủy đơn/Shipping fail **ĐÃ IMPLEMENT** (returnStockOnOrderCancel + shipping rollback).
-  - `ORD-005`: Workflow trạng thái ≈ tài liệu (COMPLETED chỉ cập nhật stats ở automation, `markCodPaid`, audit log đầy đủ, transitions cho PENDING⇄PROCESSING sau shipping fail).
-  - `ORD-009`: Logic refund chưa được kiểm chứng đầy đủ.
-- **POS:** Bị block do các logic về giá, chiết khấu, và tồn kho ở backend đang sai hoặc thiếu.
+- **Tiến độ:** Automation ORD-005/008/010 đã live, Playwright/REST test cover luồng tạo order → processing → shipping → COD settlement.
+- **Cập nhật:** `ORD-009` hoàn tất – refund request tạo `OrderReturn`, approve hoàn kho + điều chỉnh stats/debt, audit log đầy đủ, integration test chạy chu trình restock/commission.
+- **POS:** Đã hiển thị cảnh báo LOSS_SALE theo thời gian thực và bảng thuế GTGT ngay trong workspace; KPI nâng cao/báo cáo vẫn chờ triển khai.
 
 ### 4.4 Finance, Discounts & Reports
-- **Tình trạng:** Hầu hết là `Todo`.
-- **Vấn đề:**
-  - `FIN-002` (Partial Payment): Đã được "hoàn thành" theo hướng **KHÔNG hỗ trợ**.
-- `DISC-003` (Item-level Discount): DTO + Prisma fields đã hoàn thiện và POS Workspace hiện cho phép pick loại chiết khấu + giá trị/đơn vị + cảnh báo LOSS_SALE.
-- `DISC-006` (Tax Calculation): Thuế dựa trên `taxableSubtotal` (tự động loại item `taxExempt`, discount app). `PricingService` trả `taxBreakdown`, POS cũng có toggle `Miễn VAT` để đồng bộ dữ liệu lên API.
-  - `RPT-001` (Sales Dashboard): Bị block do dữ liệu order chưa chính xác.
+- `DISC-003` & `DISC-006` đã merge cùng migration `20251119095500_p1_full_schema` (thêm `discountAmount`, `taxableSubtotal`, `taxBreakdown`). POS UI nhận payload mới + cảnh báo LOSS_SALE.
+- `FIN-002`: vẫn giữ chính sách “không hỗ trợ partial payment” → docs cần nhấn mạnh.
+- `RPT-001`: chờ dữ liệu thực sau khi order automation ổn định để bật dashboard thật (hiện chỉ mock).
 
 ### 4.5 Integrations & Notifications
-- **Tình trạng:** Hầu hết là `Todo`.
-- **Vấn đề:**
-  - `SHIP-007/008/009`: Shipping fee tính theo partner/distance/weight + lưu breakdown. Workflow FAILED/RETURNED → order quay lại PENDING + hoàn kho; DELIVERED → auto COMPLETED + `markCodPaid`. Audit log phủ shipping order/status.
-  - `Webhooks`: CRUD đã có nhưng các tính năng quan trọng như phát event, retry/HMAC vẫn là `Todo`.
-  - `Notifications`: Toàn bộ là `Todo`.
+- `SHIP-007/008/009`: Fee engine + rollback đã triển khai (sử dụng settings `shipping.partners`). Cần build integration test thực sự với partner API khi có credential thật.
+- `INV-009`: Reservation monitor + alert endpoint (`GET/POST /inventory/reservation-alerts`) + nightly cron đã bật để phát hiện stock chưa release.
+- `Webhooks`: CRUD + HMAC guard đã có, nhưng chưa bật retry worker.
+- `Notifications`: vẫn là `Todo`; Playwright hiện chỉ verify toast nội bộ.
 
 ---
 
 ## 5. Kiểm thử & tài liệu
-- **Tình trạng:** Các tài liệu cốt lõi (`01_BUSINESS_LOGIC.md`, `03_DATABASE_SCHEMA.md`, `04_API_REFERENCE.md`) đã được cập nhật để phản ánh đúng trạng thái của code, bao gồm cả các lỗi và thiếu sót.
-- **Hành động tiếp theo:** Sử dụng các tài liệu đã cập nhật này làm nguồn thông tin chính xác để lên kế hoạch sửa lỗi và phát triển các tính năng còn lại.
+- **Docs:** `01_BUSINESS_LOGIC.md`, `03_DATABASE_SCHEMA.md`, `04_API_REFERENCE.md`, `AGENTS.md`, `TASK_TRACKING_REALITY_CHECK.md` đều đã cập nhật để nêu rõ automation mới (reservation, COD, shipping rollback, middleware).
+- **Tests:** Bổ sung Playwright suite (login, dashboard, customers, orders, POS, order-shipping-flow) chạy bằng `pnpm test:playwright` – lệnh này tự `migrate reset + seed` mỗi lần.
+- **Hành động tiếp theo:** Hoàn thiện nốt test cho refund/notifications, giảm thời gian chạy Playwright để tránh timeout CI.
 
 ---
 

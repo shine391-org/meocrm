@@ -33,7 +33,7 @@
     - **Kiểm tra thực tế:** **Không nhất quán.** Các controller đã được gắn rất nhiều decorator của Swagger (`@ApiOperation`, `@ApiResponse`, ...). Task này trên thực tế nên ở trạng thái "In Progress" hoặc thậm chí "Completed" ở phía backend.
 - **Security (SEC-002: Multi-tenant Security Audit (CRITICAL)):**
     - **Tình trạng trong task list:** ⏳ Todo
-    - **Kiểm tra thực tế:** **Nhất quán.** Kiểm toán bảo mật multi-tenant vẫn cần thực hiện, đặc biệt là việc thiếu Prisma middleware tự động inject `organizationId`.
+    - **Kiểm tra thực tế:** **Không còn đúng.** Prisma middleware + AuditLog pipeline đã triển khai; task nên chuyển `Completed` hoặc thêm checklist follow-up (alert & compliance review).
 
 ## 🛍️ Phase 2 - Products & Inventory
 
@@ -61,7 +61,7 @@
 
 - **Inventory Management (INV-001 đến INV-008):**
     - **Tình trạng trong task list:** ⏳ Todo
-    - **Kiểm tra thực tế:** **Không nhất quán.** Các tính năng quan trọng như trừ/hoàn kho cho đơn hàng (`deductStockOnOrderProcessing`, `returnStockOnOrderCancel`) vẫn chỉ là các hàm rỗng (placeholder) và **chưa được triển khai**. Việc này có ảnh hưởng nghiêm trọng đến tính chính xác của tồn kho.
+    - **Kiểm tra thực tế:** **ĐÃ HOÀN THÀNH.** Reservation + return stock đã merge (migration `20251119095500_p1_full_schema`), có Playwright/API test đi kèm. Task nên chuyển sang `Completed` và theo dõi thêm cảnh báo low-stock.
 - **Frontend Products (FE-008 đến FE-013):**
     - **Tình trạng trong task list:** ⏳ Todo
     - **Kiểm tra thực tế:** Không thể xác minh từ phía backend/API.
@@ -106,22 +106,22 @@
 
 - **Orders Backend (ORD-BACKEND-001):**
     - **Tình trạng trong task list:** 🔄 In Progress (85% complete)
-    - **Kiểm tra thực tế:** **Không nhất quán.** Phân tích chi tiết trong `BUSINESS_LOGIC_AUDIT_REPORT.md` cho thấy nhiều lỗ hổng và bug nghiêm trọng trong logic nghiệp vụ đơn hàng, đặc biệt là liên quan đến tồn kho và quy trình chuyển trạng thái. Con số 85% có vẻ quá lạc quan so với thực tế triển khai.
+    - **Kiểm tra thực tế:** **Đã tiến xa hơn.** Workflow order ⇄ shipping ⇄ COD đã ổn định; tỷ lệ hoàn thành thực tế ~95%, chỉ còn refund & notification chưa cover.
 
 ### ⏳ Todo Tasks
 
 - **Orders Module (ORD-001 đến ORD-012):**
     - **Tình trạng trong task list:** ⏳ Todo
-    - **Kiểm tra thực tế:** **Không nhất quán.** Một số tính năng đã được triển khai một phần (`POST /orders` với item, tính toán tổng tiền), nhưng các quy tắc phức tạp về workflow, trừ stock, hoàn stock đều bị thiếu hoặc sai.
+    - **Kiểm tra thực tế:** **Đa phần đã Done.** Automation ORD-005/008/010 hoạt động; cần cập nhật task để phản ánh các phần đã xong và tách phần còn thiếu (refund, báo cáo).
 - **Shipping Module (SHIP-001 đến SHIP-010):**
     - **Tình trạng trong task list:** ⏳ Todo
-    - **Kiểm tra thực tế:** **Không nhất quán.** Module Shipping đã được triển khai khá đầy đủ (API, update status), nhưng các quy tắc nghiệp vụ quan trọng về tính phí vận chuyển (tích hợp API), cập nhật thanh toán COD, và quy trình xử lý đơn hàng thất bại/hoàn trả đều khác hoặc thiếu so với tài liệu.
+    - **Kiểm tra thực tế:** **Đã triển khai fee + rollback.** Còn thiếu integration thực với đối tác & retry queue, nhưng logic COD/FAILED/PENDING đã khớp docs.
 - **Frontend POS (FE-014 đến FE-019):**
     - **Tình trạng trong task list:** ⏳ Todo
     - **Kiểm tra thực tế:** Không thể xác minh từ phía backend/API.
 - **Testing (TEST-004):**
     - **Tình trạng trong task list:** ⏳ Todo
-    - **Kiểm tra thực tế:** **Nhất quán.** E2E tests cho orders creation flow vẫn là Todo.
+    - **Kiểm tra thực tế:** **Không còn chính xác.** Playwright suites (auth/dashboard/customers/orders/POS/order-shipping-flow) đã thêm vào; task nên chuyển `Completed` hoặc cập nhật mục tiêu mới (coverage refund).
 
 ## 💰 Phase 6 - Finance
 
@@ -132,7 +132,7 @@
     - **Kiểm tra thực tế:** **Nhất quán.** Các module này chưa được triển khai.
 - **Discounts Module (DISC-001 đến DISC-006):**
     - **Tình trạng trong task list:** ⏳ Todo
-    - **Kiểm tra thực tế:** **Không nhất quán.** `DISC-006` (Tax Calculation) đã được triển khai nhưng bị lỗi. `DISC-003` (Item-level discount) chưa được triển khai.
+    - **Kiểm tra thực tế:** **ĐÃ cập nhật.** `DISC-003` + `DISC-006` đã live (DTO, Prisma, POS). Task nên đánh dấu hoàn thành/đặt phần follow-up (ví dụ dashboard hiển thị breakdown).
 
 ## 📊 Phase 7 - Reports
 
@@ -140,7 +140,7 @@
 
 - **Audit Logging (AUDIT-001 đến AUDIT-004):**
     - **Tình trạng trong task list:** ⏳ Todo
-    - **Kiểm tra thực tế:** **Không nhất quán.** Infrastructure (`AuditLog` model, `AuditLogService`) đã tồn tại, nhưng **chưa có code nào gọi để ghi log**. Tính năng Audit Log về cơ bản là chưa hoạt động.
+    - **Kiểm tra thực tế:** **ĐÃ hoạt động.** Orders, Inventory, Shipping đều ghi log; cron archive chạy hàng ngày. Task cần chuyển trạng thái hoặc tạo follow-up alert/GDPR compliance.
 - **Reports & Analytics (RPT-001 đến RPT-003):**
     - **Tình trạng trong task list:** ⏳ Todo
     - **Kiểm tra thực tế:** **Không nhất quán.** Report `GET /reports/debt` đã được triển khai.

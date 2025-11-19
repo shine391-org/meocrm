@@ -4,7 +4,6 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as crypto from 'crypto';
 import axios, { AxiosInstance } from 'axios';
-import { v4 as uuidv4 } from 'uuid';
 import { OrderStatus, Prisma, Webhook } from '@prisma/client';
 import {
   decryptSecret,
@@ -146,14 +145,14 @@ export class WebhooksService implements OnModuleInit {
   ): Promise<{ success: boolean; message: string; deliveryId?: string }> {
     const webhook = await this.findWebhookOrThrow(webhookId, organizationId);
 
-    const deliveryId = uuidv4();
+    const deliveryId = crypto.randomUUID();
     const payload = {
       event: 'ping',
       version: '1.0',
       organizationId: webhook.organizationId,
       data: { message: 'Test webhook payload' },
       meta: {
-        traceId: uuidv4(),
+        traceId: crypto.randomUUID(),
         sentAt: new Date().toISOString(),
       },
     };

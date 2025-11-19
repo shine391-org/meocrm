@@ -13,7 +13,10 @@ describe('ShippingService', () => {
   let prisma: any;
   let shippingFeeService: { calculate: jest.Mock };
   let ordersService: { updateStatus: jest.Mock; markCodPaid: jest.Mock };
-  let inventoryService: { returnStockOnOrderCancel: jest.Mock };
+  let inventoryService: {
+    returnStockOnOrderCancel: jest.Mock;
+    checkReservationHealth: jest.Mock;
+  };
   let auditLogService: { log: jest.Mock };
   let requestContextService: { getTraceId: jest.Mock };
 
@@ -45,6 +48,7 @@ describe('ShippingService', () => {
     };
     inventoryService = {
       returnStockOnOrderCancel: jest.fn().mockResolvedValue(undefined),
+      checkReservationHealth: jest.fn().mockResolvedValue({ alertCreated: false }),
     };
     auditLogService = { log: jest.fn().mockResolvedValue(undefined) };
     requestContextService = { getTraceId: jest.fn().mockReturnValue('trace-shipping') };
@@ -184,7 +188,6 @@ describe('ShippingService', () => {
   it('fails shipping order and returns order to processing', async () => {
     prisma.shippingOrder.findFirst.mockResolvedValue({
       id: 's1',
-      partner: { id: 'partner-1' },
       status: ShippingStatus.PICKING_UP,
       orderId: 'order-1',
       order: { id: 'order-1', paymentMethod: 'CASH' },
@@ -197,8 +200,8 @@ describe('ShippingService', () => {
         update: jest.fn().mockResolvedValue({
           id: 's1',
           status: ShippingStatus.FAILED,
-          partner: { id: 'partner-1' },
-          order: { id: 'order-1' },
+          partner: { id: 'partner-1', organizationId: 'org-1' },
+          order: { id: 'order-1', paymentMethod: 'CASH' },
           orderId: 'order-1',
         }),
       },
@@ -225,12 +228,19 @@ describe('ShippingService', () => {
       'org-1',
       expect.any(Object),
     );
+    expect(inventoryService.checkReservationHealth).toHaveBeenCalledWith(
+      'order-1',
+      'org-1',
+      expect.objectContaining({
+        triggeredBy: 'shipping',
+        shippingStatus: ShippingStatus.FAILED,
+      }),
+    );
   });
 
   it('returns shipping order and cancels the linked order', async () => {
     prisma.shippingOrder.findFirst.mockResolvedValue({
       id: 's2',
-      partner: { id: 'partner-1' },
       status: ShippingStatus.IN_TRANSIT,
       orderId: 'order-2',
       order: { id: 'order-2', paymentMethod: 'CASH' },
@@ -243,9 +253,9 @@ describe('ShippingService', () => {
         update: jest.fn().mockResolvedValue({
           id: 's2',
           status: ShippingStatus.RETURNED,
-          partner: { id: 'partner-1' },
+          partner: { id: 'partner-1', organizationId: 'org-1' },
           orderId: 'order-2',
-          order: { id: 'order-2' },
+          order: { id: 'order-2', paymentMethod: 'CASH' },
         }),
       },
       shippingPartner: { update: jest.fn() },
@@ -268,6 +278,11 @@ describe('ShippingService', () => {
       'order-2',
       'org-1',
       expect.any(Object),
+    );
+    expect(inventoryService.checkReservationHealth).toHaveBeenCalledWith(
+      'order-2',
+      'org-1',
+      expect.objectContaining({ shippingStatus: ShippingStatus.RETURNED }),
     );
   });
 });

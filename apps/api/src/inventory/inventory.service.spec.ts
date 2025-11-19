@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { StockAdjustmentReason } from './dto/adjust-stock.dto';
+import { OrderInventoryReservationStatus, ShippingStatus } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { RequestContextService } from '../common/context/request-context.service';
 
@@ -608,9 +609,9 @@ describe('InventoryService', () => {
     beforeEach(() => {
       prisma.order.findFirst.mockResolvedValue(mockOrder as any);
       prisma.orderInventoryReservation.count.mockResolvedValue(0);
-      prisma.inventory.findUnique.mockResolvedValue({ quantity: 10 });
-      prisma.inventory.update.mockResolvedValue({ quantity: 7 });
-      prisma.productVariant.findFirst.mockResolvedValue({ id: 'variant-1', stock: 5 });
+      prisma.inventory.findUnique.mockResolvedValue({ quantity: 10 } as any);
+      prisma.inventory.update.mockResolvedValue({ quantity: 7 } as any);
+      prisma.productVariant.findFirst.mockResolvedValue({ id: 'variant-1', stock: 5 } as any);
       prisma.productVariant.update.mockResolvedValue({ id: 'variant-1' } as any);
       prisma.stockAdjustment.create.mockResolvedValue({ id: 'adj-1' } as any);
       prisma.orderInventoryReservation.createMany.mockResolvedValue({ count: 1 } as any);
@@ -639,7 +640,7 @@ describe('InventoryService', () => {
     });
 
     it('throws when stock is insufficient', async () => {
-      prisma.inventory.findUnique.mockResolvedValue({ quantity: 1 });
+      prisma.inventory.findUnique.mockResolvedValue({ quantity: 1 } as any);
 
       await expect(
         service.deductStockOnOrderProcessing('order-1', 'org-1', 'user-1'),
@@ -684,8 +685,8 @@ describe('InventoryService', () => {
           variantReservedQuantity: 1,
         },
       ] as any);
-      prisma.inventory.findUnique.mockResolvedValue({ quantity: 3 });
-      prisma.inventory.update.mockResolvedValue({ quantity: 5 });
+      prisma.inventory.findUnique.mockResolvedValue({ quantity: 3 } as any);
+      prisma.inventory.update.mockResolvedValue({ quantity: 5 } as any);
       prisma.productVariant.update.mockResolvedValue({ id: 'variant-1' } as any);
       prisma.stockAdjustment.create.mockResolvedValue({ id: 'adj-2' } as any);
       prisma.orderInventoryReservation.updateMany.mockResolvedValue({ count: 1 } as any);

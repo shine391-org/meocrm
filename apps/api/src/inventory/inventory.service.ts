@@ -5,12 +5,22 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { AdjustmentType, AuditAction, OrderInventoryReservationStatus, Prisma } from '@prisma/client';
+import {
+  AdjustmentType,
+  AuditAction,
+  InventoryReservationAlertStatus,
+  OrderInventoryReservationStatus,
+  OrderStatus,
+  Prisma,
+  ShippingStatus,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { GetInventoryDto } from './dto/get-inventory.dto';
 import { AdjustStockDto, StockAdjustmentReason } from './dto/adjust-stock.dto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
+import { GetReservationAlertsDto } from './dto/get-reservation-alerts.dto';
+import { ScanReservationAlertsDto } from './dto/scan-reservation-alerts.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { RequestContextService } from '../common/context/request-context.service';
 
@@ -23,6 +33,14 @@ interface InventoryReservationActor {
   traceId?: string;
 }
 
+interface ReservationMonitorContext {
+  triggeredBy?: 'shipping' | 'scan' | 'manual' | 'deduction';
+  shippingOrderId?: string;
+  shippingStatus?: ShippingStatus;
+  retryCount?: number;
+  note?: string;
+}
+
 interface OrderStockAdjustmentItemInput {
   productId: string;
   oldQuantity: number;
@@ -30,9 +48,36 @@ interface OrderStockAdjustmentItemInput {
   difference: number;
 }
 
+interface ReservationAlertPayload {
+  organizationId: string;
+  orderId: string;
+  branchId?: string | null;
+  reservationIds: string[];
+  quantityHeld: number;
+  unresolvedReservations: number;
+  shippingOrderId?: string;
+  shippingStatus?: ShippingStatus;
+  consecutiveFailures?: number;
+  triggeredBy?: string;
+  note?: string;
+}
+
+const STUCK_ORDER_STATUSES: OrderStatus[] = [
+  OrderStatus.PENDING,
+  OrderStatus.CANCELLED,
+  OrderStatus.COMPLETED,
+];
+
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
+  private readonly reservationAlertInclude = {
+    order: { select: { id: true, code: true, status: true } },
+    branch: { select: { id: true, name: true } },
+    shippingOrder: {
+      select: { id: true, trackingCode: true, status: true, retryCount: true },
+    },
+  } as const;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -437,6 +482,161 @@ export class InventoryService {
     };
   }
 
+  async getReservationAlerts(
+    query: GetReservationAlertsDto,
+    organizationId: string,
+  ) {
+    const { page = 1, limit = 20, orderId, status } = query;
+    const normalizedLimit = Math.max(1, Math.min(limit, 100));
+    const skip = (page - 1) * normalizedLimit;
+
+    const where: Prisma.InventoryReservationAlertWhereInput = {
+      organizationId,
+    };
+
+    if (orderId) {
+      where.orderId = orderId;
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.inventoryReservationAlert.findMany({
+        where,
+        include: this.reservationAlertInclude,
+        orderBy: { lastDetectedAt: 'desc' },
+        skip,
+        take: normalizedLimit,
+      }),
+      this.prisma.inventoryReservationAlert.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit: normalizedLimit,
+        totalPages: Math.ceil(total / normalizedLimit) || 0,
+      },
+    };
+  }
+
+  async scanReservationLeaks(
+    organizationId: string,
+    dto?: ScanReservationAlertsDto,
+  ) {
+    const minAgeMinutes = Math.max(dto?.minAgeMinutes ?? 30, 0);
+    const cutoff = new Date(Date.now() - minAgeMinutes * 60_000);
+    const normalizedLimit = Math.max(1, Math.min(dto?.limit ?? 50, 200));
+    const minQuantity = Math.max(dto?.minQuantity ?? 1, 1);
+
+    const where: Prisma.OrderInventoryReservationWhereInput = {
+      organizationId,
+      status: OrderInventoryReservationStatus.RESERVED,
+      updatedAt: { lte: cutoff },
+      order: {
+        status: { in: STUCK_ORDER_STATUSES },
+        deletedAt: null,
+      },
+    };
+
+    if (dto?.orderId) {
+      where.orderId = dto.orderId;
+    }
+
+    const stuckReservations = await this.prisma.orderInventoryReservation.findMany({
+      where,
+      select: {
+        id: true,
+        orderId: true,
+        branchId: true,
+        quantity: true,
+        variantReservedQuantity: true,
+        order: {
+          select: {
+            branchId: true,
+          },
+        },
+      },
+      take: normalizedLimit,
+    });
+
+    const grouped = new Map<
+      string,
+      {
+        branchId: string | null;
+        reservationIds: string[];
+        quantityHeld: number;
+        unresolvedReservations: number;
+      }
+    >();
+
+    for (const reservation of stuckReservations) {
+      const baseQuantity = Number(reservation.quantity ?? 0);
+      const variantQty = Number(reservation.variantReservedQuantity ?? 0);
+      const current =
+        grouped.get(reservation.orderId) ?? {
+          branchId: reservation.branchId ?? reservation.order?.branchId ?? null,
+          reservationIds: [],
+          quantityHeld: 0,
+          unresolvedReservations: 0,
+        };
+      current.reservationIds.push(reservation.id);
+      current.quantityHeld += baseQuantity + variantQty;
+      current.unresolvedReservations += 1;
+      grouped.set(reservation.orderId, current);
+    }
+
+    const filteredEntries = [...grouped.entries()].filter(
+      ([, payload]) => payload.quantityHeld >= minQuantity,
+    );
+
+    if (!filteredEntries.length) {
+      if (dto?.orderId) {
+        await this.resolveReservationAlerts(organizationId, dto.orderId, 'scan-no-leaks');
+      }
+      return {
+        data: [],
+        meta: {
+          scanned: grouped.size,
+          detected: 0,
+        },
+      };
+    }
+
+    const orderIds = filteredEntries.map(([orderId]) => orderId);
+    const latestShippingOrders = await this.fetchLatestShippingOrders(orderIds);
+
+    const alerts = [];
+    for (const [orderId, payload] of filteredEntries) {
+      const shipping = latestShippingOrders.get(orderId);
+      const alert = await this.upsertReservationAlert(this.prisma, {
+        organizationId,
+        orderId,
+        branchId: payload.branchId,
+        reservationIds: payload.reservationIds,
+        quantityHeld: payload.quantityHeld,
+        unresolvedReservations: payload.unresolvedReservations,
+        shippingOrderId: shipping?.id,
+        shippingStatus: shipping?.status,
+        consecutiveFailures: shipping?.retryCount,
+        triggeredBy: 'scan',
+      });
+      alerts.push(alert);
+    }
+
+    return {
+      data: alerts,
+      meta: {
+        scanned: grouped.size,
+        detected: alerts.length,
+      },
+    };
+  }
+
   /**
    * INV-005: Create inter-branch transfer
    * INV-007: Negative stock prevention
@@ -680,7 +880,7 @@ export class InventoryService {
   ) {
     const actor = this.normalizeReservationActor(actorInput);
 
-    return this.prisma.$transaction(async (tx) => {
+    const outcome = await this.prisma.$transaction(async (tx) => {
       const order = await this.loadOrderInventoryContext(tx, orderId, organizationId);
 
       const reservations = await tx.orderInventoryReservation.findMany({
@@ -763,6 +963,10 @@ export class InventoryService {
         },
       };
     });
+
+    await this.resolveReservationAlerts(organizationId, orderId, 'restock-complete');
+
+    return outcome;
   }
 
   /**
@@ -776,7 +980,7 @@ export class InventoryService {
   ) {
     const actor = this.normalizeReservationActor(actorInput);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const order = await this.loadOrderInventoryContext(tx, orderId, organizationId);
       await this.ensureNoActiveReservation(tx, orderId, organizationId);
 
@@ -864,6 +1068,254 @@ export class InventoryService {
           adjustmentId: adjustment.id,
         },
       };
+    });
+
+    await this.resolveReservationAlerts(organizationId, orderId, 'reservation-regenerated');
+
+    return result;
+  }
+
+  private async fetchLatestShippingOrders(orderIds: string[]) {
+    if (!orderIds.length) {
+      return new Map<string, { id: string; orderId: string; status: ShippingStatus; retryCount: number }>();
+    }
+
+    const shippingOrders = await this.prisma.shippingOrder.findMany({
+      where: { orderId: { in: orderIds } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        retryCount: true,
+      },
+    });
+
+    const latestMap = new Map<string, (typeof shippingOrders)[number]>();
+    for (const record of shippingOrders) {
+      if (!latestMap.has(record.orderId)) {
+        latestMap.set(record.orderId, record);
+      }
+    }
+
+    return latestMap;
+  }
+
+  async checkReservationHealth(
+    orderId: string,
+    organizationId: string,
+    context?: ReservationMonitorContext,
+  ) {
+    const stuckReservations = await this.prisma.orderInventoryReservation.findMany({
+      where: {
+        orderId,
+        organizationId,
+        status: OrderInventoryReservationStatus.RESERVED,
+        order: {
+          status: { in: STUCK_ORDER_STATUSES },
+          deletedAt: null,
+        },
+      },
+      select: {
+        id: true,
+        branchId: true,
+        quantity: true,
+        variantReservedQuantity: true,
+      },
+    });
+
+    if (!stuckReservations.length) {
+      await this.resolveReservationAlerts(organizationId, orderId, context?.note);
+      return { alertCreated: false };
+    }
+
+    const branchId = stuckReservations[0]?.branchId ?? null;
+    const quantityHeld = stuckReservations.reduce((sum, reservation) => {
+      return (
+        sum + Number(reservation.quantity ?? 0) + Number(reservation.variantReservedQuantity ?? 0)
+      );
+    }, 0);
+
+    const alert = await this.upsertReservationAlert(this.prisma, {
+      organizationId,
+      orderId,
+      branchId,
+      reservationIds: stuckReservations.map((r) => r.id),
+      quantityHeld,
+      unresolvedReservations: stuckReservations.length,
+      shippingOrderId: context?.shippingOrderId,
+      shippingStatus: context?.shippingStatus,
+      consecutiveFailures: context?.retryCount,
+      triggeredBy: context?.triggeredBy ?? 'manual',
+      note: context?.note,
+    });
+
+    return { alertCreated: true, alert };
+  }
+
+  private async upsertReservationAlert(
+    prisma: PrismaTransactionalClient | PrismaService,
+    payload: ReservationAlertPayload,
+  ) {
+    const existing = await prisma.inventoryReservationAlert.findFirst({
+      where: {
+        organizationId: payload.organizationId,
+        orderId: payload.orderId,
+        status: InventoryReservationAlertStatus.OPEN,
+      },
+      include: this.reservationAlertInclude,
+    });
+
+    const details = this.buildAlertDetails(payload);
+    const lastDetectedAt = new Date();
+    const consecutiveFailures =
+      payload.consecutiveFailures ?? existing?.consecutiveFailures ?? 0;
+
+    const relationData: Prisma.InventoryReservationAlertUpdateInput = {
+      unresolvedReservations: payload.unresolvedReservations,
+      quantityHeld: payload.quantityHeld,
+      consecutiveFailures,
+      shippingStatus: payload.shippingStatus ?? existing?.shippingStatus,
+      details,
+      lastDetectedAt,
+    };
+
+    if (payload.branchId) {
+      relationData.branch = { connect: { id: payload.branchId } };
+    }
+
+    if (payload.shippingOrderId) {
+      relationData.shippingOrder = { connect: { id: payload.shippingOrderId } };
+    }
+
+    if (existing) {
+      const updated = await prisma.inventoryReservationAlert.update({
+        where: { id: existing.id },
+        data: relationData,
+        include: this.reservationAlertInclude,
+      });
+
+      await this.auditLogService.log({
+        user: { id: 'inventory-monitor', organizationId: payload.organizationId },
+        entity: 'inventoryReservationAlert',
+        entityId: updated.id,
+        action: 'inventory.reservation.alert.updated',
+        auditAction: AuditAction.UPDATE,
+        newValues: {
+          orderId: payload.orderId,
+          unresolvedReservations: payload.unresolvedReservations,
+          quantityHeld: payload.quantityHeld,
+          triggeredBy: payload.triggeredBy,
+        },
+      });
+
+      return updated;
+    }
+
+    const created = await prisma.inventoryReservationAlert.create({
+      data: {
+        organization: { connect: { id: payload.organizationId } },
+        order: { connect: { id: payload.orderId } },
+        branch: payload.branchId ? { connect: { id: payload.branchId } } : undefined,
+        shippingOrder: payload.shippingOrderId
+          ? { connect: { id: payload.shippingOrderId } }
+          : undefined,
+        unresolvedReservations: payload.unresolvedReservations,
+        quantityHeld: payload.quantityHeld,
+        consecutiveFailures,
+        shippingStatus: payload.shippingStatus,
+        details,
+        lastDetectedAt,
+      },
+      include: this.reservationAlertInclude,
+    });
+
+    await this.auditLogService.log({
+      user: { id: 'inventory-monitor', organizationId: payload.organizationId },
+      entity: 'inventoryReservationAlert',
+      entityId: created.id,
+      action: 'inventory.reservation.alert.created',
+      auditAction: AuditAction.CREATE,
+      newValues: {
+        orderId: payload.orderId,
+        unresolvedReservations: payload.unresolvedReservations,
+        quantityHeld: payload.quantityHeld,
+        triggeredBy: payload.triggeredBy,
+      },
+    });
+
+    return created;
+  }
+
+  private buildAlertDetails(payload: ReservationAlertPayload): Prisma.JsonObject {
+    const details: Record<string, unknown> = {
+      reservationIds: payload.reservationIds,
+      triggeredBy: payload.triggeredBy,
+    };
+
+    if (payload.note) {
+      details.note = payload.note;
+    }
+
+    return details as Prisma.JsonObject;
+  }
+
+  private async resolveReservationAlerts(
+    organizationId: string,
+    orderId: string,
+    resolutionNote?: string,
+  ) {
+    if (!orderId) {
+      return;
+    }
+
+    const hasStuckReservations = await this.prisma.orderInventoryReservation.count({
+      where: {
+        organizationId,
+        orderId,
+        status: OrderInventoryReservationStatus.RESERVED,
+        order: {
+          status: { in: STUCK_ORDER_STATUSES },
+          deletedAt: null,
+        },
+      },
+    });
+
+    if (hasStuckReservations > 0) {
+      return;
+    }
+
+    const openAlert = await this.prisma.inventoryReservationAlert.findFirst({
+      where: {
+        organizationId,
+        orderId,
+        status: InventoryReservationAlertStatus.OPEN,
+      },
+    });
+
+    if (!openAlert) {
+      return;
+    }
+
+    await this.prisma.inventoryReservationAlert.update({
+      where: { id: openAlert.id },
+      data: {
+        status: InventoryReservationAlertStatus.RESOLVED,
+        resolvedAt: new Date(),
+        resolutionNote,
+      },
+    });
+
+    await this.auditLogService.log({
+      user: { id: 'inventory-monitor', organizationId },
+      entity: 'inventoryReservationAlert',
+      entityId: openAlert.id,
+      action: 'inventory.reservation.alert.resolved',
+      auditAction: AuditAction.UPDATE,
+      newValues: {
+        orderId,
+        resolutionNote,
+      },
     });
   }
 

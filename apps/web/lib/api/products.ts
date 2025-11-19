@@ -9,6 +9,7 @@ export interface ProductListItem {
   name: string;
   sellPrice?: number;
   price?: number;
+  costPrice?: number;
   stock?: number;
   unit?: string | null;
   unitOfMeasure?: string | null;

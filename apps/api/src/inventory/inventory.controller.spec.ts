@@ -14,6 +14,8 @@ describe('InventoryController', () => {
     getInventoryByBranch: jest.fn(),
     adjustStock: jest.fn(),
     getLowStockAlerts: jest.fn(),
+    getReservationAlerts: jest.fn(),
+    scanReservationLeaks: jest.fn(),
     createTransfer: jest.fn(),
   };
 
@@ -214,6 +216,32 @@ describe('InventoryController', () => {
       await controller.getLowStockAlerts('branch-2', 'org-2');
 
       expect(service.getLowStockAlerts).toHaveBeenCalledWith('branch-2', 'org-2');
+    });
+  });
+
+  describe('getReservationAlerts', () => {
+    it('should return reservation alerts', async () => {
+      const mockResult = { data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } };
+      mockInventoryService.getReservationAlerts.mockResolvedValue(mockResult);
+
+      const query = { orderId: 'order-1', page: 2 } as any;
+      const result = await controller.getReservationAlerts(query, 'org-1');
+
+      expect(result).toEqual(mockResult);
+      expect(service.getReservationAlerts).toHaveBeenCalledWith(query, 'org-1');
+    });
+  });
+
+  describe('scanReservationAlerts', () => {
+    it('should trigger reservation leak scan', async () => {
+      const mockResult = { data: [{ id: 'alert-1' }], meta: { scanned: 1, detected: 1 } };
+      mockInventoryService.scanReservationLeaks.mockResolvedValue(mockResult);
+
+      const body = { minAgeMinutes: 0, orderId: 'order-1' } as any;
+      const result = await controller.scanReservationAlerts(body, 'org-1');
+
+      expect(result).toEqual(mockResult);
+      expect(service.scanReservationLeaks).toHaveBeenCalledWith('org-1', body);
     });
   });
 

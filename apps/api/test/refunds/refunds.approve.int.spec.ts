@@ -10,6 +10,7 @@ import {
   Prisma,
   User,
   UserRole,
+  ReturnStatus,
 } from '@prisma/client';
 import { RefundsService } from '../../src/refunds/refunds.service';
 import { RequestContextService } from '../../src/common/context/request-context.service';
@@ -34,6 +35,8 @@ type SeedRefundResult = {
   initialProductStock: number;
   initialVariantStock: number;
 };
+
+const approvePayload = { refundMethod: 'CASH' as const };
 
 const PRODUCT_STOCK = 3;
 const VARIANT_STOCK = 5;
@@ -85,12 +88,8 @@ let eventEmitterMock: {
   });
 
   const runAs = async <T>(organizationId: string, user: User, handler: () => Promise<T>): Promise<T> => {
-    return requestContext.run(async () => {
-      requestContext.setContext({
-        organizationId,
-        userId: user.id,
-        roles: [user.role],
-      });
+    return requestContext.withOrganizationContext(organizationId, async () => {
+      requestContext.setContext({ userId: user.id, roles: [user.role] });
       return handler();
     });
   };
@@ -166,7 +165,36 @@ let eventEmitterMock: {
             quantity: ITEM_QUANTITY,
             unitPrice: 50000,
             subtotal: 100000,
+            netTotal: 100000,
           },
+        },
+      },
+    });
+
+    const orderItems = await prisma.orderItem.findMany({ where: { orderId: order.id } });
+    const refundAmount = orderItems.reduce(
+      (sum, item) => sum.add(item.subtotal ?? item.unitPrice ?? 0),
+      new Prisma.Decimal(0),
+    );
+
+    await prisma.orderReturn.create({
+      data: {
+        organizationId: organization.id,
+        orderId: order.id,
+        code: `RET-${Date.now()}`,
+        reason: 'Seed refund',
+        refundAmount,
+        refundMethod: 'CASH',
+        status: ReturnStatus.PENDING,
+        createdBy: user.id,
+        items: {
+          create: orderItems.map((item) => ({
+            orderItemId: item.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            refundPrice: item.unitPrice,
+            lineTotal: item.subtotal,
+          })),
         },
       },
     });
@@ -226,13 +254,16 @@ let eventEmitterMock: {
     const seed = await seedRefundScenario();
 
     await runAs(seed.organizationId, seed.user, () =>
-      refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+      refundsService.approveRefund(seed.orderId, approvePayload as any, seed.user, seed.organizationId),
     );
 
     const product = await prisma.product.findUnique({ where: { id: seed.productId } });
     const variant = await prisma.productVariant.findUnique({ where: { id: seed.variantId } });
     expect(product?.stock).toBe(seed.initialProductStock + seed.quantity);
     expect(variant?.stock).toBe(seed.initialVariantStock + seed.quantity);
+
+    const orderReturn = await prisma.orderReturn.findFirst({ where: { orderId: seed.orderId } });
+    expect(orderReturn?.status).toBe(ReturnStatus.COMPLETED);
 
     const commissions = await prisma.commission.findMany({ where: { orderId: seed.orderId } });
     const adjustment = commissions.find((entry) => entry.isAdjustment);
@@ -295,6 +326,7 @@ let eventEmitterMock: {
             quantity: 1,
             unitPrice: 150000,
             subtotal: 150000,
+            netTotal: 150000,
           },
         },
       },
@@ -306,13 +338,36 @@ let eventEmitterMock: {
       ],
     });
 
+    const standaloneItems = await prisma.orderItem.findMany({ where: { orderId: order.id } });
+    await prisma.orderReturn.create({
+      data: {
+        organizationId,
+        orderId: order.id,
+        code: `RET-SA-${Date.now()}`,
+        reason: 'Standalone refund',
+        refundAmount: new Prisma.Decimal(150000),
+        refundMethod: 'CASH',
+        status: ReturnStatus.PENDING,
+        createdBy: user.id,
+        items: {
+          create: standaloneItems.map((item) => ({
+            orderItemId: item.id,
+            productId: product.id,
+            quantity: item.quantity,
+            refundPrice: item.unitPrice,
+            lineTotal: item.subtotal,
+          })),
+        },
+      },
+    });
+
     await requestContext.run(async () => {
       requestContext.setContext({
         organizationId,
         userId: user.id,
         roles: [user.role],
       });
-      await refundsService.approveRefund(order.id, user, organizationId);
+      await refundsService.approveRefund(order.id, approvePayload as any, user, organizationId);
     });
 
     const updatedProduct = await prisma.product.findUnique({ where: { id: product.id } });
@@ -332,7 +387,7 @@ let eventEmitterMock: {
 
     await expect(
       runAs(seed.organizationId, seed.user, () =>
-        refundsService.approveRefund('missing-order', seed.user, seed.organizationId),
+        refundsService.approveRefund('missing-order', approvePayload as any, seed.user, seed.organizationId),
       ),
     ).rejects.toThrow('Order with ID missing-order not found.');
   });
@@ -345,7 +400,7 @@ let eventEmitterMock: {
 
     await expect(
       runAs(seed.organizationId, seed.user, () =>
-        refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+        refundsService.approveRefund(seed.orderId, approvePayload as any, seed.user, seed.organizationId),
       ),
     ).rejects.toThrow('Cannot refund an order that has not been completed.');
   });
@@ -359,7 +414,7 @@ let eventEmitterMock: {
 
     await expect(
       runAs(seed.organizationId, seed.user, () =>
-        refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+        refundsService.approveRefund(seed.orderId, approvePayload as any, seed.user, seed.organizationId),
       ),
     ).rejects.toThrow('Refund window of 7 days has expired.');
   });
@@ -394,13 +449,13 @@ let eventEmitterMock: {
     const seed = await seedRefundScenario();
 
     await runAs(seed.organizationId, seed.user, () =>
-      refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+      refundsService.approveRefund(seed.orderId, approvePayload as any, seed.user, seed.organizationId),
     );
     const productAfterFirst = await prisma.product.findUnique({ where: { id: seed.productId } });
     const variantAfterFirst = await prisma.productVariant.findUnique({ where: { id: seed.variantId } });
 
     await runAs(seed.organizationId, seed.user, () =>
-      refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+      refundsService.approveRefund(seed.orderId, approvePayload as any, seed.user, seed.organizationId),
     );
 
     const productAfterSecond = await prisma.product.findUnique({ where: { id: seed.productId } });
@@ -446,7 +501,7 @@ let eventEmitterMock: {
     try {
       await expect(
         runAs(seed.organizationId, seed.user, () =>
-          refundsService.approveRefund(seed.orderId, seed.user, seed.organizationId),
+          refundsService.approveRefund(seed.orderId, approvePayload as any, seed.user, seed.organizationId),
         ),
       ).rejects.toThrow('forced variant failure');
     } finally {

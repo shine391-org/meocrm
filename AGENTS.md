@@ -43,7 +43,7 @@ Tôi sẽ viết mã và kiểm thử.
 1.  Tạo một nhánh (branch) mới cho nhiệm vụ (ví dụ: `feature/ORD-010-fix-inventory-bug`).
 2.  Viết hoặc sửa đổi mã nguồn.
 3.  Viết kiểm thử (unit/integration test) song song.
-4.  Chạy kiểm thử liên tục và **đảm bảo tất cả các bài kiểm thử đều PASS** trước khi kết thúc.
+4.  Chạy kiểm thử liên tục (Jest + `pnpm test:playwright` nếu có liên quan UI/API) và **đảm bảo tất cả các bài kiểm thử đều PASS** trước khi kết thúc.
 5.  Commit mã nguồn với một thông điệp rõ ràng, có chứa `TASK-ID`.
 
 ### Bước 4: BÁO CÁO & XIN REVIEW (AGENT)

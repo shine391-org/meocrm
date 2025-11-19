@@ -34,6 +34,16 @@ export type OrderListItem = {
   itemsCount?: number;
 };
 
+export type OrderWarning = {
+  type: 'LOW_STOCK' | 'OUT_OF_STOCK' | 'LOSS_SALE';
+  productId: string;
+  variantId?: string | null;
+  sku?: string | null;
+  message: string;
+  available: number;
+  requested: number;
+};
+
 export type OrdersMeta = {
   total: number;
   page: number;
@@ -84,6 +94,11 @@ type OrderDetailResponse = {
       ward?: string | null;
     };
   };
+};
+
+type CreateOrderResponse = {
+  data: OrderDetail;
+  warnings?: OrderWarning[];
 };
 
 export type OrderDetail = OrderDetailResponse['data'];
@@ -210,6 +225,6 @@ export async function createPosOrder(payload: CreatePosOrderPayload) {
     throw new Error(message);
   }
 
-  const payloadResponse = (await response.json()) as OrderDetailResponse;
-  return payloadResponse.data;
+  const payloadResponse = (await response.json()) as CreateOrderResponse;
+  return payloadResponse;
 }

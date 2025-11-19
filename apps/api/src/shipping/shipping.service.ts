@@ -370,6 +370,18 @@ export class ShippingService {
         organizationId,
         reservationActor,
       );
+
+      await this.inventoryService.checkReservationHealth(
+        shippingOrder.orderId,
+        organizationId,
+        {
+          triggeredBy: 'shipping',
+          shippingOrderId: shippingOrder.id,
+          shippingStatus: dto.status,
+          retryCount: shippingOrder.retryCount ?? 0,
+          note: dto.failedReason ?? dto.returnReason,
+        },
+      );
     }
   }
 }

@@ -347,6 +347,23 @@
       ✅ Error format: N/A.
       ✅ API docs: N/A.
       ✅ Settings: N/A.
+  - `INV-009`: Reservation Monitoring & Shipping Fail Coverage *(P1)*
+    - **Vấn đề:** Khi vận đơn liên tiếp báo `FAILED/RETURNED`, workflow hiện tại dựa trên `OrderInventoryReservation` để hoàn kho nhưng chưa có lớp giám sát nếu stock không được release hết, cũng như thiếu E2E để tái hiện luồng shipping fail nhiều lần.
+    - **Acceptance Criteria:**
+      ✅ Schema: Bổ sung bảng/enum `InventoryReservationAlert` để lưu cảnh báo reservation leak; chạy migration + `prisma generate`.
+      ✅ Service: InventoryModule cung cấp API/Service để quét reservation còn kẹt (`scanReservationLeaks`, `getReservationAlerts`, auto resolve khi hết kẹt) và log `AuditLog` khi tạo cảnh báo.
+      ✅ Automation: ShippingService gọi monitor sau `FAILED/RETURNED`, scheduler (hoặc endpoint thủ công) có thể kích hoạt quét toàn org.
+      ✅ Tests: Unit/integration cho monitor + InventoryService; Playwright E2E cover shipping fail liên tiếp (deduct → fail → reprocess → fail) đảm bảo stock trả về và cảnh báo hoạt động.
+      ✅ Docs: ROADMAP, `01_BUSINESS_LOGIC.md`, `04_API_REFERENCE.md`, CHANGELOG mô tả cơ chế mới.
+    - **📚 Business Logic liên quan:**
+      - Mục 3.1 + 5.3 (`Stock Deduction / Failed Delivery`).
+      - Mục 1.2 (`Refund/Order automation` - tương tác COD) để đảm bảo monitor không phá workflow.
+    - **Trạng thái 2025-11-19:** ✅ Hoàn thành — migration `20251119125748_inv_009_reservation_alerts`, API (`GET/POST /inventory/reservation-alerts`), cron monitor và Playwright spec shipping fail đã cập nhật.
+    - **Cập nhật 2025-11-19:**
+      - **Hành động:** Tạo bảng `inventory_reservation_alerts`, mở rộng InventoryService/ShippingService + scheduler job, bổ sung DTO + controller endpoint, docs & ROADMAP.
+      - **Kiểm thử:** `pnpm --filter @meocrm/api test inventory`, `pnpm --filter @meocrm/api test shipping.service`, Playwright spec `tests/e2e/order-shipping-flow.spec.ts` (server chưa khởi động trong 120s → cần hướng dẫn tăng timeout khi chạy full suite).
+      - **Commit:** (pending review/commit trên nhánh làm việc).
+      - **Trạng thái:** Đợi review (code + migration sẵn sàng).
 - **Frontend Products (⚠️ NEEDS SCREENSHOTS)**
   - `FE-008`: Frontend: Products list page
     - **Acceptance Criteria:**
@@ -668,6 +685,11 @@
     - **📚 Business Logic liên quan (từ `01_BUSINESS_LOGIC.md`):**
       - Mục 1.2: `Refund Policy`
       - Mục 2.1: `Customer Debt Calculation`
+    - **Trạng thái 2025-11-19:** ✅ Hoàn thành – refund request tạo OrderReturn, approve hoàn kho + cập nhật stats/debt, audit logs và event `order.refunded` đã hoạt động.
+    - **Cập nhật 2025-11-19:**
+      - **Hành động:** Bổ sung DTO `ApproveRefundDto`, lưu OrderReturnItem, cập nhật Orders/CustomerStatsService, thêm commission adjustments/idempotency guard.
+      - **Kiểm thử:** `pnpm --filter @meocrm/api test refunds` (unit + integration) + cập nhật Playwright shipping-flow để đảm bảo E2E liền mạch.
+      - **Trạng thái:** Chờ review hợp nhất.
   - **`ORD-010`: Stock Deduction on Order Status Change (CRITICAL - BLOCKS POS)**
   - **Vấn đề:** Logic trừ kho khi xử lý đơn hàng chưa được triển khai.
   - **Acceptance Criteria:**
@@ -955,6 +977,7 @@
   - **Trạng thái 19-11-2025:** ✅ `PricingService` trả `taxBreakdown { taxableAmount, rate }`, VAT dựa trên `taxableSubtotal` (trừ cả item discount + order discount, tôn trọng `isTaxExempt`).
   - **📚 Business Logic liên quan (từ `01_BUSINESS_LOGIC.md`):**
     - Mục 4.4: `Tax Calculation`
+  - **Cập nhật 2025-11-19:** POS Workspace hiển thị cảnh báo LOSS_SALE theo thời gian thực và bảng VAT (taxableAmount + VAT 10%) dựa trên dữ liệu giỏ hàng; đồng thời phản ánh warnings từ API sau khi tạo đơn.
 - **Finance Module (Critical)**
   - `FIN-001`: Setup FinanceModule (CRITICAL)
     - **Acceptance Criteria:**

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- feat(inventory): add `InventoryReservationAlert` schema, monitor APIs (`GET/POST /inventory/reservation-alerts`), shipping hook + scheduler job for multi-fail detection (INV-009).
+- test(api): extend inventory/shipping unit tests for reservation monitor; new Playwright flow covers repeated shipping failures and manual scan path.
+- feat(refunds): rework `ORD-009` with OrderReturn + OrderReturnItem records, Approval DTO, stock restock, customer stats/debt updates, audit logging + events.
 - feat(orders/inventory): add `OrderInventoryReservation`, stock adjustments, automation + audit logging.
 - feat(orders): move customer stats/COD settlement to automation (`markCodPaid`, `taxableSubtotal`, item-level discounts, warnings).
 - feat(shipping): dynamic fee breakdown, retry/failure flow, auto-complete + COD settlement hooks.

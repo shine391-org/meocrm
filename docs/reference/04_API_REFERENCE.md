@@ -398,19 +398,63 @@ Update the status of an order (e.g., from PENDING to PROCESSING).
 
 Request a refund for a completed order.
 
+**Body:**
+```json
+{
+  "reason": "Khách đổi ý",
+  "notes": "Sản phẩm chưa bóc"
+}
+```
+
 **Response:** `202 Accepted`
+```json
+{
+  "data": {
+    "id": "ret_01",
+    "code": "RET-0001",
+    "status": "PENDING",
+    "refundAmount": 1450000,
+    "items": [
+      { "orderItemId": "item-1", "quantity": 2, "refundPrice": 725000 }
+    ]
+  }
+}
+```
 
 ### POST /orders/:orderId/refund-approve
 
 Approve a pending refund request (manager role required).
 
-**Response:** `200 OK`
+**Body:**
+```json
+{
+  "refundMethod": "CASH",
+  "notes": "Hoàn tiền tại quầy",
+  "items": [
+    { "orderItemId": "item-1", "quantity": 1, "refundPrice": 700000 }
+  ]
+}
+```
+
+**Response:** `200 OK` – trả về `Order` đã cập nhật (status `CANCELLED`, `isPaid` và stats đã điều chỉnh).
 
 ### POST /orders/:orderId/refund-reject
 
 Reject a pending refund request (manager role required).
 
+**Body:**
+```json
+{
+  "reason": "Không đủ điều kiện đổi trả"
+}
+```
+
 **Response:** `200 OK`
+```json
+{
+  "message": "Refund request rejected successfully."
+}
+```
 
 ---
 
@@ -522,6 +566,58 @@ Get a list of products with low stock for a specific branch.
 **Query Parameters:** `branchId` (required)
 
 **Response:** `200 OK`
+
+### GET /inventory/reservation-alerts
+
+List stuck reservation alerts grouped by order.
+
+**Query Parameters:**
+- `orderId` *(optional)*
+- `status` *(optional, default `OPEN`)*
+- `page`, `limit` *(pagination, default 1/20, max 100)*
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "alert-id",
+      "unresolvedReservations": 2,
+      "quantityHeld": 4,
+      "consecutiveFailures": 1,
+      "shippingStatus": "FAILED",
+      "status": "OPEN",
+      "order": { "id": "order-1", "code": "ORD-0012", "status": "PENDING" },
+      "branch": { "id": "branch-1", "name": "HN" },
+      "shippingOrder": { "id": "ship-1", "trackingCode": "TRK-123", "status": "FAILED", "retryCount": 2 },
+      "lastDetectedAt": "2025-11-19T03:21:00.000Z"
+    }
+  ],
+  "meta": { "total": 1, "page": 1, "limit": 20, "totalPages": 1 }
+}
+```
+
+### POST /inventory/reservation-alerts/scan *(Admin)*
+
+Trigger reservation leak scan for the current organization.
+
+**Request Body:**
+```json
+{
+  "orderId": "optional-order-id",
+  "minAgeMinutes": 30,
+  "limit": 50,
+  "minQuantity": 1
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "data": [ { "id": "alert-id", "orderId": "order-1", "unresolvedReservations": 3 } ],
+  "meta": { "scanned": 5, "detected": 1 }
+}
+```
 
 ### POST /inventory/transfer
 

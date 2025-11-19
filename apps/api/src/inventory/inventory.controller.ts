@@ -12,6 +12,8 @@ import { InventoryService } from './inventory.service';
 import { GetInventoryDto } from './dto/get-inventory.dto';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
+import { GetReservationAlertsDto } from './dto/get-reservation-alerts.dto';
+import { ScanReservationAlertsDto } from './dto/scan-reservation-alerts.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrganizationGuard } from '../common/guards/organization.guard';
 import { OrganizationId } from '../common/decorators/organization-id.decorator';
@@ -58,6 +60,27 @@ export class InventoryController {
     @OrganizationId() organizationId: string,
   ) {
     return this.inventoryService.getLowStockAlerts(branchId, organizationId);
+  }
+
+  @Get('reservation-alerts')
+  @ApiOperation({ summary: 'List stuck reservation alerts' })
+  @ApiResponse({ status: 200, description: 'Reservation alerts retrieved successfully' })
+  async getReservationAlerts(
+    @Query() query: GetReservationAlertsDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.inventoryService.getReservationAlerts(query, organizationId);
+  }
+
+  @Post('reservation-alerts/scan')
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: 'Trigger a reservation leak scan (admin)' })
+  @ApiResponse({ status: 200, description: 'Scan executed successfully' })
+  async scanReservationAlerts(
+    @Body() dto: ScanReservationAlertsDto,
+    @OrganizationId() organizationId: string,
+  ) {
+    return this.inventoryService.scanReservationLeaks(organizationId, dto);
   }
 
   @Post('transfer')

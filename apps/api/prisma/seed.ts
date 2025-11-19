@@ -10,6 +10,8 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding...');
   
+  await prisma.inventoryReservationAlert.deleteMany();
+  await prisma.orderInventoryReservation.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.shippingOrder.deleteMany();

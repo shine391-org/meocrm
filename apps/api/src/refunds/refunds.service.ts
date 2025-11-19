@@ -1,5 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { AuditAction, Commission, CommissionStatus, OrderStatus, Prisma, User } from '@prisma/client';
+import {
+  AuditAction,
+  Commission,
+  CommissionStatus,
+  OrderStatus,
+  PaymentMethod,
+  Prisma,
+  ReturnStatus,
+  User,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotificationsService } from '../modules/notifications/notifications.service';
@@ -7,6 +16,8 @@ import { SettingsService } from '../modules/settings/settings.service';
 import { RefundRequestDto } from './dto/refund-request.dto';
 import { RefundRejectDto } from './dto/refund-reject.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ApproveRefundDto, ApproveRefundItemDto } from './dto/approve-refund.dto';
+import { CustomerStatsService } from '../customers/services/customer-stats.service';
 
 @Injectable()
 export class RefundsService {
@@ -16,11 +27,16 @@ export class RefundsService {
     private readonly notifications: NotificationsService,
     private readonly settings: SettingsService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly customerStatsService: CustomerStatsService,
   ) {}
 
   async requestRefund(orderId: string, dto: RefundRequestDto, user: User, organizationId: string) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, organizationId },
+      include: {
+        items: true,
+        orderReturns: true,
+      },
     });
 
     if (!order) {
@@ -30,27 +46,87 @@ export class RefundsService {
       });
     }
 
+    if (order.status !== OrderStatus.COMPLETED) {
+      throw new BadRequestException({
+        code: 'REFUND_ORDER_NOT_COMPLETED',
+        message: 'Only completed orders can be refunded.',
+      });
+    }
+
+    const existingPending = order.orderReturns?.find(
+      (entry) => entry.status === ReturnStatus.PENDING || entry.status === ReturnStatus.APPROVED,
+    );
+    if (existingPending) {
+      throw new BadRequestException({
+        code: 'REFUND_ALREADY_PENDING',
+        message: 'A refund request already exists for this order.',
+      });
+    }
+
+    const refundItemsPayload = this.buildReturnItemsFromOrder(order.items);
+    const refundAmount = refundItemsPayload.reduce(
+      (sum, item) => sum.add(item.lineTotal),
+      new Prisma.Decimal(0),
+    );
+
+    const returnRecord = await this.prisma.orderReturn.create({
+      data: {
+        organizationId,
+        orderId,
+        code: await this.generateReturnCode(organizationId),
+        reason: dto.reason,
+        notes: dto.notes,
+        refundAmount,
+        refundMethod: order.paymentMethod,
+        status: ReturnStatus.PENDING,
+        createdBy: user.id,
+        items: {
+          create: refundItemsPayload.map((item) => ({
+            orderItemId: item.orderItemId,
+            productId: item.productId,
+            quantity: item.quantity,
+            refundPrice: item.refundPrice,
+            lineTotal: item.lineTotal,
+          })),
+        },
+      },
+      include: { items: true },
+    });
+
     await this.auditLog.log({
       user,
       entity: 'order',
       entityId: orderId,
       action: 'refund.requested',
       auditAction: AuditAction.UPDATE,
-      newValues: { reason: dto.reason },
+      newValues: { reason: dto.reason, orderReturnId: returnRecord.id },
     });
 
     await this.notifications.sendToStaff(
-      `Refund requested for Order #${order.code} by ${user.email}. Reason: ${dto.reason}`,
+      `Refund requested for Order #${order.code} (${returnRecord.code}) by ${user.email}. Reason: ${dto.reason}`,
     );
 
-    return { message: 'Refund request submitted successfully.' };
+    return { data: returnRecord };
   }
 
-  async approveRefund(orderId: string, user: User, organizationId: string) {
+  async approveRefund(
+    orderId: string,
+    dto: ApproveRefundDto,
+    user: User,
+    organizationId: string,
+  ) {
     const windowDays =
-      (await this.settings.get<number>('refund.windowDays')) ?? 7;
+      (await this.settings.getForOrganization<number>(
+        organizationId,
+        'refund.windowDays',
+        7,
+      )) ?? 7;
     const restockOnRefund =
-      (await this.settings.get<boolean>('refund.restockOnRefund')) ?? true;
+      (await this.settings.getForOrganization<boolean>(
+        organizationId,
+        'refund.restockOnRefund',
+        true,
+      )) ?? true;
 
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, organizationId },
@@ -61,6 +137,10 @@ export class RefundsService {
           },
         },
         commissions: true,
+        customer: true,
+        orderReturns: {
+          include: { items: true },
+        },
       },
     });
 
@@ -91,11 +171,66 @@ export class RefundsService {
     const hasRefundAdjustments = order.commissions.some(
       (commission) => commission.isAdjustment && commission.traceId?.startsWith(`refund-${order.id}`),
     );
-    if (hasRefundAdjustments) {
-      return order;
+
+    const pendingReturn = order.orderReturns.find(
+      (entry) => entry.status === ReturnStatus.PENDING,
+    );
+
+    if (!pendingReturn) {
+      if (hasRefundAdjustments) {
+        return order;
+      }
+      throw new BadRequestException({
+        code: 'REFUND_NOT_REQUESTED',
+        message: 'No pending refund request found for this order.',
+      });
     }
 
+    const resolvedItems = dto.items?.length
+      ? this.buildReturnItemsFromDto(dto.items, order.items)
+      : pendingReturn.items.map((item) => ({
+          orderItemId: item.orderItemId,
+          productId: item.productId,
+          quantity: item.quantity,
+          refundPrice: item.refundPrice,
+          lineTotal: item.lineTotal,
+        }));
+
+    const refundAmount = resolvedItems.reduce(
+      (sum, item) => sum.add(item.lineTotal),
+      new Prisma.Decimal(0),
+    );
+    const refundAmountNumber = Number(refundAmount);
+
     const { updatedOrder, adjustmentsCreated } = await this.prisma.$transaction(async (tx) => {
+      await tx.orderReturnItem.deleteMany({ where: { returnId: pendingReturn.id } });
+      await tx.orderReturnItem.createMany({
+        data: resolvedItems.map((item) => ({
+          returnId: pendingReturn.id,
+          orderItemId: item.orderItemId,
+          productId: item.productId,
+          quantity: item.quantity,
+          refundPrice: item.refundPrice,
+          lineTotal: item.lineTotal,
+        })),
+      });
+
+      await tx.orderReturn.update({
+        where: { id: pendingReturn.id },
+        data: {
+          refundAmount,
+          refundMethod: dto.refundMethod ?? pendingReturn.refundMethod ?? order.paymentMethod,
+          status: ReturnStatus.COMPLETED,
+          approvedBy: user.id,
+          approvedAt: new Date(),
+          notes: dto.notes ?? pendingReturn.notes,
+        },
+      });
+
+      if (hasRefundAdjustments) {
+        return { updatedOrder: order, adjustmentsCreated: 0 };
+      }
+
       if (restockOnRefund) {
         for (const item of order.items) {
           const productId = item.productId ?? item.variant?.productId ?? null;
@@ -123,6 +258,24 @@ export class RefundsService {
         data: { status: OrderStatus.CANCELLED },
       });
 
+      if (order.customerId) {
+        await this.customerStatsService.revertStatsOnOrderCancel(
+          order.customerId,
+          refundAmountNumber,
+          tx,
+          organizationId,
+        );
+
+        if (refundAmountNumber !== 0) {
+          await this.customerStatsService.updateDebt(
+            order.customerId,
+            -refundAmountNumber,
+            tx,
+            organizationId,
+          );
+        }
+      }
+
       return { updatedOrder: result, adjustmentsCreated };
     });
 
@@ -135,17 +288,19 @@ export class RefundsService {
       newValues: {
         restocked: Boolean(restockOnRefund),
         adjustmentsCreated,
+        refundAmount: refundAmountNumber,
       },
     });
 
     await this.notifications.sendToStaff(
-      `Refund approved for Order #${order.code} by ${user.email}.`,
+      `Refund approved for Order #${order.code} by ${user.email}. Amount: ${refundAmountNumber.toLocaleString()}`,
     );
 
     this.eventEmitter.emit('order.refunded', {
       order: updatedOrder,
       trigger: 'manual_refund',
       userId: user.id,
+      refundAmount: refundAmountNumber,
     });
 
     return updatedOrder;
@@ -154,12 +309,28 @@ export class RefundsService {
   async rejectRefund(orderId: string, dto: RefundRejectDto, user: User, organizationId: string) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, organizationId },
+      include: {
+        orderReturns: true,
+      },
     });
 
     if (!order) {
       throw new NotFoundException({
         code: 'ORDER_NOT_FOUND',
         message: `Order with ID ${orderId} not found.`,
+      });
+    }
+
+    const pendingReturn = order.orderReturns.find(
+      (entry) => entry.status === ReturnStatus.PENDING,
+    );
+    if (pendingReturn) {
+      await this.prisma.orderReturn.update({
+        where: { id: pendingReturn.id },
+        data: {
+          status: ReturnStatus.REJECTED,
+          notes: dto.reason,
+        },
       });
     }
 
@@ -227,5 +398,66 @@ export class RefundsService {
     );
 
     return commissionsToAdjust.length;
+  }
+
+  private buildReturnItemsFromOrder(orderItems: { id: string; productId: string; quantity: number; unitPrice: Prisma.Decimal | number }[]) {
+    return orderItems.map((item) => {
+      const refundPrice = new Prisma.Decimal(item.unitPrice ?? 0);
+      const lineTotal = refundPrice.mul(item.quantity);
+      return {
+        orderItemId: item.id,
+        productId: item.productId,
+        quantity: item.quantity,
+        refundPrice,
+        lineTotal,
+      };
+    });
+  }
+
+  private buildReturnItemsFromDto(
+    items: ApproveRefundItemDto[],
+    orderItems: { id: string; productId: string; quantity: number; unitPrice: Prisma.Decimal | number }[],
+  ) {
+    const map = new Map(orderItems.map((item) => [item.id, item]));
+    return items.map((input) => {
+      const matching = map.get(input.orderItemId);
+      if (!matching) {
+        throw new BadRequestException({
+          code: 'REFUND_ITEM_INVALID',
+          message: `Order item ${input.orderItemId} is invalid for this order`,
+        });
+      }
+      if (input.quantity > matching.quantity) {
+        throw new BadRequestException({
+          code: 'REFUND_QUANTITY_INVALID',
+          message: `Refund quantity cannot exceed ordered quantity for item ${input.orderItemId}`,
+        });
+      }
+
+      const refundPriceDecimal = new Prisma.Decimal(
+        input.refundPrice !== undefined ? input.refundPrice : matching.unitPrice ?? 0,
+      );
+      const lineTotal = refundPriceDecimal.mul(input.quantity);
+      return {
+        orderItemId: matching.id,
+        productId: matching.productId,
+        quantity: input.quantity,
+        refundPrice: refundPriceDecimal,
+        lineTotal,
+      };
+    });
+  }
+
+  private async generateReturnCode(organizationId: string): Promise<string> {
+    const prefix = 'RET';
+    const lastReturn = await this.prisma.orderReturn.findFirst({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+      select: { code: true },
+    });
+
+    const lastNumber = lastReturn?.code?.split('-').pop();
+    const seq = lastNumber ? Number(lastNumber) + 1 : 1;
+    return `${prefix}-${seq.toString().padStart(4, '0')}`;
   }
 }

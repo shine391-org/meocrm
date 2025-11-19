@@ -3,6 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { RefundsService } from './refunds.service';
 import { RefundRequestDto } from './dto/refund-request.dto';
 import { RefundRejectDto } from './dto/refund-reject.dto';
+import { ApproveRefundDto } from './dto/approve-refund.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -38,10 +39,16 @@ export class RefundsController {
   @ApiOperation({ summary: 'Approve a refund request (manager)' })
   async approveRefund(
     @Param('orderId') orderId: string,
+    @Body() approveRefundDto: ApproveRefundDto,
     @CurrentUser() user: User,
     @OrganizationId() organizationId: string,
   ) {
-    return this.refundsService.approveRefund(orderId, user, organizationId);
+    return this.refundsService.approveRefund(
+      orderId,
+      approveRefundDto,
+      user,
+      organizationId,
+    );
   }
 
   @Post('refund-reject')

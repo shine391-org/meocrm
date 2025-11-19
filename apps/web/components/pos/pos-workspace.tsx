@@ -3,13 +3,14 @@
 import { useAuth } from '@/hooks/use-auth';
 import { usePosStore } from '@/hooks/use-pos-store';
 import { cn, formatCurrency } from '@/lib/utils';
-import { calculatePosTotals } from '@/lib/pos/calculations';
+import { calculatePosTotals, resolveUnitDiscount } from '@/lib/pos/calculations';
 import { CartLine, Product, Invoice } from '@/lib/pos/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  AlertTriangle,
   CalendarClock,
   Clock3,
   Download,
@@ -45,7 +47,8 @@ import { toast } from 'sonner';
 import { searchProducts } from '@/lib/api/products';
 import { getCustomers } from '@/lib/api/customers';
 import { fetchBranches } from '@/lib/api/branches';
-import { createPosOrder } from '@/lib/api/orders';
+import { createPosOrder, OrderWarning } from '@/lib/api/orders';
+import { fetchPosSettings } from '@/lib/api/settings';
 
 const saleModeConfigs: {
   id: 'quick' | 'standard' | 'delivery';
@@ -85,6 +88,13 @@ const shippingPartners = [
   { value: 'GHN', label: 'GHN' },
   { value: 'VNPOST', label: 'VNPost' },
 ];
+
+const DEFAULT_POS_TAX_RATE = Number(
+  process.env.NEXT_PUBLIC_POS_TAX_RATE ?? '0.1',
+);
+const DEFAULT_POS_SHIPPING_FEE = Number(
+  process.env.NEXT_PUBLIC_POS_SHIPPING_FEE ?? '30000',
+);
 
 const extractProducts = (payload: any): Product[] => {
   if (!payload) return [];
@@ -128,6 +138,10 @@ export function PosWorkspace() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [debouncedSearch] = useDebounce(searchTerm, 400);
   const [debouncedCustomerSearch] = useDebounce(customerQuery, 350);
+  const getNetUnitPrice = useCallback((line: CartLine) => {
+    const discountPerUnit = resolveUnitDiscount(line);
+    return Math.max(0, line.price - discountPerUnit);
+  }, []);
 
   useEffect(() => {
     const handle = setInterval(() => setTimestamp(new Date()), 60 * 1000);
@@ -148,6 +162,8 @@ export function PosWorkspace() {
   } = useSWR(['pos-products', debouncedSearch], ([, query]) =>
     searchProducts({ page: 1, limit: 40, search: query || undefined }),
   );
+
+  const { data: posSettings } = useSWR('pos-settings', fetchPosSettings);
 
   const { data: defaultCustomers } = useSWR('pos-customers-default', () =>
     getCustomers(1, 5, ''),
@@ -180,16 +196,41 @@ export function PosWorkspace() {
   const activeInvoice =
     invoices.find((invoice) => invoice.id === activeInvoiceId) ?? invoices[0];
 
+  const shippingFee = posSettings?.shippingFee ?? DEFAULT_POS_SHIPPING_FEE;
+  const taxRate = posSettings?.taxRate ?? DEFAULT_POS_TAX_RATE;
+
   const totals = useMemo(() => {
     if (!activeInvoice) {
-      return { subtotal: 0, discount: 0, surcharge: 0, total: 0, itemCount: 0 };
+      return {
+        subtotal: 0,
+        discount: 0,
+        surcharge: shippingFee,
+        total: 0,
+        itemCount: 0,
+        taxableSubtotal: 0,
+        itemDiscountTotal: 0,
+        taxRate,
+        taxEstimate: 0,
+        lossSaleLineIds: [],
+      };
     }
     return calculatePosTotals(
       activeInvoice.cart,
       activeInvoice.discount,
-      activeInvoice.surcharge,
+      shippingFee,
+      taxRate,
     );
-  }, [activeInvoice]);
+  }, [activeInvoice, shippingFee, taxRate]);
+  const lossSaleLineSet = useMemo(
+    () => new Set(totals.lossSaleLineIds ?? []),
+    [totals.lossSaleLineIds],
+  );
+  const lossSaleLines = useMemo(() => {
+    if (!activeInvoice) {
+      return [] as CartLine[];
+    }
+    return activeInvoice.cart.filter((line) => lossSaleLineSet.has(line.id));
+  }, [activeInvoice, lossSaleLineSet]);
 
   const formattedDate = useMemo(() => {
     return new Intl.DateTimeFormat('vi-VN', {
@@ -237,6 +278,7 @@ export function PosWorkspace() {
           price: unitPrice,
           quantity: 1,
           unit: product.unit ?? product.unitOfMeasure ?? 'đơn vị',
+          costPrice: Number(product.costPrice ?? 0),
           taxExempt: false,
         };
 
@@ -381,7 +423,7 @@ export function PosWorkspace() {
     setIsSubmitting(true);
     try {
       const isDelivery = activeInvoice.mode === 'delivery';
-      await createPosOrder({
+      const response = await createPosOrder({
         branchId,
         customerId: activeInvoice.customerId,
         items: activeInvoice.cart.map((line) => ({
@@ -395,12 +437,19 @@ export function PosWorkspace() {
         paymentMethod: isDelivery ? 'COD' : 'CASH',
         channel: 'POS',
         discount: activeInvoice.discount,
-        shipping: activeInvoice.surcharge,
+        shipping: shippingFee,
         notes: activeInvoice.note,
         isPaid: !isDelivery,
         paidAmount: !isDelivery ? totals.total : 0,
       });
-      toast.success('Đã tạo đơn POS thành công');
+      const warningMessage = formatServerWarnings(response.warnings ?? []);
+      if (warningMessage) {
+        toast.warning('Đơn hoàn tất với cảnh báo', {
+          description: warningMessage,
+        });
+      } else {
+        toast.success('Đã tạo đơn POS thành công');
+      }
       resetInvoice(activeInvoice.id);
     } catch (error) {
       const message =
@@ -518,9 +567,19 @@ export function PosWorkspace() {
                         : product.category?.name ?? 'Danh mục'}
                     </div>
                     <div className="mt-3 flex flex-1 flex-col gap-1">
-                      <p className="line-clamp-2 font-semibold text-slate-900">
-                        {product.name}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="line-clamp-2 font-semibold text-slate-900">
+                          {product.name}
+                        </p>
+                        {product.costPrice !== undefined && (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-slate-200 text-[11px] text-slate-500"
+                          >
+                            Giá vốn {formatCurrency(Number(product.costPrice ?? 0))}
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground">
                         SKU: {product.sku}
                       </p>
@@ -750,13 +809,8 @@ export function PosWorkspace() {
                       line.discountType === 'FIXED'
                         ? Math.max(line.discountValue ?? 0, 0)
                         : 0;
-                    const discountPerUnit =
-                      line.discountType === 'PERCENT'
-                        ? (line.price * percentValue) / 100
-                        : line.discountType === 'FIXED'
-                          ? Math.min(line.price, fixedValue)
-                          : 0;
-                    const netUnitPrice = Math.max(0, line.price - discountPerUnit);
+                    const discountPerUnit = resolveUnitDiscount(line);
+                    const netUnitPrice = getNetUnitPrice(line);
                     const netTotal = netUnitPrice * line.quantity;
                     const discountSummary =
                       line.discountType === 'PERCENT'
@@ -764,6 +818,8 @@ export function PosWorkspace() {
                         : line.discountType === 'FIXED'
                           ? `${formatCurrency(fixedValue)} /sp`
                           : null;
+                    const costPrice = Number(line.costPrice ?? 0);
+                    const isLossSale = lossSaleLineSet.has(line.id);
 
                     return (
                       <div
@@ -772,7 +828,17 @@ export function PosWorkspace() {
                         data-testid="pos-cart-line"
                       >
                         <div className="flex-1 space-y-1">
-                          <p className="text-sm font-semibold">{line.name}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold">{line.name}</p>
+                            {isLossSale && (
+                              <Badge
+                                variant="secondary"
+                                className="bg-amber-100 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+                              >
+                                Bán lỗ
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">
                             {line.sku} · {line.unit}
                           </p>
@@ -834,6 +900,11 @@ export function PosWorkspace() {
                               </span>
                             )}
                           </div>
+                          {isLossSale && costPrice > 0 && (
+                            <p className="text-xs text-amber-600">
+                              Net {formatCurrency(netUnitPrice)} &lt; vốn {formatCurrency(costPrice)}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 rounded-full border bg-slate-50 px-2 py-1">
                           <Button
@@ -899,27 +970,64 @@ export function PosWorkspace() {
                 />
               </div>
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-muted-foreground">Thu khác</span>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  className="h-9 w-32 text-right text-sm"
-                  value={activeInvoice.surcharge}
-                  onChange={(event) =>
-                    updateActiveInvoice((invoice) => ({
-                      ...invoice,
-                      surcharge: Number(event.target.value ?? 0),
-                    }))
-                  }
-                  min={0}
-                  step={1000}
-                />
+                <span className="text-muted-foreground">Phí vận chuyển</span>
+                <div className="text-right">
+                  <p className="font-medium text-slate-900">
+                    {formatCurrency(shippingFee)}
+                  </p>
+                  {!posSettings && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Dùng giá trị mặc định
+                    </p>
+                  )}
+                </div>
               </div>
               <SummaryRow
                 label="Khách cần trả"
                 value={totals.total}
                 emphasize
               />
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Giá trị chịu thuế</span>
+                  <span className="font-medium text-slate-900">
+                    {formatCurrency(totals.taxableSubtotal)}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between font-semibold text-slate-900">
+                  <span>VAT ({(totals.taxRate * 100).toFixed(0)}%)</span>
+                  <span>{formatCurrency(totals.taxEstimate)}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tạm tính dựa trên cấu hình VAT hiện tại.
+                </p>
+              </div>
+
+              {lossSaleLines.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="h-4 w-4" />
+                    Cảnh báo bán lỗ
+                  </div>
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {lossSaleLines.map((line) => (
+                      <li key={line.id} className="flex items-center justify-between gap-2">
+                        <span className="flex-1 truncate">{line.name}</span>
+                        <span className="font-medium">
+                          {formatCurrency(getNetUnitPrice(line))} &lt;{' '}
+                          {formatCurrency(Number(line.costPrice ?? 0))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    Kiểm tra lại giá vốn hoặc chiết khấu trước khi xác nhận.
+                  </p>
+                </div>
+              )}
             </div>
 
             <Button
@@ -1072,4 +1180,22 @@ function SummaryRow({
       <span>{formatCurrency(value)}</span>
     </div>
   );
+}
+
+function formatServerWarnings(warnings: OrderWarning[]): string | null {
+  if (!warnings.length) {
+    return null;
+  }
+  return warnings
+    .map((warning) => {
+      const label =
+        warning.type === 'LOSS_SALE'
+          ? 'Bán lỗ'
+          : warning.type === 'LOW_STOCK'
+            ? 'Tồn kho thấp'
+            : 'Hết hàng';
+      const sku = warning.sku ?? warning.productId;
+      return `${label} (${sku}): ${warning.message}`;
+    })
+    .join(' • ');
 }

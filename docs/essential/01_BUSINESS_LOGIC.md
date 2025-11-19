@@ -78,10 +78,20 @@ graph TD
     - Gọi `InventoryService.returnStockOnOrderCancel` để giải phóng các reservation đang giữ.
     - Ghi audit log `shipping.status.changed` kèm `failedReason/returnReason`, cập nhật `retryCount`.
     - `shipping_orders` tăng `retryCount`, giữ lại `returnReason` để hiển thị tại UI.
+    - Sau mỗi lần hoàn kho, hệ thống chạy monitor `InventoryReservationAlert` (Cron + `POST /inventory/reservation-alerts/scan`) để cảnh báo nếu còn reservation ở trạng thái `RESERVED`.
 
 ### 1.2 Refund Policy
 
-- **Quy tắc:** Các quy tắc về hoàn tiền (`settings.refund`) và luồng `RefundRequest` phải được đọc từ Settings. API cho việc này (`/orders/:orderId/refund-request`) có tồn tại nhưng logic nghiệp vụ bên trong cần được kiểm tra.
+- **Quy tắc:** Các quy tắc về hoàn tiền (`settings.refund`) và luồng `RefundRequest` đọc từ Settings.
+  - Nhân viên tạo yêu cầu (`POST /orders/:orderId/refund-request`) ⇒ hệ thống tạo `OrderReturn` (`status = PENDING`) + copy toàn bộ `OrderItem` vào `OrderReturnItem` (quantity, refundPrice, lineTotal).
+  - Quản lý duyệt (`POST /orders/:orderId/refund-approve`):
+      1. Có thể chỉnh sửa danh sách item + `refundMethod` trước khi duyệt.
+      2. Restock sản phẩm/variant nếu `settings.refund.restockOnRefund=true`.
+      3. Ghi nhận `OrderReturn.status = COMPLETED`, `approvedBy/At` và tạo `inventory.adjustment + auditLog`.
+      4. Cập nhật lại `customer.totalSpent`, `totalOrders`, `debt` theo `refundAmount` (sử dụng `CustomerStatsService.revertStatsOnOrderCancel` + `updateDebt`).
+      5. Order chuyển về `CANCELLED`, phát sự kiện `order.refunded`.
+  - Hủy yêu cầu (`POST /orders/:orderId/refund-reject`) ⇒ `OrderReturn.status = REJECTED`, lưu lý do.
+  - `settings.refund.windowDays` kiểm soát số ngày sau `completedAt` được phép refund. Nếu vượt → báo lỗi `REFUND_WINDOW_EXCEEDED`.
 
 ---
 

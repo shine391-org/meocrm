@@ -92,6 +92,7 @@ describe('RefundsController (Integration)', () => {
       return request(app.getHttpServer())
         .post('/orders/order-1/refund-approve')
         .set('x-user-role', 'staff')
+        .send({ refundMethod: 'CASH' })
         .expect(403);
     });
 
@@ -99,6 +100,7 @@ describe('RefundsController (Integration)', () => {
       return request(app.getHttpServer())
         .post('/orders/order-1/refund-approve')
         .set('x-user-role', 'manager')
+        .send({ refundMethod: 'CASH' })
         .expect(201);
     });
   });

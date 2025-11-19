@@ -6,6 +6,7 @@ export interface Product {
   sku: string;
   price: number;
   sellPrice?: number;
+  costPrice?: number;
   stock: number;
   category?: string | { name: string };
   unit: string;
@@ -23,6 +24,7 @@ export interface CartLine {
   price: number;
   quantity: number;
   unit: string;
+  costPrice?: number;
   variant?: string;
   variantId?: string;
   discountType?: 'PERCENT' | 'FIXED';

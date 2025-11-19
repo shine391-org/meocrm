@@ -37,6 +37,11 @@ enum OrderInventoryReservationStatus {
   RETURNED
 }
 
+enum InventoryReservationAlertStatus {
+  OPEN
+  RESOLVED
+}
+
 enum PaymentMethod {
   CASH // Tiền mặt
   CARD // Thẻ
@@ -246,6 +251,7 @@ model Organization {
   customers         Customer[]
   leads             Lead[]
   orders            Order[]
+  reservationAlerts InventoryReservationAlert[]
   orderItems        OrderItem[]
   suppliers         Supplier[]
   categories        Category[]
@@ -313,6 +319,7 @@ model Branch {
   attendances       Attendance[]
   stockAdjustments  StockAdjustment[]
   purchaseOrders    PurchaseOrder[]
+  reservationAlerts InventoryReservationAlert[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -584,6 +591,7 @@ model Order {
 
   items                 OrderItem[]
   inventoryReservations OrderInventoryReservation[]
+  reservationAlerts     InventoryReservationAlert[]
   shippingOrders        ShippingOrder[]
   payments              Payment[]
   orderReturns          OrderReturn[]
@@ -677,6 +685,40 @@ model OrderInventoryReservation {
   @@map("order_inventory_reservations")
 }
 
+model InventoryReservationAlert {
+  id             String                          @id @default(cuid())
+  organizationId String
+  organization   Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  orderId String
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  shippingOrderId String?
+  shippingOrder   ShippingOrder? @relation(fields: [shippingOrderId], references: [id], onDelete: SetNull)
+
+  unresolvedReservations Int
+  quantityHeld           Int
+  consecutiveFailures    Int                           @default(0)
+
+  shippingStatus ShippingStatus?
+  status         InventoryReservationAlertStatus       @default(OPEN)
+  details        Json?
+  resolutionNote String?
+
+  lastDetectedAt DateTime @default(now())
+  resolvedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([orderId])
+  @@index([status])
+  @@map("inventory_reservation_alerts")
+}
+
 // Shipping Module
 model ShippingPartner {
   id             String       @id @default(uuid())
@@ -736,6 +778,8 @@ model ShippingOrder {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  reservationAlerts InventoryReservationAlert[]
 
   @@index([orderId])
   @@index([partnerId])

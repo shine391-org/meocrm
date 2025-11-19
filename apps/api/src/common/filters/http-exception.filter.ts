@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 interface NormalizedError {
   code: string;
@@ -47,7 +47,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = exception.getStatus();
     const exceptionResponse = exception.getResponse();
 
-    const traceId = uuidv4();
+    const traceId = randomUUID();
 
     const normalized: NormalizedError = {
       code: `HTTP_${status}`,

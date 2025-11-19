@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { OrderInventoryReservationStatus, PrismaClient } from '@prisma/client';
 import { loginViaApi, apiGet, apiPost, apiPatch } from './utils/api';
 
 type OrderResponse = { data: any };
@@ -200,5 +200,179 @@ test.describe('Order automation flow (API)', () => {
 
     expect(refreshedOrder.status).toBe('PENDING');
     expect(refreshedOrder.isPaid).toBe(false);
+  });
+
+  test('monitors reservations across consecutive shipping failures', async ({ request }) => {
+    const auth = await loginViaApi(request);
+    const token = auth.accessToken;
+
+    const branch = await getFirstItem(request, token, '/branches');
+    const customer = await getFirstItem(request, token, '/customers?limit=1');
+    const product = await getFirstItem(request, token, '/products?limit=1');
+
+    const orderPayload = {
+      branchId: branch.id,
+      customerId: customer.id,
+      items: [
+        {
+          productId: product.id,
+          quantity: 2,
+        },
+      ],
+      paymentMethod: 'CASH',
+      channel: 'POS',
+      discount: 0,
+      shipping: 15000,
+      notes: 'E2E repeated fail flow',
+      isPaid: false,
+      paidAmount: 0,
+    };
+
+    const createdOrder = (await apiPost<OrderResponse>(
+      request,
+      '/orders',
+      token,
+      orderPayload,
+    )).data;
+
+    await apiPatch(
+      request,
+      `/orders/${createdOrder.id}/status`,
+      token,
+      { status: 'PROCESSING' },
+    );
+
+    const firstShipping = (await apiPost<ShippingResponse>(
+      request,
+      '/shipping/orders',
+      token,
+      {
+        orderId: createdOrder.id,
+        partnerId: shippingPartnerId,
+        trackingCode: `${RETURN_TRACKING_PREFIX}-${Date.now()}`,
+        recipientName: customer.name ?? 'E2E Customer',
+        recipientPhone: customer.phone ?? '0900000000',
+        recipientAddress: customer.address ?? '123 Retry St',
+        shippingFee: 25000,
+        codAmount: 0,
+        weight: 300,
+        notes: 'Retry flow',
+      },
+    )).data;
+
+    await apiPatch(
+      request,
+      `/shipping/orders/${firstShipping.id}/status`,
+      token,
+      { status: 'FAILED', failedReason: 'Courier delay' },
+    );
+
+    const alertsAfterFirstFail = await apiGet<{ data: any[] }>(
+      request,
+      `/inventory/reservation-alerts?orderId=${createdOrder.id}`,
+      token,
+    );
+    expect(alertsAfterFirstFail.data.length).toBe(0);
+
+    await apiPatch(
+      request,
+      `/orders/${createdOrder.id}/status`,
+      token,
+      { status: 'PROCESSING' },
+    );
+
+    const secondShipping = (await apiPost<ShippingResponse>(
+      request,
+      '/shipping/orders',
+      token,
+      {
+        orderId: createdOrder.id,
+        partnerId: shippingPartnerId,
+        trackingCode: `${RETURN_TRACKING_PREFIX}-SECOND-${Date.now()}`,
+        recipientName: customer.name ?? 'E2E Customer',
+        recipientPhone: customer.phone ?? '0900000000',
+        recipientAddress: customer.address ?? '123 Retry St',
+        shippingFee: 26000,
+        codAmount: 0,
+        weight: 400,
+        notes: 'Second attempt',
+      },
+    )).data;
+
+    await apiPatch(
+      request,
+      `/shipping/orders/${secondShipping.id}/status`,
+      token,
+      { status: 'FAILED', failedReason: 'Customer not home' },
+    );
+
+    const alertsAfterSecondFail = await apiGet<{ data: any[] }>(
+      request,
+      `/inventory/reservation-alerts?orderId=${createdOrder.id}`,
+      token,
+    );
+    expect(alertsAfterSecondFail.data.length).toBe(0);
+
+    const dbOrder = await prisma.order.findUnique({
+      where: { id: createdOrder.id },
+      include: { items: true },
+    });
+    if (!dbOrder?.items?.length) {
+      throw new Error('Order items not found for leak test');
+    }
+
+    let leakReservationId: string | null = null;
+    try {
+      const leakReservation = await prisma.orderInventoryReservation.create({
+        data: {
+          organizationId: dbOrder.organizationId,
+          orderId: dbOrder.id,
+          orderItemId: dbOrder.items[0].id,
+          branchId: dbOrder.branchId!,
+          productId: dbOrder.items[0].productId,
+          quantity: 1,
+          variantReservedQuantity: 0,
+          status: OrderInventoryReservationStatus.RESERVED,
+        },
+      });
+      leakReservationId = leakReservation.id;
+
+      await apiPost(
+        request,
+        '/inventory/reservation-alerts/scan',
+        token,
+        { orderId: createdOrder.id, minAgeMinutes: 0 },
+      );
+
+      const leakAlerts = await apiGet<{ data: any[] }>(
+        request,
+        `/inventory/reservation-alerts?orderId=${createdOrder.id}`,
+        token,
+      );
+      expect(leakAlerts.data.length).toBeGreaterThan(0);
+
+      await prisma.orderInventoryReservation.update({
+        where: { id: leakReservation.id },
+        data: { status: OrderInventoryReservationStatus.RETURNED },
+      });
+
+      await apiPost(
+        request,
+        '/inventory/reservation-alerts/scan',
+        token,
+        { orderId: createdOrder.id, minAgeMinutes: 0 },
+      );
+
+      const clearedAlerts = await apiGet<{ data: any[] }>(
+        request,
+        `/inventory/reservation-alerts?orderId=${createdOrder.id}`,
+        token,
+      );
+      expect(clearedAlerts.data.length).toBe(0);
+    } finally {
+      if (leakReservationId) {
+        await prisma.orderInventoryReservation.delete({ where: { id: leakReservationId } }).catch(() => undefined);
+      }
+    }
   });
 });

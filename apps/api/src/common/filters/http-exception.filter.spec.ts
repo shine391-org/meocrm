@@ -1,8 +1,8 @@
 import { ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter';
-import { v4 as uuidv4 } from 'uuid';
+import * as crypto from 'crypto';
 
-jest.mock('uuid', () => ({ v4: jest.fn() }));
+jest.spyOn(crypto, 'randomUUID');
 
 describe('HttpExceptionFilter', () => {
   const createHost = (responseMock: any): ArgumentsHost => {
@@ -18,7 +18,7 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('normalizes simple HttpException payloads with traceId', () => {
-    (uuidv4 as jest.Mock).mockReturnValue('trace-simple');
+    (crypto.randomUUID as jest.Mock).mockReturnValue('trace-simple');
     const filter = new HttpExceptionFilter();
     const responseMock = {
       status: jest.fn().mockReturnThis(),
@@ -38,7 +38,7 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('prioritizes custom code, message array and details', () => {
-    (uuidv4 as jest.Mock).mockReturnValue('trace-custom');
+    (crypto.randomUUID as jest.Mock).mockReturnValue('trace-custom');
     const filter = new HttpExceptionFilter();
     const responseMock = {
       status: jest.fn().mockReturnThis(),
