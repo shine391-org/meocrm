@@ -150,22 +150,25 @@ describe('OrdersService', () => {
   });
 
   describe('generateOrderCode', () => {
-    it('should generate ORD001 for the first order', async () => {
+    it('should generate first order code with org prefix', async () => {
+      prisma.organization.findUnique.mockResolvedValue({ code: 'ORGID' } as any);
       prisma.order.findFirst.mockResolvedValue(null);
       const code = await service.generateOrderCode('org-id');
-      expect(code).toBe('ORD001');
+      expect(code).toBe('ORD-ORGID-0001');
     });
 
     it('should increment from the last order code', async () => {
-      prisma.order.findFirst.mockResolvedValue({ code: 'ORD009' } as any);
+      prisma.organization.findUnique.mockResolvedValue({ code: 'ORGID' } as any);
+      prisma.order.findFirst.mockResolvedValue({ code: 'ORD-ORGID-0009' } as any);
       const code = await service.generateOrderCode('org-id');
-      expect(code).toBe('ORD010');
+      expect(code).toBe('ORD-ORGID-0010');
     });
 
     it('should handle codes with larger numbers correctly', async () => {
-      prisma.order.findFirst.mockResolvedValue({ code: 'ORD123' } as any);
+      prisma.organization.findUnique.mockResolvedValue({ code: 'ORGID' } as any);
+      prisma.order.findFirst.mockResolvedValue({ code: 'ORD-ORGID-0123' } as any);
       const code = await service.generateOrderCode('org-id');
-      expect(code).toBe('ORD124');
+      expect(code).toBe('ORD-ORGID-0124');
     });
   });
 
@@ -235,6 +238,9 @@ describe('OrdersService', () => {
               name: 'Branch 1',
             }),
           },
+          organization: {
+            findUnique: jest.fn().mockResolvedValue({ code: 'ORGID' }),
+          },
           product: {
             findFirst: jest.fn().mockResolvedValue(mockProduct),
             update: jest.fn().mockResolvedValue(mockProduct),
@@ -291,6 +297,9 @@ describe('OrdersService', () => {
               id: 'branch-1',
               name: 'Branch 1',
             }),
+          },
+          organization: {
+            findUnique: jest.fn().mockResolvedValue({ code: 'ORGID' }),
           },
           product: {
             findFirst: jest.fn().mockResolvedValue(mockProduct),
@@ -612,7 +621,7 @@ describe('OrdersService', () => {
     });
 
     it('blocks COD orders from advancing without shipping order', async () => {
-      const codOrder = { ...order, paymentMethod: 'COD' } as any;
+      const codOrder = { ...order, paymentMethod: 'COD', status: OrderStatus.PROCESSING } as any;
       prisma.order.findFirst.mockResolvedValue(codOrder);
       prisma.shippingOrder.findFirst.mockResolvedValue(null);
 
