@@ -25,10 +25,10 @@ describe('PricingService', () => {
 
   it('applies free shipping when channel matches and subtotal is above threshold', async () => {
     settings.get
-      .mockResolvedValueOnce(500000) // shipping.freeShipThreshold
-      .mockResolvedValueOnce(['ONLINE']) // shipping.applyChannels
       .mockResolvedValueOnce(undefined) // shipping.defaultFee
       .mockResolvedValueOnce(30000) // shipping.baseFee
+      .mockResolvedValueOnce(500000) // shipping.freeShipThreshold
+      .mockResolvedValueOnce(['ONLINE']) // shipping.applyChannels
       .mockResolvedValueOnce(0.1); // pricing.taxRate
 
     const result = await service.calculateTotals({
@@ -48,11 +48,11 @@ describe('PricingService', () => {
 
   it('returns default shipping fee when threshold not met', async () => {
     settings.get
-      .mockResolvedValueOnce(500000)
-      .mockResolvedValueOnce(['ONLINE'])
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(0.1);
+      .mockResolvedValueOnce(undefined) // shipping.defaultFee
+      .mockResolvedValueOnce(30000) // shipping.baseFee
+      .mockResolvedValueOnce(500000) // shipping.freeShipThreshold
+      .mockResolvedValueOnce(['ONLINE']) // shipping.applyChannels
+      .mockResolvedValueOnce(0.1); // pricing.taxRate
 
     const result = await service.calculateTotals({
       channel: 'POS',

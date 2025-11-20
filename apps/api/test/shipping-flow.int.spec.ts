@@ -75,6 +75,7 @@ describe('Shipping flow (e2e)', () => {
             quantity: 1,
             unitPrice: 200000,
             subtotal: 200000,
+            netTotal: 200000,
           },
         ],
       },

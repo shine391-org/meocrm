@@ -83,7 +83,7 @@ describe('CustomersService', () => {
         include: expect.any(Object),
       });
       expect(segmentationService.updateSegment).toHaveBeenCalledWith('1', organizationId, expect.anything());
-      expect(result).toEqual({ ...created, segment: 'Regular' });
+      expect(result).toEqual({ data: { ...created, segment: 'Regular' } });
     });
 
     it('throws when phone already exists', async () => {
@@ -169,7 +169,7 @@ describe('CustomersService', () => {
         where: { id: '1', organizationId, deletedAt: null },
         data: { deletedAt: expect.any(Date) },
       });
-      expect(result.message).toBe('Customer deleted successfully');
+      expect(result.data.message).toBe('Customer deleted successfully');
     });
 
     it('throws when customer still has orders', async () => {
@@ -188,9 +188,9 @@ describe('CustomersService', () => {
     });
 
     it('generates sequential codes correctly', async () => {
-        prisma.customer.findFirst.mockResolvedValueOnce({ code: 'KH000009' });
-        const code = await (service as any).generateCode(organizationId);
-        expect(code).toBe('KH000010');
+      prisma.customer.findFirst.mockResolvedValueOnce({ code: 'KH000009' });
+      const code = await (service as any).generateCode(organizationId);
+      expect(code).toBe('KH000010');
     });
   });
 

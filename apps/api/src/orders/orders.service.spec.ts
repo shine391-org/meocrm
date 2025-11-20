@@ -684,15 +684,23 @@ describe('OrdersService', () => {
         customer: { id: 'cust-1' },
       } as any;
 
-      prisma.order.findFirst.mockResolvedValue(codOrder);
-      prisma.order.update.mockResolvedValue({
-        ...codOrder,
-        isPaid: true,
-        paidAmount: new Prisma.Decimal(500),
-        customer: { id: 'cust-1' },
-        items: [],
-        branch: null,
-      } as any);
+      const transactionContext = {
+        order: {
+          findFirst: jest.fn().mockResolvedValue(codOrder),
+          update: jest.fn().mockResolvedValue({
+            ...codOrder,
+            isPaid: true,
+            paidAmount: new Prisma.Decimal(500),
+            customer: { id: 'cust-1' },
+            items: [],
+            branch: null,
+          } as any),
+        },
+      };
+
+      (prisma.$transaction as jest.Mock).mockImplementation(async (callback) =>
+        callback(transactionContext),
+      );
 
       const result = await service.markCodPaid('order-1', 'org-1', undefined, {
         id: 'user-1',
@@ -703,7 +711,7 @@ describe('OrdersService', () => {
       expect(customerStatsService.updateDebt).toHaveBeenCalledWith(
         'cust-1',
         -500,
-        expect.anything(),
+        transactionContext,
         'org-1',
       );
       expect(auditLogService.log).toHaveBeenCalledWith(

@@ -2,8 +2,6 @@ import { ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common
 import { HttpExceptionFilter } from './http-exception.filter';
 import * as crypto from 'crypto';
 
-jest.spyOn(crypto, 'randomUUID');
-
 describe('HttpExceptionFilter', () => {
   const createHost = (responseMock: any): ArgumentsHost => {
     return {
@@ -18,7 +16,7 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('normalizes simple HttpException payloads with traceId', () => {
-    (crypto.randomUUID as jest.Mock).mockReturnValue('trace-simple');
+    jest.spyOn(crypto, 'randomUUID').mockReturnValue('trace-simple');
     const filter = new HttpExceptionFilter();
     const responseMock = {
       status: jest.fn().mockReturnThis(),
@@ -38,7 +36,7 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('prioritizes custom code, message array and details', () => {
-    (crypto.randomUUID as jest.Mock).mockReturnValue('trace-custom');
+    jest.spyOn(crypto, 'randomUUID').mockReturnValue('trace-custom');
     const filter = new HttpExceptionFilter();
     const responseMock = {
       status: jest.fn().mockReturnThis(),
@@ -69,7 +67,7 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('returns stable fallback when details contain circular references', () => {
-    (uuidv4 as jest.Mock).mockReturnValue('trace-circular');
+    jest.spyOn(crypto, 'randomUUID').mockReturnValue('trace-circular');
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const filter = new HttpExceptionFilter();
     const responseMock = {
