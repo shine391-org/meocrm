@@ -28,7 +28,7 @@ export class ShippingService {
     private readonly inventoryService: InventoryService,
     private readonly auditLogService: AuditLogService,
     private readonly requestContext: RequestContextService,
-  ) {}
+  ) { }
 
   async create(organizationId: string, dto: CreateShippingOrderDto) {
     const shippingOrder = await this.prisma.$transaction(async (tx) => {
@@ -358,12 +358,15 @@ export class ShippingService {
       dto.status === ShippingStatus.FAILED ||
       dto.status === ShippingStatus.RETURNED
     ) {
-      await this.ordersService.updateStatus(
-        shippingOrder.orderId,
-        { status: OrderStatus.PENDING },
-        organizationId,
-        automationActor,
-      );
+      // Only update order status if not already PENDING
+      if (shippingOrder.order.status !== OrderStatus.PENDING) {
+        await this.ordersService.updateStatus(
+          shippingOrder.orderId,
+          { status: OrderStatus.PENDING },
+          organizationId,
+          automationActor,
+        );
+      }
 
       await this.inventoryService.returnStockOnOrderCancel(
         shippingOrder.orderId,

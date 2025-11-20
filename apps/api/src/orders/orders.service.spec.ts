@@ -286,6 +286,7 @@ describe('OrdersService', () => {
     it('respects immediate payment when allowed', async () => {
       const paidDto = {
         ...mockCreateDto,
+        channel: 'POS',
         isPaid: true,
         paidAmount: 215,
       };
@@ -306,11 +307,21 @@ describe('OrdersService', () => {
           },
           order: {
             create: jest.fn().mockResolvedValue({ ...mockOrder, isPaid: true }),
-            findFirst: jest.fn().mockResolvedValue(null),
+            findFirst: jest.fn()
+              .mockResolvedValueOnce(null) // for generateOrderCode
+              .mockResolvedValueOnce({ // for finalizeOrderCompletion
+                id: 'order-1',
+                total: 215,
+                paidAmount: 215,
+                customerId: 'customer-1',
+              }),
           },
           customer: {
             findFirst: jest.fn().mockResolvedValue({ id: 'customer-1' }),
             update: jest.fn().mockResolvedValue({ ...mockCustomer, debt: 0 }),
+          },
+          orderInventoryReservation: {
+            updateMany: jest.fn().mockResolvedValue({ count: 0 }),
           },
         };
         return callback(txClient);

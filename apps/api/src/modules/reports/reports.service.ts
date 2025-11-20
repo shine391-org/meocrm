@@ -15,7 +15,7 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly requestContextService: RequestContextService,
-  ) {}
+  ) { }
 
   private getOrganizationId(): string {
     const organizationId = this.requestContextService.organizationId;
@@ -25,8 +25,8 @@ export class ReportsService {
     return organizationId;
   }
 
-  async getDebtReport(query: GetDebtReportQuery) {
-    const organizationId = this.getOrganizationId();
+  async getDebtReport(query: GetDebtReportQuery, organizationIdOverride?: string) {
+    const organizationId = organizationIdOverride ?? this.getOrganizationId();
     const { groupBy, fromDate, toDate, customerId } = query;
 
     const whereConditions = [

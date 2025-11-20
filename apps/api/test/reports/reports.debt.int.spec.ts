@@ -70,14 +70,7 @@ describe('Reports /reports/debt (integration)', () => {
 
     await debtSnapshotService.handleCron();
 
-    const result = await requestContext.run(async () => {
-      requestContext.setContext({
-        organizationId,
-        userId: reportingUser.id,
-        roles: [reportingUser.role],
-      });
-      return reportsService.getDebtReport({ groupBy: 'day' });
-    });
+    const result = await reportsService.getDebtReport({ groupBy: 'day' }, organizationId);
 
     const entries = result as Array<any>;
     expect(Array.isArray(entries)).toBe(true);
@@ -121,14 +114,7 @@ describe('Reports /reports/debt (integration)', () => {
       },
     });
 
-    const result = await requestContext.run(async () => {
-      requestContext.setContext({
-        organizationId: orgA.id,
-        userId: reportingUser.id,
-        roles: [reportingUser.role],
-      });
-      return reportsService.getDebtReport({ groupBy: 'month' });
-    });
+    const result = await reportsService.getDebtReport({ groupBy: 'month' }, orgA.id);
 
     const entries = result as Array<any>;
     expect(entries).toHaveLength(1);
@@ -169,19 +155,12 @@ describe('Reports /reports/debt (integration)', () => {
       ],
     });
 
-    const result = await requestContext.run(async () => {
-      requestContext.setContext({
-        organizationId,
-        userId: reportingUser.id,
-        roles: [reportingUser.role],
-      });
-      return reportsService.getDebtReport({
-        groupBy: 'month',
-        customerId: targetCustomer.id,
-        fromDate: new Date('2025-01-01T00:00:00Z'),
-        toDate: new Date('2025-02-01T00:00:00Z'),
-      });
-    });
+    const result = await reportsService.getDebtReport({
+      groupBy: 'month',
+      customerId: targetCustomer.id,
+      fromDate: new Date('2025-01-01T00:00:00Z'),
+      toDate: new Date('2025-02-01T00:00:00Z'),
+    }, organizationId);
 
     const entries = result as Array<any>;
     expect(entries).toHaveLength(1);
@@ -202,14 +181,7 @@ describe('Reports /reports/debt (integration)', () => {
     });
 
     await expect(
-      requestContext.run(async () => {
-        requestContext.setContext({
-          organizationId: organization.id,
-          userId: reportingUser.id,
-          roles: [reportingUser.role],
-        });
-        return reportsService.getDebtReport({ groupBy: 'year' as any });
-      }),
+      reportsService.getDebtReport({ groupBy: 'year' as any }, organization.id),
     ).rejects.toThrow('Invalid groupBy value. Must be "day" or "month".');
   });
 });

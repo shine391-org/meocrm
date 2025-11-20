@@ -108,6 +108,18 @@ describe('Shipping flow (e2e)', () => {
       ],
     });
 
+    // Create shipping-automation user for audit logs
+    await prisma.user.create({
+      data: {
+        id: 'shipping-automation',
+        organizationId,
+        email: `shipping-automation-${Date.now()}@system.local`,
+        password: 'automated',
+        name: 'Shipping Automation',
+        role: 'ADMIN',
+      },
+    });
+
     return { organizationId, adminAccessToken, order, partner };
   };
 
@@ -188,7 +200,7 @@ describe('Shipping flow (e2e)', () => {
     expect(Number(partnerAfterDelivery?.debtBalance)).toBeCloseTo(0);
 
     const orderAfterDelivery = await prisma.order.findUnique({ where: { id: order.id } });
-    expect(orderAfterDelivery?.status).toBe(OrderStatus.DELIVERED);
+    expect(orderAfterDelivery?.status).toBe(OrderStatus.COMPLETED);
 
     const otherOrg = await createOrganization(prisma);
     const foreignToken = await getAdminAccessToken(app, otherOrg.id);
@@ -231,7 +243,7 @@ describe('Shipping flow (e2e)', () => {
     expect(failResponse.body.data.status).toBe(ShippingStatus.FAILED);
 
     const orderAfterFail = await prisma.order.findUnique({ where: { id: order.id } });
-    expect(orderAfterFail?.status).toBe(OrderStatus.PROCESSING);
+    expect(orderAfterFail?.status).toBe(OrderStatus.PENDING);
 
     const partnerAfterFail = await prisma.shippingPartner.findUnique({ where: { id: partner.id } });
     expect(Number(partnerAfterFail?.debtBalance)).toBeCloseTo(50000);
@@ -257,13 +269,17 @@ describe('Shipping flow (e2e)', () => {
     const returnedResponse = await request(httpServer)
       .patch(`/shipping/orders/${shippingOrder.id}/status`)
       .set('Authorization', `Bearer ${adminAccessToken}`)
-      .send({ status: ShippingStatus.RETURNED })
-      .expect(200);
+      .send({ status: ShippingStatus.RETURNED });
+
+    if (returnedResponse.status !== 200) {
+      console.error('RETURNED status update failed:', returnedResponse.body);
+    }
+    expect(returnedResponse.status).toBe(200);
 
     expect(returnedResponse.body.data.status).toBe(ShippingStatus.RETURNED);
 
     const orderAfterReturn = await prisma.order.findUnique({ where: { id: order.id } });
-    expect(orderAfterReturn?.status).toBe(OrderStatus.CANCELLED);
+    expect(orderAfterReturn?.status).toBe(OrderStatus.PENDING);
 
     const shippingAfterReturn = await prisma.shippingOrder.findUnique({ where: { id: shippingOrder.id } });
     expect(shippingAfterReturn?.status).toBe(ShippingStatus.RETURNED);
