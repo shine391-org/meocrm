@@ -76,7 +76,14 @@ export class ProductsService {
 
     // Task 2: Filters
     if (filters?.categoryId) {
-      where.categoryId = filters.categoryId;
+      const categoryIds = Array.isArray(filters.categoryId) ? filters.categoryId : [filters.categoryId];
+      if (categoryIds.length > 0) {
+        where.categoryId = { in: categoryIds };
+      }
+    }
+
+    if (typeof filters?.isActive === 'boolean') {
+      where.isActive = filters.isActive;
     }
 
     if (filters?.minPrice !== undefined || filters?.maxPrice !== undefined) {
@@ -232,5 +239,66 @@ export class ProductsService {
       data: { deletedAt: new Date(), isActive: false },
     });
     return { message: 'Variant deleted successfully' };
+  }
+
+  async updateVariants(
+    productId: string,
+    dtos: (CreateVariantDto & { id?: string })[],
+    organizationId: string,
+  ) {
+    const product = await this.findOne(productId, organizationId);
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Upsert variants from DTO
+      const finalVariants = await Promise.all(
+        dtos.map(async (dto) => {
+          if (dto.id) {
+            // Update existing variant
+            return tx.productVariant.update({
+              where: { id: dto.id, productId, organizationId },
+              data: {
+                name: dto.name,
+                sellPrice: dto.price,
+                stock: dto.inStock ?? 0,
+                isActive: dto.isActive ?? true,
+                attributes: (dto.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
+              },
+            });
+          } else {
+            // Create new variant
+            const sku = await this.generateVariantSKU(product.sku, organizationId);
+            return tx.productVariant.create({
+              data: {
+                sku,
+                productId,
+                organizationId,
+                name: dto.name,
+                sellPrice: dto.price,
+                stock: dto.inStock ?? 0,
+                isActive: dto.isActive ?? true,
+                attributes: (dto.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
+              },
+            });
+          }
+        }),
+      );
+
+      // 2. Soft-delete variants not in DTO
+      const dtoIds = dtos.map((dto) => dto.id).filter(Boolean);
+      await tx.productVariant.updateMany({
+        where: {
+          productId,
+          organizationId,
+          id: { notIn: dtoIds },
+          deletedAt: null,
+        },
+        data: {
+          deletedAt: new Date(),
+          isActive: false,
+        },
+      });
+
+      return finalVariants;
+    });
   }
 }

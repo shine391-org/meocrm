@@ -56,6 +56,15 @@ export class ProductsController {
     return this.productsService.createVariant(id, dto, req.user.organizationId);
   }
 
+  @Patch(':id/variants')
+  updateVariants(
+    @Param('id') id: string,
+    @Body() dtos: (CreateVariantDto & { id?: string })[],
+    @Req() req: any
+  ) {
+    return this.productsService.updateVariants(id, dtos, req.user.organizationId);
+  }
+
   @Get(':id/variants')
   findVariants(@Param('id') id: string, @Req() req: any) {
     return this.productsService.findVariants(id, req.user.organizationId);

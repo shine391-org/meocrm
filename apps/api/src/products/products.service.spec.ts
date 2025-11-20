@@ -20,9 +20,22 @@ describe('ProductsService', () => {
     },
     productVariant: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
     },
-    $transaction: jest.fn().mockImplementation((promises) => Promise.all(promises)),
+    $transaction: jest.fn().mockImplementation(async (callback) => {
+      // Execute the callback with a mock transaction object
+      const mockTx = {
+        productVariant: {
+          update: jest.fn(),
+          create: jest.fn(),
+          updateMany: jest.fn(),
+        },
+      };
+      return await callback(mockTx);
+    }),
   };
 
   beforeEach(async () => {
@@ -49,7 +62,7 @@ describe('ProductsService', () => {
   });
 
   describe('findAll with filters', () => {
-    it('should filter by categoryId', async () => {
+    it('should filter by a single categoryId', async () => {
       const filters = { categoryId: 'cat-1' };
       mockPrismaService.product.findMany.mockResolvedValue([]);
       mockPrismaService.product.count.mockResolvedValue(0);
@@ -58,7 +71,35 @@ describe('ProductsService', () => {
 
       expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ categoryId: 'cat-1' }),
+          where: expect.objectContaining({ categoryId: { in: ['cat-1'] } }),
+        }),
+      );
+    });
+
+    it('should filter by multiple categoryIds', async () => {
+      const filters = { categoryId: ['cat-1', 'cat-2'] };
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
+
+      await service.findAll(1, 20, 'org-1', filters as any);
+
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ categoryId: { in: ['cat-1', 'cat-2'] } }),
+        }),
+      );
+    });
+
+    it('should filter by isActive status', async () => {
+      const filters = { isActive: false };
+      mockPrismaService.product.findMany.mockResolvedValue([]);
+      mockPrismaService.product.count.mockResolvedValue(0);
+
+      await service.findAll(1, 20, 'org-1', filters);
+
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ isActive: false }),
         }),
       );
     });

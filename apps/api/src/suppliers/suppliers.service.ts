@@ -152,7 +152,8 @@ if (!supplier) {
   throw new NotFoundException('Supplier not found');
 }
 
-// TODO: Uncomment this when PurchaseOrder model is available
+// TODO: Wait for Batch 4D (Purchase Orders)
+// Uncomment this when PurchaseOrder model is available
 // const purchaseOrderCount = await this.prisma.purchaseOrder.count({
 //   where: { supplierId: id },
 // });

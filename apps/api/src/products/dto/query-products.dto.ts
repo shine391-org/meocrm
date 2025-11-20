@@ -58,6 +58,11 @@ export class QueryProductsDto {
   @IsBoolean()
   inStock?: boolean;
 
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isActive?: boolean;
+
   // Search (Task 3)
   @IsOptional()
   @IsString()
